@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 import {
   ArrowRight,
@@ -18,6 +19,7 @@ import { ProviderCard } from "@/components/app/provider-card";
 import { Badge } from "@/components/ui/badge";
 import { buttonStyles } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
+import { createPortfolio } from "@/lib/actions/portfolio";
 import { manualPortfolioSeed, providers } from "@/lib/mock-data";
 import { cn } from "@/lib/utils";
 
@@ -37,9 +39,12 @@ const extraHolding = {
 };
 
 export default function OnboardingPage() {
+  const router = useRouter();
   const [method, setMethod] = useState<Method>("connect");
   const [selectedProviderId, setSelectedProviderId] = useState("wealthsimple");
   const [draftHoldings, setDraftHoldings] = useState(manualPortfolioSeed);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const selectedProvider =
     providers.find((provider) => provider.id === selectedProviderId) ?? providers[0];
@@ -71,6 +76,40 @@ export default function OnboardingPage() {
     });
   }
 
+  async function handleContinue() {
+    setSubmitError(null);
+    setSubmitting(true);
+    const sourceType =
+      method === "manual"
+        ? "manual"
+        : (selectedProviderId as "wealthsimple" | "interactive-brokers" | "demo");
+    const { error, portfolioId } = await createPortfolio({
+      name: "My Portfolio",
+      sourceType,
+      holdings: draftHoldings.map((h) => ({
+        symbol: h.symbol,
+        company: h.company,
+        sector: h.sector,
+        market: h.market,
+        source: h.source,
+        price: h.price,
+        dailyChange: h.dailyChange,
+        allocation: h.allocation,
+        thesis: h.thesis,
+      })),
+    });
+    setSubmitting(false);
+    if (error) {
+      setSubmitError(error);
+      return;
+    }
+    if (portfolioId) {
+      router.push(`/analysis?portfolioId=${portfolioId}`);
+    } else {
+      router.push("/analysis");
+    }
+  }
+
   return (
     <AppShell
       eyebrow="Onboarding"
@@ -85,13 +124,23 @@ export default function OnboardingPage() {
           >
             Skip to analysis
           </Link>
-          <Link href="/analysis" className={buttonStyles({ size: "lg" })}>
-            Continue
+          <button
+            type="button"
+            onClick={handleContinue}
+            disabled={submitting || (method === "manual" && !isAllocationBalanced)}
+            className={buttonStyles({ size: "lg" })}
+          >
+            {submitting ? "Creating…" : "Continue"}
             <ArrowRight className="ml-2 h-4 w-4" />
-          </Link>
+          </button>
         </>
       }
     >
+      {submitError ? (
+        <div className="mb-6 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+          {submitError}
+        </div>
+      ) : null}
       <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
         <div className="space-y-6">
           <Panel className="space-y-5 border-black/6 bg-white/84">

@@ -3,17 +3,42 @@ import Link from "next/link";
 import { Activity, ArrowRight, BrainCircuit, RefreshCw } from "lucide-react";
 
 import { AppShell } from "@/components/app/app-shell";
+import { AnalysisRunTrigger } from "@/components/app/analysis-run-trigger";
 import { Badge } from "@/components/ui/badge";
 import { buttonStyles } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
 import {
-  analysisSteps,
-  portfolioInsights,
-  portfolioOverview,
-} from "@/lib/mock-data";
-import { formatCurrency, formatPercent, cn } from "@/lib/utils";
+  getPortfolioInsights,
+  getPortfolioOverview,
+  getUserPortfolios,
+} from "@/lib/actions/portfolio";
+import { formatCurrency, formatPercent } from "@/lib/utils";
 
-export default function AnalysisPage() {
+export default async function AnalysisPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ portfolioId?: string }>;
+}) {
+  const params = await searchParams;
+  const { data: portfolios } = await getUserPortfolios();
+  const portfolioId = params.portfolioId ?? portfolios?.[0]?.id ?? null;
+
+  const [overviewResult, insightsResult] = await Promise.all([
+    portfolioId ? getPortfolioOverview(portfolioId) : { data: null, error: null },
+    portfolioId ? getPortfolioInsights(portfolioId) : { data: [], error: null },
+  ]);
+
+  const portfolioOverview = overviewResult?.data ?? {
+    totalValue: 0,
+    dayChange: 0,
+    monthlyChange: 0,
+    lastSyncedAt: "—",
+    lastAnalyzedAt: "Never",
+    coverage: "0 stories",
+    primaryGoal: "Add a portfolio and run analysis.",
+  };
+  const portfolioInsights = insightsResult?.data ?? [];
+
   return (
     <AppShell
       eyebrow="Analysis"
@@ -23,12 +48,15 @@ export default function AnalysisPage() {
       actions={
         <>
           <Link
-            href="/portfolio"
+            href={portfolioId ? `/portfolio` : "/portfolio"}
             className={buttonStyles({ variant: "secondary" })}
           >
             Review portfolio
           </Link>
-          <Link href="/feed" className={buttonStyles({ size: "lg" })}>
+          <Link
+            href={portfolioId ? `/feed` : "/feed"}
+            className={buttonStyles({ size: "lg" })}
+          >
             Open feed
             <ArrowRight className="ml-2 h-4 w-4" />
           </Link>
@@ -41,67 +69,29 @@ export default function AnalysisPage() {
             glow
             className="space-y-6 border-black/6 bg-[#142033] p-8 shadow-[0_30px_80px_rgba(15,23,42,0.14)]"
           >
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-              <div className="space-y-3">
+            {portfolioId ? (
+              <AnalysisRunTrigger
+                portfolioId={portfolioId}
+                defaultOverview={portfolioOverview}
+              />
+            ) : (
+              <>
                 <Badge tone="brand">
                   <BrainCircuit className="h-3.5 w-3.5" />
-                  generating_insights
+                  No portfolio
                 </Badge>
                 <h2 className="text-3xl font-semibold text-white">
-                  Building portfolio-aware explanations
+                  Create a portfolio first
                 </h2>
                 <p className="max-w-2xl text-sm leading-7 text-slate-300">
-                  Instead of just ranking articles, the analysis step ties each
-                  story back to holdings, sectors, and macro exposures before the
-                  user lands in the feed.
+                  Go to onboarding to add a portfolio, then return here to run
+                  the AI analysis.
                 </p>
-              </div>
-              <div className="rounded-3xl border border-white/10 bg-white/6 p-5">
-                <p className="text-sm uppercase tracking-[0.18em] text-slate-400">
-                  Estimated progress
-                </p>
-                <p className="mt-2 text-4xl font-semibold text-white">78%</p>
-                <p className="mt-2 text-sm text-slate-400">
-                  Last updated {portfolioOverview.lastAnalyzedAt}
-                </p>
-              </div>
-            </div>
-            <div className="h-3 overflow-hidden rounded-full bg-white/8">
-              <div className="h-full w-[78%] rounded-full bg-gradient-to-r from-brand to-brand-strong" />
-            </div>
-            <div className="grid gap-3">
-              {analysisSteps.map((step) => (
-                <div
-                  key={step.id}
-                  className={cn(
-                    "rounded-3xl border p-5",
-                    step.status === "current"
-                      ? "border-brand/24 bg-brand/10"
-                      : "border-white/10 bg-white/6",
-                  )}
-                >
-                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                    <div className="space-y-2">
-                      <p className="text-lg font-semibold text-white">{step.title}</p>
-                      <p className="text-sm leading-7 text-slate-200">
-                        {step.detail}
-                      </p>
-                    </div>
-                    <Badge
-                      tone={
-                        step.status === "complete"
-                          ? "success"
-                          : step.status === "current"
-                            ? "brand"
-                            : "neutral"
-                      }
-                    >
-                      {step.status}
-                    </Badge>
-                  </div>
-                </div>
-              ))}
-            </div>
+                <Link href="/onboarding" className={buttonStyles({ size: "lg" })}>
+                  Go to onboarding
+                </Link>
+              </>
+            )}
           </Panel>
         </div>
 
@@ -146,22 +136,28 @@ export default function AnalysisPage() {
               </div>
             </div>
             <div className="space-y-3">
-              {portfolioInsights.map((insight) => (
-                <div
-                  key={insight.title}
-                  className="rounded-2xl border border-black/6 bg-[#fffdf9] p-4"
-                >
-                  <p className="text-sm uppercase tracking-[0.18em] text-slate-500">
-                    {insight.title}
-                  </p>
-                  <p className="mt-2 text-lg font-semibold text-slate-950">
-                    {insight.value}
-                  </p>
-                  <p className="mt-2 text-sm leading-7 text-slate-600">
-                    {insight.detail}
-                  </p>
-                </div>
-              ))}
+              {portfolioInsights.length > 0 ? (
+                portfolioInsights.map((insight) => (
+                  <div
+                    key={insight.title}
+                    className="rounded-2xl border border-black/6 bg-[#fffdf9] p-4"
+                  >
+                    <p className="text-sm uppercase tracking-[0.18em] text-slate-500">
+                      {insight.title}
+                    </p>
+                    <p className="mt-2 text-lg font-semibold text-slate-950">
+                      {insight.value}
+                    </p>
+                    <p className="mt-2 text-sm leading-7 text-slate-600">
+                      {insight.detail}
+                    </p>
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-slate-500">
+                  Run analysis to generate insights.
+                </p>
+              )}
             </div>
           </Panel>
         </div>

@@ -7,10 +7,33 @@ import { FeedView } from "@/components/app/feed-view";
 import { Badge } from "@/components/ui/badge";
 import { buttonStyles } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
-import { portfolioInsights, portfolioOverview } from "@/lib/mock-data";
+import {
+  getPortfolioInsights,
+  getPortfolioOverview,
+  getUserPortfolios,
+} from "@/lib/actions/portfolio";
 import { formatCurrency, formatPercent } from "@/lib/utils";
 
-export default function FeedPage() {
+export default async function FeedPage() {
+  const { data: portfolios } = await getUserPortfolios();
+  const portfolioId = portfolios?.[0]?.id ?? null;
+
+  const [overviewResult, insightsResult] = await Promise.all([
+    portfolioId ? getPortfolioOverview(portfolioId) : { data: null, error: null },
+    portfolioId ? getPortfolioInsights(portfolioId) : { data: [], error: null },
+  ]);
+
+  const portfolioOverview = overviewResult?.data ?? {
+    totalValue: 0,
+    dayChange: 0,
+    monthlyChange: 0,
+    lastSyncedAt: "—",
+    lastAnalyzedAt: "Never",
+    coverage: "0 stories",
+    primaryGoal: "Add a portfolio and run analysis.",
+  };
+  const portfolioInsights = insightsResult?.data ?? [];
+
   return (
     <AppShell
       eyebrow="Daily brief"
@@ -20,7 +43,7 @@ export default function FeedPage() {
       actions={
         <>
           <Link
-            href="/analysis"
+            href={portfolioId ? `/analysis?portfolioId=${portfolioId}` : "/analysis"}
             className={buttonStyles({ variant: "secondary" })}
           >
             Refresh analysis
@@ -70,7 +93,7 @@ export default function FeedPage() {
         </div>
 
         <div className="grid gap-4 xl:grid-cols-[1fr_320px]">
-          <FeedView />
+          <FeedView portfolioId={portfolioId} />
           <Panel className="hidden space-y-4 border-black/6 bg-white/84 xl:block">
             <div className="flex items-center gap-3">
               <div className="rounded-2xl border border-black/6 bg-[#f7f2ea] p-3 text-brand">
@@ -86,22 +109,28 @@ export default function FeedPage() {
               </div>
             </div>
             <div className="space-y-3">
-              {portfolioInsights.map((insight) => (
-                <div
-                  key={insight.title}
-                  className="rounded-2xl border border-black/6 bg-[#fffdf9] p-4"
-                >
-                  <p className="text-sm uppercase tracking-[0.18em] text-slate-500">
-                    {insight.title}
-                  </p>
-                  <p className="mt-2 text-lg font-semibold text-slate-950">
-                    {insight.value}
-                  </p>
-                  <p className="mt-2 text-sm leading-7 text-slate-600">
-                    {insight.detail}
-                  </p>
-                </div>
-              ))}
+              {portfolioInsights.length > 0 ? (
+                portfolioInsights.map((insight) => (
+                  <div
+                    key={insight.title}
+                    className="rounded-2xl border border-black/6 bg-[#fffdf9] p-4"
+                  >
+                    <p className="text-sm uppercase tracking-[0.18em] text-slate-500">
+                      {insight.title}
+                    </p>
+                    <p className="mt-2 text-lg font-semibold text-slate-950">
+                      {insight.value}
+                    </p>
+                    <p className="mt-2 text-sm leading-7 text-slate-600">
+                      {insight.detail}
+                    </p>
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-slate-500">
+                  Run analysis to see insights here.
+                </p>
+              )}
             </div>
           </Panel>
         </div>

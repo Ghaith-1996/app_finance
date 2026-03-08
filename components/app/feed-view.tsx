@@ -1,48 +1,101 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { ArrowRight, RefreshCw, X } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 
 import { NewsFeedCard } from "@/components/app/news-feed-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
-import { newsFeed } from "@/lib/mock-data";
+import type { NewsItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-const holdingOptions = ["All holdings", ...new Set(newsFeed.flatMap((story) => story.holdings))];
-const sectorOptions = ["All sectors", ...new Set(newsFeed.flatMap((story) => story.sectors))];
 const recencyOptions = [
   { label: "Any time", maxMinutes: Number.POSITIVE_INFINITY },
   { label: "Past hour", maxMinutes: 60 },
   { label: "Past 2 hours", maxMinutes: 120 },
 ];
 
-export function FeedView() {
+export function FeedView({ portfolioId }: { portfolioId?: string | null }) {
+  const [feed, setFeed] = useState<NewsItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [selectedHolding, setSelectedHolding] = useState("All holdings");
   const [selectedSector, setSelectedSector] = useState("All sectors");
   const [selectedRecency, setSelectedRecency] = useState(recencyOptions[0].label);
-  const [selectedStoryId, setSelectedStoryId] = useState<string | null>(newsFeed[0]?.id ?? null);
+  const [selectedStoryId, setSelectedStoryId] = useState<string | null>(null);
+
+  const fetchFeed = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    const params = new URLSearchParams();
+    if (portfolioId) params.set("portfolioId", portfolioId);
+    const res = await fetch(`/api/feed?${params.toString()}`);
+    const data = await res.json().catch(() => ({}));
+    setLoading(false);
+    if (!res.ok) {
+      setError(data.error ?? "Failed to load feed");
+      setFeed([]);
+      return;
+    }
+    setFeed(data.feed ?? []);
+    if (data.feed?.length && !selectedStoryId) {
+      setSelectedStoryId(data.feed[0].id);
+    }
+  }, [portfolioId]);
+
+  useEffect(() => {
+    fetchFeed();
+  }, [fetchFeed]);
+
+  useEffect(() => {
+    if (!portfolioId) return;
+    const supabase = createClient();
+    const channel = supabase
+      .channel(`feed-items-${portfolioId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "feed_items",
+          filter: `portfolio_id=eq.${portfolioId}`,
+        },
+        () => {
+          fetchFeed();
+        }
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [portfolioId, fetchFeed]);
+
+  const holdingOptions = useMemo(
+    () => ["All holdings", ...new Set(feed.flatMap((s) => s.holdings))],
+    [feed]
+  );
+  const sectorOptions = useMemo(
+    () => ["All sectors", ...new Set(feed.flatMap((s) => s.sectors))],
+    [feed]
+  );
 
   const filteredStories = useMemo(() => {
     const recency = recencyOptions.find((option) => option.label === selectedRecency);
-
-    return newsFeed.filter((story) => {
+    return feed.filter((story) => {
       const matchesHolding =
-        selectedHolding === "All holdings" ||
-        story.holdings.includes(selectedHolding);
+        selectedHolding === "All holdings" || story.holdings.includes(selectedHolding);
       const matchesSector =
         selectedSector === "All sectors" || story.sectors.includes(selectedSector);
-      const matchesRecency =
-        !recency || story.publishedMinutesAgo <= recency.maxMinutes;
-
+      const matchesRecency = !recency || story.publishedMinutesAgo <= recency.maxMinutes;
       return matchesHolding && matchesSector && matchesRecency;
     });
-  }, [selectedHolding, selectedSector, selectedRecency]);
+  }, [feed, selectedHolding, selectedSector, selectedRecency]);
 
   const selectedStory = selectedStoryId
-    ? filteredStories.find((story) => story.id === selectedStoryId) ??
+    ? filteredStories.find((s) => s.id === selectedStoryId) ??
       filteredStories[0] ??
       null
     : null;
@@ -51,7 +104,27 @@ export function FeedView() {
     setSelectedHolding("All holdings");
     setSelectedSector("All sectors");
     setSelectedRecency(recencyOptions[0].label);
-    setSelectedStoryId(newsFeed[0]?.id ?? null);
+    setSelectedStoryId(feed[0]?.id ?? null);
+  }
+
+  if (error) {
+    return (
+      <Panel className="space-y-4 border-black/6 bg-white/82 p-8 text-center">
+        <Badge tone="warning" className="mx-auto">
+          Error
+        </Badge>
+        <p className="text-slate-600">{error}</p>
+        <Button onClick={fetchFeed}>Retry</Button>
+      </Panel>
+    );
+  }
+
+  if (loading) {
+    return (
+      <Panel className="space-y-4 border-black/6 bg-white/82 p-8 text-center">
+        <p className="text-slate-600">Loading feed…</p>
+      </Panel>
+    );
   }
 
   return (

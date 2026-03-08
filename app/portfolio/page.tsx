@@ -4,13 +4,67 @@ import { ArrowRight, DatabaseZap, ShieldCheck } from "lucide-react";
 
 import { AppShell } from "@/components/app/app-shell";
 import { PortfolioTable } from "@/components/app/portfolio-table";
+import { RefreshPricesButton } from "@/components/app/refresh-prices-button";
 import { Badge } from "@/components/ui/badge";
 import { buttonStyles } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
-import { holdings, portfolioInsights, portfolioOverview } from "@/lib/mock-data";
+import {
+  getPortfolio,
+  getPortfolioInsights,
+  getPortfolioOverview,
+  getUserPortfolios,
+} from "@/lib/actions/portfolio";
 import { formatCurrency, formatPercent } from "@/lib/utils";
 
-export default function PortfolioPage() {
+export default async function PortfolioPage() {
+  const { data: portfolios } = await getUserPortfolios();
+  const portfolioId = portfolios?.[0]?.id ?? null;
+
+  if (!portfolioId) {
+    return (
+      <AppShell
+        eyebrow="Portfolio"
+        title="No portfolio yet"
+        description="Create a portfolio from onboarding to see holdings and analysis here."
+        activePath="/portfolio"
+        actions={
+          <Link href="/onboarding" className={buttonStyles({ size: "lg" })}>
+            Go to onboarding
+            <ArrowRight className="ml-2 h-4 w-4" />
+          </Link>
+        }
+      >
+        <Panel className="border-black/6 bg-white/84 p-8 text-center">
+          <p className="text-slate-600">
+            You don&apos;t have a portfolio yet. Complete onboarding to add one.
+          </p>
+          <Link href="/onboarding" className={buttonStyles({ className: "mt-4" })}>
+            Start onboarding
+          </Link>
+        </Panel>
+      </AppShell>
+    );
+  }
+
+  const [{ data: portfolioData }, { data: overview }, { data: portfolioInsights }] =
+    await Promise.all([
+      getPortfolio(portfolioId),
+      getPortfolioOverview(portfolioId),
+      getPortfolioInsights(portfolioId),
+    ]);
+
+  const portfolioOverview = overview ?? {
+    totalValue: 0,
+    dayChange: 0,
+    monthlyChange: 0,
+    lastSyncedAt: "—",
+    lastAnalyzedAt: "Never",
+    coverage: "0 stories",
+    primaryGoal: "Add holdings and run analysis.",
+  };
+  const holdings = portfolioData?.holdings ?? [];
+  const insights = portfolioInsights ?? [];
+
   return (
     <AppShell
       eyebrow="Portfolio"
@@ -19,10 +73,14 @@ export default function PortfolioPage() {
       activePath="/portfolio"
       actions={
         <>
+          <RefreshPricesButton portfolioId={portfolioId} />
           <Link href="/feed" className={buttonStyles({ variant: "secondary" })}>
             Back to feed
           </Link>
-          <Link href="/analysis" className={buttonStyles({ size: "lg" })}>
+          <Link
+            href={`/analysis?portfolioId=${portfolioId}`}
+            className={buttonStyles({ size: "lg" })}
+          >
             Refresh analysis
             <ArrowRight className="ml-2 h-4 w-4" />
           </Link>
@@ -67,18 +125,18 @@ export default function PortfolioPage() {
                   Source status
                 </p>
                 <p className="text-lg font-semibold text-slate-950">
-                  Mixed provider portfolio
+                  {portfolioData?.sourceType === "manual"
+                    ? "Manual portfolio"
+                    : "Mixed provider portfolio"}
                 </p>
               </div>
             </div>
             <div className="space-y-3">
-              <SourceRow label="Wealthsimple" detail="Primary linked account" status="Active" />
               <SourceRow
-                label="Interactive Brokers"
-                detail="Roadmap account shown as imported data"
-                status="Preview"
+                label={portfolioData?.sourceType ?? "Manual"}
+                detail="Portfolio source"
+                status="Active"
               />
-              <SourceRow label="Manual positions" detail="Fallback hedge sleeve" status="Editable" />
             </div>
           </Panel>
           <Panel className="space-y-4 border-black/6 bg-white/84">
@@ -88,17 +146,16 @@ export default function PortfolioPage() {
               </div>
               <div>
                 <p className="text-sm uppercase tracking-[0.18em] text-slate-500">
-                  Next backend hooks
+                  Last analyzed
                 </p>
                 <p className="text-lg font-semibold text-slate-950">
-                  Ready for secure sync
+                  {portfolioOverview.lastAnalyzedAt}
                 </p>
               </div>
             </div>
             <p className="text-sm leading-7 text-slate-600">
-              This view is already structured for read-only broker status, stale
-              portfolio banners, and last analyzed timestamps once the backend is
-              connected.
+              Run analysis from the Analysis page to generate insights and feed
+              items.
             </p>
             <Badge tone="brand">refreshing | stale | failed</Badge>
           </Panel>
@@ -141,22 +198,28 @@ export default function PortfolioPage() {
               Insight summary
             </p>
             <div className="space-y-3">
-              {portfolioInsights.map((insight) => (
-                <div
-                  key={insight.title}
-                  className="rounded-2xl border border-black/6 bg-[#fffdf9] p-4"
-                >
-                  <p className="text-sm uppercase tracking-[0.18em] text-slate-500">
-                    {insight.title}
-                  </p>
-                  <p className="mt-2 text-lg font-semibold text-slate-950">
-                    {insight.value}
-                  </p>
-                  <p className="mt-2 text-sm leading-7 text-slate-600">
-                    {insight.detail}
-                  </p>
-                </div>
-              ))}
+              {insights.length > 0 ? (
+                insights.map((insight) => (
+                  <div
+                    key={insight.title}
+                    className="rounded-2xl border border-black/6 bg-[#fffdf9] p-4"
+                  >
+                    <p className="text-sm uppercase tracking-[0.18em] text-slate-500">
+                      {insight.title}
+                    </p>
+                    <p className="mt-2 text-lg font-semibold text-slate-950">
+                      {insight.value}
+                    </p>
+                    <p className="mt-2 text-sm leading-7 text-slate-600">
+                      {insight.detail}
+                    </p>
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-slate-500">
+                  Run analysis to see AI-generated insights here.
+                </p>
+              )}
             </div>
           </Panel>
         </div>

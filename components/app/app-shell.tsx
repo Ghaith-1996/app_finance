@@ -4,7 +4,7 @@ import Link from "next/link";
 
 import { ArrowUpRight } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
+import { UserMenu } from "@/components/app/user-menu";
 import { buttonStyles } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -46,9 +46,6 @@ export function AppShell({
                 <p className="text-sm font-semibold text-slate-950">Personal AI finance</p>
               </div>
             </Link>
-            <Badge tone="neutral" className="hidden md:inline-flex">
-              Demo mode
-            </Badge>
           </div>
           <nav className="hidden items-center gap-2 rounded-full border border-black/6 bg-white/70 p-1 md:flex">
             {navItems.map((item) => (
@@ -66,16 +63,19 @@ export function AppShell({
               </Link>
             ))}
           </nav>
-          <Link
-            href="/"
-            className={buttonStyles({
-              variant: "ghost",
-              className: "text-slate-700 hover:bg-black/5 hover:text-slate-950",
-            })}
-          >
-            Landing
-            <ArrowUpRight className="ml-2 h-4 w-4" />
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/"
+              className={buttonStyles({
+                variant: "ghost",
+                className: "text-slate-700 hover:bg-black/5 hover:text-slate-950",
+              })}
+            >
+              Landing
+              <ArrowUpRight className="ml-2 h-4 w-4" />
+            </Link>
+            <UserMenu />
+          </div>
         </div>
       </header>
       <main className="relative px-6 py-10 lg:px-8 lg:py-12">

@@ -1,5 +1,16 @@
 export type NewsProviderId = "seed" | "marketaux" | "finnhub";
 
+/** Origin label stored in news_items.source_type. */
+export type NewsSourceType =
+  | "edgar"
+  | "yfinance"
+  | "marketaux"
+  | "finnhub"
+  | "newsapi"
+  | "gnews"
+  | "seed"
+  | "other";
+
 export interface RawNewsItem {
   headline: string;
   source: string;
@@ -7,6 +18,8 @@ export interface RawNewsItem {
   publishedAt: Date;
   angle?: string;
   rawContent?: string;
+  /** Uppercase ticker symbols extracted by the provider (e.g. from MarketAux entities). */
+  entityTickers?: string[];
 }
 
 export interface FetchNewsOptions {

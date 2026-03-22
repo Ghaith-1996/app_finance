@@ -8,7 +8,7 @@ function isProtectedPath(pathname: string) {
 }
 
 export async function middleware(request: NextRequest) {
-  let response = NextResponse.next({ request });
+  const response = NextResponse.next({ request });
 
   if (
     !process.env.NEXT_PUBLIC_SUPABASE_URL ||

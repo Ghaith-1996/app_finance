@@ -1,5 +1,23 @@
 export type Sentiment = "positive" | "watch" | "negative" | "neutral";
 export type ImpactLevel = "High" | "Medium" | "Low";
+export type StockEffect = "bullish" | "bearish" | "neutral";
+
+export const NEWS_CATEGORIES = [
+  "technology", "minerals", "energy", "healthcare", "financials",
+  "consumer", "industrials", "macro", "regulation", "earnings",
+  "deals", "geopolitics", "other",
+] as const;
+export type NewsCategory = (typeof NEWS_CATEGORIES)[number];
+
+export interface TickerImpact {
+  symbol: string;
+  effect: StockEffect;
+}
+export type MatchReasonCode =
+  | "held_ticker_tag"
+  | "held_ticker_impact"
+  | "held_company_mention"
+  | "sector_exposure_explicit";
 export type ProviderStatus = "Roadmap" | "Preview" | "Demo";
 export type AnalysisStage =
   | "queued"
@@ -58,7 +76,48 @@ export interface Holding {
   dailyChange: number;
   allocation: number;
   thesis: string;
+  quantity: number;
+  averageCost: number;
+  costBasis: number;
+  currentPrice: number;
+  currentValue: number;
+  unrealizedGainAmount: number;
+  unrealizedGainPercent: number;
+  quoteCurrency: string;
+  quoteAsOf: string | null;
+  importSource: string;
 }
+
+export interface HoldingDraft {
+  tempId: string;
+  symbol: string;
+  company: string;
+  quantity: number;
+  averageCost: number;
+  sector: string;
+  market: string;
+  exchange: string;
+  currency: string;
+  thesis: string;
+  importSource: "csv" | "manual";
+  status: "confirmed" | "unresolved" | "skipped";
+  issues: HoldingIssue[];
+  candidates: HoldingResolutionCandidate[];
+}
+
+export interface HoldingIssue {
+  field: string;
+  message: string;
+}
+
+export interface HoldingResolutionCandidate {
+  symbol: string;
+  name: string;
+  exchange: string;
+  type: string;
+}
+
+export type SaveMode = "replace" | "merge";
 
 export interface AnalysisStep {
   id: AnalysisStage;
@@ -83,20 +142,62 @@ export interface PortfolioInsight {
   detail: string;
 }
 
-export interface NewsItem {
-  id: string;
+export interface PortfolioFeedHighlight {
   headline: string;
   source: string;
   publishedAt: string;
-  publishedMinutesAgo: number;
+  category: NewsCategory;
   relevanceScore: number;
-  sentiment: Sentiment;
-  impact: ImpactLevel;
+  whyItMatters: string;
   holdings: string[];
   sectors: string[];
   aiSummary: string;
-  whyItMatters: string;
+  matchReasonCodes?: MatchReasonCode[];
+}
+
+export type NewsSourceType =
+  | "edgar"
+  | "yfinance"
+  | "marketaux"
+  | "finnhub"
+  | "newsapi"
+  | "gnews"
+  | "seed"
+  | "other";
+export type SourceConfidence = "high" | "standard";
+export type FeedMode = "personal" | "market";
+
+export interface NewsItem {
+  id: string;
+  newsItemId: string;
+  headline: string;
+  source: string;
+  url?: string;
+  publishedAt: string;
+  publishedMinutesAgo: number;
+  category: NewsCategory;
+  stockTags: string[];
+  globalSummary: string;
+  displayEffect: StockEffect;
+  tickerImpacts: TickerImpact[];
+  sourceType: NewsSourceType;
+  sourceConfidence: SourceConfidence;
+  metadata: Record<string, unknown>;
   angle: string;
+
+  /* Personal mode fields — populated by feed_items join */
+  relevanceScore?: number;
+  sentiment?: Sentiment;
+  impact?: ImpactLevel;
+  holdings?: string[];
+  sectors?: string[];
+  aiSummary?: string;
+  whyItMatters?: string;
+  matchedStockTags?: string[];
+  matchReasonCodes?: MatchReasonCode[];
+
+  /* Market mode fields */
+  isPortfolioMatch?: boolean;
 }
 
 export interface Testimonial {
@@ -108,4 +209,13 @@ export interface Testimonial {
 export interface FAQItem {
   question: string;
   answer: string;
+}
+
+export type ArticleChatRole = "user" | "assistant";
+
+export interface ArticleChatMessage {
+  id: string;
+  role: ArticleChatRole;
+  content: string;
+  createdAt: string;
 }

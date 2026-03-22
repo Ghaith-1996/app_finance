@@ -1,0 +1,814 @@
+PORTFOLIOSIGNAL REPO ANALYSIS
+=============================
+
+Purpose of this file
+--------------------
+This file is a plain-text handoff dossier for another AI or engineer. It documents
+what the repository currently does, how the system is organized, how data moves
+through it, what external services it depends on, and where the rough edges are.
+It is intentionally based on the code as it exists in the repo today, not on a
+polished or idealized product description.
+
+
+1. PROJECT IDENTITY
+-------------------
+
+What the project is
+- PortfolioSignal is a Next.js App Router application for portfolio-aware
+  financial workflows.
+- The core idea is: ingest market/news data, connect it to a user portfolio,
+  run AI analysis, and present a personalized feed plus portfolio insights.
+- The repo mixes two modes:
+  - marketing/demo surfaces that sell the product concept
+  - authenticated product flows that use Supabase-backed portfolio/news data
+
+What problem it is trying to solve
+- Investors see too much undifferentiated market information.
+- The product tries to filter general financial news through what the user
+  actually owns.
+- It also tries to turn raw news into portfolio-language explanations:
+  why it matters, which holdings connect to it, what the signal stack is,
+  and what to read next.
+
+Current product posture in the repo
+- This is not a finished production application.
+- It is closer to a functional frontend-heavy MVP with real backend/data
+  plumbing for portfolios, news ingestion, analysis, and article chat.
+- The codebase contains both production-like flows and some demo/static
+  content and placeholder messaging.
+
+
+2. RUNTIME STACK AND ARCHITECTURE
+---------------------------------
+
+Primary stack
+- Next.js 16 App Router
+- React 19
+- TypeScript
+- Tailwind CSS 4
+- Supabase for auth, database, and realtime
+- Python worker for news ingestion
+- Vitest + Testing Library for frontend and route-level tests
+
+High-level architecture
+- Browser/client components handle:
+  - interactive onboarding
+  - feed filtering and article detail UI
+  - analysis trigger/polling
+  - article chat interaction
+- Server components handle:
+  - authenticated page shells and data loading for portfolio, analysis, feed
+- Server actions handle:
+  - CSV parsing preview flow
+  - holdings save/merge/update flows
+  - portfolio reads and derived overview data
+- API routes handle:
+  - feed reads
+  - analysis run state
+  - refresh/cron/health/ingest news pipeline endpoints
+  - article chat thread/message I/O
+- Python handles:
+  - EDGAR and NewsAPI ingestion
+  - normalization and dedupe/upsert into Supabase
+
+Important boundaries
+- News ingestion is hybrid:
+  - Python fetches/upserts raw articles
+  - TypeScript/Node enriches them with AI
+- Analysis is TypeScript-only and portfolio-aware.
+- Market/news storage is global in `news_items`.
+- Portfolio-specific feed rows live in `feed_items`.
+
+
+3. USER-FACING FLOWS
+--------------------
+
+3.1 Landing / marketing
+Main entrypoints
+- `app/page.tsx`
+- `components/marketing/*`
+
+Purpose
+- Markets the product vision.
+- Uses mock/static content from `lib/mock-data.ts`.
+- Explains positioning, feature ideas, proof/testimonials, and CTA paths.
+
+Data in/out
+- Mostly static copy and mock arrays.
+- Does not depend on Supabase for the main marketing content.
+
+Caveats
+- Marketing language often describes the product as more mature than the
+  operational backend guarantees.
+- README is generic Next.js boilerplate and does not explain this app.
+
+3.2 Authentication
+Main entrypoints
+- `app/(auth)/login/page.tsx`
+- `app/auth/callback/route.ts`
+- `middleware.ts`
+
+Behavior
+- Login page supports Google and GitHub OAuth via Supabase auth.
+- Callback exchanges the code for a session, then redirects to the requested
+  protected route or `/portfolio`.
+- Middleware protects:
+  - `/onboarding`
+  - `/analysis`
+  - `/feed`
+  - `/portfolio`
+- Logged-in users are redirected away from `/login`.
+
+Dependencies
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+
+3.3 Onboarding / portfolio creation / import
+Main entrypoints
+- `app/onboarding/page.tsx`
+- `components/app/csv-dropzone.tsx`
+- `components/app/column-mapper.tsx`
+- `components/app/holdings-review-table.tsx`
+- `components/app/symbol-search.tsx`
+- `lib/actions/portfolio.ts`
+- `lib/services/csv-parser.ts`
+- `lib/services/yahoo-finance.ts`
+
+Behavior
+- User can add a portfolio by:
+  - uploading CSV
+  - manual symbol search + manual position entry
+- CSV flow:
+  - parse CSV
+  - detect columns
+  - if ambiguous, request manual mapping
+  - normalize rows into holding drafts
+  - try resolving symbols via Yahoo-based search
+  - let user confirm, skip, or resolve ambiguous entries
+- Save flow:
+  - create a new portfolio if needed
+  - replace or merge holdings into an existing portfolio
+  - revalidate onboarding/portfolio/feed/analysis routes
+
+Data out
+- Writes to:
+  - `portfolios`
+  - `holdings`
+
+Important caveats
+- Symbol search depends on Yahoo Finance lookups.
+- CSV and manual entry are real flows, but UX/state logic is still MVP-style.
+
+3.4 Portfolio page
+Main entrypoints
+- `app/portfolio/page.tsx`
+- `components/app/portfolio-table.tsx`
+- `components/app/refresh-prices-button.tsx`
+- `lib/services/portfolio.ts`
+
+Behavior
+- Displays holdings, allocation, source status, gain/loss, and recent insights.
+- Pulls portfolio overview, holdings, and insight summaries.
+- Uses Yahoo Finance quotes for fresher display prices if available.
+- Falls back to stored DB prices when quote fetch fails.
+
+Data in/out
+- Reads:
+  - `portfolios`
+  - `holdings`
+  - `analysis_runs`
+  - `feed_items`
+  - `portfolio_insights`
+- Price refresh logic exists as a UI surface, but the repo is still largely a
+  frontend-first MVP rather than a full broker-sync system.
+
+3.5 Analysis page and pipeline trigger
+Main entrypoints
+- `app/analysis/page.tsx`
+- `components/app/analysis-run-trigger.tsx`
+- `app/api/news/refresh/route.ts`
+- `app/api/analysis/run/route.ts`
+
+Behavior
+- The analysis page is where the user kicks off the main pipeline.
+- `AnalysisRunTrigger`:
+  - starts refresh
+  - records stage output
+  - polls run status
+  - subscribes to Supabase realtime updates on `analysis_runs`
+- Refresh route currently means:
+  1. ingest global news pool
+  2. AI-enrich newly inserted articles
+  3. run portfolio-specific analysis
+
+Pipeline stage concepts shown in UI
+- ingest
+- enrichment
+- analysis
+- plus analysis run statuses such as:
+  - queued
+  - processing_holdings
+  - mapping_news
+  - generating_insights
+  - complete
+  - failed
+
+Current caveat
+- The UI around "analysis complete" vs "feed ready" vs "no current news pool"
+  has been evolving and may still contain product-logic ambiguities.
+
+3.6 Feed page
+Main entrypoints
+- `app/feed/page.tsx`
+- `components/app/feed-view.tsx`
+- `components/app/news-feed-card.tsx`
+- `app/api/feed/route.ts`
+
+Feed modes
+- Personal feed
+  - based on `feed_items`
+  - scoped to latest completed `analysis_run`
+  - sorted by relevance score
+- Full market feed
+  - based directly on `news_items`
+  - last-24-hour global market/news pool
+  - flags whether an article matches held symbols
+
+Behavior
+- Supports client-side filters:
+  - personal: holdings, sectors, category, recency
+  - market: source, category, recency
+- Article detail panel shows:
+  - headline
+  - badges
+  - source
+  - published time
+  - stock tags
+  - ticker impacts
+  - summary
+  - why-it-matters or holdings context in personal mode
+  - portfolio match hints in market mode
+
+Important recent addition
+- Feed payloads now include `newsItemId` as the canonical ID for the underlying
+  `news_items` row so cross-surface article chat can target the same article.
+
+3.7 Article chat
+Main entrypoints
+- `components/app/article-chat-panel.tsx`
+- `app/api/article-chat/route.ts`
+- `supabase/migrations/006_article_chat.sql`
+
+Behavior
+- Inline chat opens from the article detail panel.
+- Chat is per `user + portfolio + article`.
+- GET loads or lazily creates a thread.
+- POST stores the user message, builds prompt context, gets an AI answer,
+  stores assistant reply, then returns the thread.
+
+Prompt context includes
+- selected article metadata and summary
+- raw article content if available
+- stock tags and ticker impacts
+- portfolio holdings
+- latest feed-item context for that article if it exists:
+  - why it matters
+  - relevance score
+  - matched holdings
+- recent conversation history
+
+Critical caveat
+- This feature depends on migration `006_article_chat.sql` being applied in the
+  target Supabase environment. The route and UI can exist in the repo even if
+  the tables are not yet present in a deployed database.
+
+
+4. DATA MODEL AND STORAGE
+-------------------------
+
+Primary tables from migrations
+- `portfolios`
+  - one portfolio per user entry, contains name/source/sync metadata
+- `holdings`
+  - portfolio positions and position metadata
+- `analysis_runs`
+  - track analysis status/progress over time
+- `news_items`
+  - global ingested market/news pool
+- `feed_items`
+  - portfolio-specific scored news rows derived from `news_items`
+- `portfolio_insights`
+  - AI-generated summary/insight cards for a run
+- `article_chat_threads`
+  - persistent per-user per-portfolio per-article chat thread
+- `article_chat_messages`
+  - ordered messages within a thread
+
+Important schema evolution
+- `001_initial_schema.sql`
+  - creates portfolios, holdings, analysis_runs, news_items, feed_items,
+    portfolio_insights, base RLS, and realtime publications
+- `002_holdings_position_fields.sql`
+  - adds quantity, average_cost, cost basis/current value style fields
+- `003_portfolio_source_csv.sql`
+  - adds CSV/import source support
+- `004_news_classification.sql`
+  - adds news classification fields and feed match metadata
+- `005_news_source_fields.sql`
+  - adds source_type, external_id, category_hint, metadata, source confidence
+- `006_article_chat.sql`
+  - adds article chat persistence tables and policies
+
+Important relationships
+- `portfolios.user_id -> auth.users.id`
+- `holdings.portfolio_id -> portfolios.id`
+- `analysis_runs.portfolio_id -> portfolios.id`
+- `feed_items.analysis_run_id -> analysis_runs.id`
+- `feed_items.news_item_id -> news_items.id`
+- `portfolio_insights.analysis_run_id -> analysis_runs.id`
+- `article_chat_threads.portfolio_id -> portfolios.id`
+- `article_chat_threads.news_item_id -> news_items.id`
+- `article_chat_messages.thread_id -> article_chat_threads.id`
+
+Important indexing and dedupe
+- `news_items` has a unique index on `(source_type, external_id)` when
+  `external_id` is present.
+- `news_items.published_at` is indexed for time-window reads.
+- `stock_tags` and `matched_stock_tags` are GIN-indexed.
+- article chat thread uniqueness is enforced on
+  `(user_id, portfolio_id, news_item_id)`.
+
+RLS model
+- Portfolio-owned data is restricted by portfolio ownership.
+- `news_items` are readable by authenticated users.
+- `article_chat_threads` and `article_chat_messages` are limited to the owning
+  authenticated user.
+
+
+5. NEWS INGESTION AND ANALYSIS PIPELINE
+---------------------------------------
+
+5.1 Global news pool concept
+- The app now treats `news_items` as a global 24-hour news pool.
+- The user portfolio is not used to decide which headline articles to ingest.
+- The portfolio is used later, during analysis, to score and filter the stored pool.
+
+5.2 Refresh route
+Main entrypoint
+- `app/api/news/refresh/route.ts`
+
+Behavior
+- Authenticated, portfolio-specific route.
+- Validates selected portfolio and requires holdings.
+- Resolves global ticker universe from all holdings in the DB for EDGAR.
+- Calls Python worker for:
+  - EDGAR filings (ticker-based)
+  - NewsAPI business/market headlines (global, non-ticker-specific)
+- Runs AI enrichment on newly inserted rows.
+- Computes a 24-hour news pool snapshot.
+- Runs portfolio-specific analysis.
+- Returns:
+  - stage results
+  - ingest breakdown
+  - enrichment count
+  - analysis run ID
+  - pool snapshot
+  - analysis metadata
+
+5.3 Cron route
+Main entrypoint
+- `app/api/news/cron/route.ts`
+
+Behavior
+- Secured with `CRON_SECRET`.
+- Does unattended ingestion only.
+- Does not run portfolio analysis or create `feed_items`.
+- Used to keep the global news pool warm/current.
+
+5.4 Ingest route
+Main entrypoint
+- `app/api/news/ingest/route.ts`
+
+Behavior
+- Another authenticated ingestion endpoint that triggers global ingestion +
+  enrichment, but not portfolio analysis.
+- This overlaps with the cron/refresh surface and is worth noting as part of
+  the current repo state.
+
+5.5 Health route
+Main entrypoint
+- `app/api/news/health/route.ts`
+
+Behavior
+- Runs the Python worker in `--check` mode.
+- Verifies Python availability and required worker configuration.
+- Returns 200 or 503 depending on aggregate health.
+
+5.6 Python worker
+Main entrypoints
+- `workers/news_ingestion/main.py`
+- `workers/news_ingestion/fetchers/edgar_fetcher.py`
+- `workers/news_ingestion/fetchers/newsapi_fetcher.py`
+- `workers/news_ingestion/upsert.py`
+- `workers/news_ingestion/bootstrap.py`
+
+Behavior
+- Loads env from `.env` if available.
+- Performs preflight checks for:
+  - edgartools
+  - newsapi-python
+  - supabase-py
+  - EDGAR identity
+  - NewsAPI key
+  - service role key
+  - writable EDGAR cache directory
+- Fetches:
+  - EDGAR filings for a provided ticker list
+  - NewsAPI global business/market headlines for the lookback window
+- Normalizes articles into a shared schema.
+- Upserts them into Supabase with per-source dedupe on external IDs.
+- Returns structured source breakdown and ingest summary.
+
+Current ingest semantics
+- If sources return no rows in the lookback window: "empty"
+- If rows fetched are all duplicates: also represented as "empty" with duplicate detail
+- If inserted > 0: success or partial
+- If both sources fail: failed
+
+5.7 AI enrichment
+Main entrypoint
+- `lib/services/news/ingest.ts`
+
+Behavior
+- Runs after Python insertion.
+- Selects recent `news_items` with `global_summary IS NULL`.
+- Calls AI article analysis.
+- Fills:
+  - category
+  - stock_tags
+  - global_summary
+  - overall_effect
+  - ticker_impacts
+
+Provider trust rules
+- EDGAR stock tags are treated as authoritative.
+- Non-EDGAR tags can be extended or adjusted by AI.
+
+5.8 Pool snapshot logic
+Main entrypoint
+- `lib/services/news/pool-snapshot.ts`
+
+Behavior
+- Computes the current stored 24-hour pool in the DB.
+- Returns:
+  - total pool count
+  - latest published timestamp
+  - optional counts by source type
+- This is used to separate "no new fetch this run" from "no currently available news."
+
+5.9 Portfolio-specific analysis
+Main entrypoint
+- `lib/services/analysis.ts`
+
+Behavior
+- Creates an `analysis_run`.
+- Loads holdings for the portfolio.
+- Reads the newest 100 `news_items` from the last 24 hours.
+- Computes:
+  - pool size in DB
+  - latest published article in the pool
+  - number of candidates scored
+- Generates portfolio insights from the article pool.
+- Scores every candidate against the portfolio.
+- Adds EDGAR source boost.
+- Persists only rows with boosted relevance >= 60 as `feed_items`.
+- Writes `portfolio_insights`.
+- Returns metadata:
+  - poolCount24h
+  - latestPublishedAt24h
+  - candidatesScored
+  - feedItemsCreated
+
+Important scoring behavior
+- There is no generic fallback feed anymore.
+- If nothing meets threshold, the personal feed can be empty even if the market pool is not.
+- Matching logic still derives matched holdings/tags/sectors for persisted feed items.
+
+
+6. AI SUBSYSTEM
+---------------
+
+Main entrypoints
+- `lib/services/ai/provider.ts`
+- `lib/services/ai/index.ts`
+- `lib/services/ai/prompts.ts`
+- `lib/services/ai/openai-provider.ts`
+- `lib/services/ai/anthropic-provider.ts`
+- `lib/services/ai/openrouter-provider.ts`
+- `lib/services/ai/stub-provider.ts`
+
+Provider abstraction
+- `getAIProvider()` selects provider from `AI_PROVIDER`.
+- Supported provider adapters:
+  - OpenAI
+  - Anthropic
+  - OpenRouter
+- If keys are missing, the code falls back to deterministic stub logic.
+
+Prompt families currently present
+- article enrichment / classification
+- article summary
+- sentiment scoring
+- portfolio relevance scoring
+- why-it-matters
+- portfolio insights generation
+- article chat prompt
+
+Article chat behavior
+- Prompt is article-specific and portfolio-aware.
+- It is allowed to use broader financial knowledge.
+- It is supposed to distinguish article facts from broader reasoning.
+
+Current caveats
+- Stub behavior is simplistic and not fidelity-matched to production AI.
+- Providers are called directly via HTTP fetch; there is no queueing, retry
+  orchestration, or streaming layer.
+- OpenRouter is the default fallback when `AI_PROVIDER` is not `"openai"` or `"anthropic"`.
+
+
+7. API AND SERVER INTERFACES
+----------------------------
+
+Server actions in `lib/actions/portfolio.ts`
+- preview CSV import
+- preview mapped CSV
+- resolve symbol
+- save holdings
+- create portfolio
+- update holding
+- get portfolio
+- get user portfolios
+- get portfolio overview
+- get portfolio insights
+
+Key API routes
+- `app/api/feed/route.ts`
+  - returns personal or market feed
+- `app/api/news/refresh/route.ts`
+  - ingest + enrich + analyze
+- `app/api/news/cron/route.ts`
+  - unattended ingest + enrich
+- `app/api/news/ingest/route.ts`
+  - manual/authenticated ingest + enrich
+- `app/api/news/health/route.ts`
+  - worker preflight
+- `app/api/analysis/run/route.ts`
+  - start run and read run status
+- `app/api/article-chat/route.ts`
+  - load/create article thread and send messages
+
+Important shared types
+- `lib/types.ts`
+- `lib/services/ai/provider.ts`
+- `lib/services/news/types.ts`
+
+Notable payload conventions
+- Feed rows now carry both `id` and `newsItemId`.
+- Analysis routes expose metadata beyond run ID.
+- Worker results contain per-source fetched/inserted/skipped/failed counts.
+
+
+8. FRONTEND ARCHITECTURE
+------------------------
+
+App shell and layout
+- `app/layout.tsx` sets metadata and global stylesheet.
+- `components/app/app-shell.tsx` is the shared authenticated shell.
+- Navigation includes onboarding, analysis, feed, portfolio, and a user menu.
+
+UI building blocks
+- `components/ui/button.tsx`
+- `components/ui/panel.tsx`
+- `components/ui/badge.tsx`
+- `components/ui/section-heading.tsx`
+
+Major app components
+- onboarding:
+  - `csv-dropzone`
+  - `column-mapper`
+  - `holdings-review-table`
+  - `symbol-search`
+- portfolio:
+  - `portfolio-table`
+  - `refresh-prices-button`
+- analysis:
+  - `analysis-run-trigger`
+- feed:
+  - `feed-view`
+  - `news-feed-card`
+  - `article-chat-panel`
+
+Feed/detail/chat wiring
+- `FeedView` fetches feed data, applies client-side filters, tracks selected story.
+- `DetailPanel` renders article detail.
+- Chat is lazy-opened inside the detail panel.
+- Chat panel loads/sends messages with `portfolioId + newsItemId`.
+
+Realtime usage
+- Personal feed listens for `feed_items` inserts.
+- Analysis trigger subscribes to `analysis_runs` updates.
+
+
+9. EXTERNAL SERVICES, DEPENDENCIES, AND CONFIG
+----------------------------------------------
+
+Node dependencies of note
+- `@supabase/ssr`
+- `@supabase/supabase-js`
+- `next`
+- `react`
+- `react-dom`
+- `lucide-react`
+- `tailwind-merge`
+- `yahoo-finance2`
+
+Python dependencies
+- `edgartools`
+- `newsapi-python`
+- `supabase`
+- `python-dotenv`
+
+Environment/config currently referenced
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `CRON_SECRET`
+- `EDGAR_IDENTITY`
+- `NEWSAPI_KEY`
+- `AI_PROVIDER`
+- `OPENAI_API_KEY`
+- `ANTHROPIC_API_KEY`
+- `OPENROUTER_API_KEY`
+- `OPENROUTER_MODEL`
+- `OPENROUTER_HTTP_REFERER`
+- `OPENROUTER_APP_NAME`
+- `NEXT_PUBLIC_SITE_URL`
+- `MARKETAUX_API_KEY` (present in an unused provider module)
+
+Important service split
+- Supabase:
+  - auth
+  - relational storage
+  - RLS
+  - realtime
+- Yahoo Finance:
+  - symbol lookup
+  - quote refresh/display pricing
+- EDGAR:
+  - filing ingestion
+- NewsAPI:
+  - global market/business headlines
+- OpenAI/Anthropic/OpenRouter:
+  - AI analysis and article chat
+
+
+10. TESTING AND VALIDATION
+--------------------------
+
+Current JS test coverage includes
+- `tests/feed-view.test.tsx`
+  - feed UI states and empty-state behavior
+- `tests/analysis-run-trigger.test.tsx`
+  - analysis trigger state handling
+- `tests/refresh-route.test.ts`
+  - refresh route behavior
+- `tests/cron-route.test.ts`
+  - cron ingestion behavior
+- `tests/feed-query.test.ts`
+  - feed query scoping logic
+- `tests/analysis-constants.test.ts`
+  - analysis limits/threshold constants
+- `tests/ingest-detail.test.ts`
+  - ingest summary formatting
+- `tests/ai-prompts.test.ts`
+  - AI prompt generation assumptions
+- `tests/article-cta.test.tsx`
+  - article link/type contract behavior
+
+Current Python test coverage includes
+- `workers/news_ingestion/tests/test_newsapi_external_id.py`
+  - NewsAPI external ID generation behavior
+
+General testing posture
+- Tests are mostly unit-style and route-contract-style.
+- Coverage is targeted, not comprehensive end-to-end.
+- There is no full browser E2E suite in the repo.
+
+Validation gaps
+- No integrated test proving full Supabase + Python worker + AI provider + UI flow together.
+- External service behavior is mostly stubbed or mocked in tests.
+- Migration application state is not validated by tests.
+
+
+11. CURRENT REPO-STATE CAVEATS AND ROUGH EDGES
+----------------------------------------------
+
+Source-of-truth issues
+- `README.md` is still the generic create-next-app template and should not be
+  treated as a source of truth for the project.
+
+Product vs repo reality mismatches
+- Marketing copy is more polished and aspirational than some backend/runtime details.
+- Some pages imply a more complete secure broker-sync product than what is
+  actually implemented in this repo.
+
+News pipeline rough edges
+- There are overlapping ingest entrypoints:
+  - refresh
+  - cron
+  - ingest
+- This is functional, but it means the ingestion surface is not fully simplified.
+- `lib/services/news/marketaux-provider.ts` still exists even though the active
+  pipeline is EDGAR + NewsAPI.
+- Historical source labels such as `yfinance`, `marketaux`, and `seed` still
+  appear in types or snapshot helper code, even though they are not all active
+  in the current ingest workflow.
+
+Article chat caveats
+- The route and UI exist in the repo, but working end-to-end requires migration
+  `006_article_chat.sql` to be applied.
+- This chat is article-scoped, not a general portfolio assistant.
+
+Feed/analysis semantics caveats
+- Personal feed emptiness can mean:
+  - no current news pool
+  - no articles qualified for the portfolio
+  - filters removed all visible items
+- The repo has logic to improve this distinction, but these UX semantics are
+  still an active area of refinement.
+
+Data freshness caveats
+- Portfolio value display can use live Yahoo quotes while broader portfolio/feed
+  data can still be based on previously ingested or analyzed DB state.
+- Analysis is based on the stored 24-hour pool, not necessarily only on rows
+  inserted during the most recent refresh click.
+
+Operational caveats
+- Python worker execution depends on local/runtime Python availability plus
+  required packages and env vars.
+- There is no queue, worker orchestration service, or job retry system beyond
+  direct subprocess execution from routes.
+
+
+12. MAIN FILES AND WHAT THEY ARE FOR
+------------------------------------
+
+Core pages
+- `app/page.tsx` -> marketing landing page
+- `app/onboarding/page.tsx` -> holdings import/create flow
+- `app/portfolio/page.tsx` -> holdings and overview
+- `app/analysis/page.tsx` -> analysis control surface
+- `app/feed/page.tsx` -> feed and article detail
+
+Core backend/service files
+- `lib/actions/portfolio.ts` -> server actions for portfolio CRUD/read flows
+- `lib/services/analysis.ts` -> analysis engine
+- `lib/services/portfolio.ts` -> overview calculations
+- `lib/services/news/ingest.ts` -> AI enrichment of raw articles
+- `lib/services/news/worker.ts` -> TypeScript bridge to Python worker
+- `workers/news_ingestion/main.py` -> Python ingest orchestrator
+- `app/api/news/refresh/route.ts` -> full pipeline trigger
+- `app/api/feed/route.ts` -> feed API
+- `app/api/article-chat/route.ts` -> article chat API
+
+Core schema files
+- `supabase/migrations/001_initial_schema.sql`
+- `supabase/migrations/004_news_classification.sql`
+- `supabase/migrations/005_news_source_fields.sql`
+- `supabase/migrations/006_article_chat.sql`
+
+
+13. USE THIS CONTEXT FOR ANOTHER AI
+-----------------------------------
+
+Highest-signal facts another AI should retain
+- This repo is a portfolio-aware finance app with real Supabase-backed product
+  flows and a polished marketing shell.
+- The central architectural split is:
+  - global news storage in `news_items`
+  - portfolio-specific feed derivation in `feed_items`
+- News ingestion is hybrid:
+  - Python fetches EDGAR + NewsAPI and upserts raw rows
+  - TypeScript enriches with AI and runs portfolio analysis
+- Analysis scores the newest 100 articles from the last 24 hours and only
+  persists feed rows with relevance >= 60.
+- Personal feed is not raw news; it is the output of the latest completed
+  analysis run for a portfolio.
+- Market feed reads directly from the global news pool.
+- Auth is Supabase OAuth with middleware-protected routes.
+- Onboarding/import and symbol resolution are real flows, not just mocks.
+- Article chat exists and is article-scoped plus portfolio-aware, but depends
+  on the latest migration being applied.
+- The repo contains active product code plus residual/older modules and some
+  aspirational copy, so another AI should trust current route/service code and
+  migrations more than the marketing language or README.

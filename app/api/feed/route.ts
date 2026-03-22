@@ -1,4 +1,16 @@
 import { createClient } from "@/lib/supabase/server";
+import type { FeedMode, MatchReasonCode, TickerImpact } from "@/lib/types";
+import { resolveDirectStockMatch } from "@/lib/services/news/direct-match";
+
+/** Hard cap: only articles from the last 24 hours appear in either feed mode. */
+const FEED_MAX_AGE_MINUTES = 24 * 60;
+
+function effectiveRecencyCap(maxMinutesParam: string | null): number {
+  if (!maxMinutesParam) return FEED_MAX_AGE_MINUTES;
+  const parsed = parseInt(maxMinutesParam, 10);
+  if (Number.isNaN(parsed) || parsed < 0) return FEED_MAX_AGE_MINUTES;
+  return Math.min(parsed, FEED_MAX_AGE_MINUTES);
+}
 
 function minutesAgo(iso: string): number {
   return Math.floor((Date.now() - new Date(iso).getTime()) / 60_000);
@@ -13,12 +25,16 @@ function formatPublishedAt(iso: string): string {
   return `${Math.floor(min / 1440)} days ago`;
 }
 
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
 /**
- * GET /api/feed?portfolioId=...&holding=...&sector=...&maxMinutes=...
- * Returns feed items for the given portfolio (or user's latest portfolio).
- * holding: filter by ticker (e.g. NVDA)
- * sector: filter by sector name
- * maxMinutes: only items published within the last N minutes (e.g. 60, 120)
+ * GET /api/feed?mode=personal|market&portfolioId=...&holding=...&sector=...
+ *              &category=...&maxMinutes=...&ticker=...&sourceType=...
  */
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -27,18 +43,17 @@ export async function GET(request: Request) {
     error: authError,
   } = await supabase.auth.getUser();
   if (authError || !user) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      status: 401,
-      headers: { "Content-Type": "application/json" },
-    });
+    return json({ error: "Unauthorized" }, 401);
   }
 
   const { searchParams } = new URL(request.url);
-  let portfolioId = searchParams.get("portfolioId");
-  const holding = searchParams.get("holding");
-  const sector = searchParams.get("sector");
+  const mode: FeedMode =
+    searchParams.get("mode") === "market" ? "market" : "personal";
+  const category = searchParams.get("category");
   const maxMinutes = searchParams.get("maxMinutes");
 
+  // --- Resolve portfolio (needed by both modes for context) ---
+  let portfolioId = searchParams.get("portfolioId");
   if (!portfolioId) {
     const { data: portfolios } = await supabase
       .from("portfolios")
@@ -50,10 +65,7 @@ export async function GET(request: Request) {
   }
 
   if (!portfolioId) {
-    return new Response(
-      JSON.stringify({ feed: [], portfolioId: null }),
-      { status: 200, headers: { "Content-Type": "application/json" } }
-    );
+    return json({ feed: [], portfolioId: null, mode });
   }
 
   const { data: portfolio } = await supabase
@@ -64,9 +76,79 @@ export async function GET(request: Request) {
     .single();
 
   if (!portfolio) {
-    return new Response(JSON.stringify({ error: "Portfolio not found" }), {
-      status: 404,
-      headers: { "Content-Type": "application/json" },
+    return json({ error: "Portfolio not found" }, 404);
+  }
+
+  const { data: holdingRows } = await supabase
+    .from("holdings")
+    .select("symbol, sector")
+    .eq("portfolio_id", portfolioId);
+
+  const portfolioSymbols = [...new Set(
+    (holdingRows ?? [])
+      .map((holding) => String(holding.symbol ?? "").toUpperCase())
+      .filter(Boolean),
+  )];
+  const portfolioSectors = [...new Set(
+    (holdingRows ?? [])
+      .map((holding) => String(holding.sector ?? ""))
+      .filter(Boolean),
+  )];
+
+  if (mode === "market") {
+    return handleMarketMode(supabase, {
+      portfolioId,
+      portfolioSymbols,
+      portfolioSectors,
+      category,
+      maxMinutes,
+      sourceType: searchParams.get("sourceType"),
+    });
+  }
+
+  return handlePersonalMode(supabase, {
+    portfolioId,
+    portfolioSymbols,
+    portfolioSectors,
+    holding: searchParams.get("holding"),
+    sector: searchParams.get("sector"),
+    category,
+    maxMinutes,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Personal mode — scoped to the latest completed analysis run
+// ---------------------------------------------------------------------------
+
+async function handlePersonalMode(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  opts: {
+    portfolioId: string;
+    portfolioSymbols: string[];
+    portfolioSectors: string[];
+    holding: string | null;
+    sector: string | null;
+    category: string | null;
+    maxMinutes: string | null;
+  },
+) {
+  const { data: latestRun } = await supabase
+    .from("analysis_runs")
+    .select("id")
+    .eq("portfolio_id", opts.portfolioId)
+    .eq("status", "complete")
+    .order("completed_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!latestRun) {
+    return json({
+      feed: [],
+      portfolioId: opts.portfolioId,
+      mode: "personal" as const,
+      portfolioSymbols: opts.portfolioSymbols,
+      portfolioSectors: opts.portfolioSectors,
     });
   }
 
@@ -82,33 +164,42 @@ export async function GET(request: Request) {
       sectors,
       ai_summary,
       why_it_matters,
+      matched_stock_tags,
+      match_reason_codes,
+      display_effect,
+      source_confidence,
       news_items!inner (
         id,
         headline,
         source,
         url,
         published_at,
-        angle
+        angle,
+        category,
+        stock_tags,
+        global_summary,
+        overall_effect,
+        ticker_impacts,
+        source_type,
+        metadata
       )
-    `
+    `,
     )
-    .eq("portfolio_id", portfolioId)
+    .eq("portfolio_id", opts.portfolioId)
+    .eq("analysis_run_id", latestRun.id)
     .order("relevance_score", { ascending: false });
 
-  if (holding) {
-    query = query.contains("holdings", [holding]);
+  if (opts.holding) {
+    query = query.contains("holdings", [opts.holding]);
   }
-  if (sector) {
-    query = query.contains("sectors", [sector]);
+  if (opts.sector) {
+    query = query.contains("sectors", [opts.sector]);
   }
 
   const { data: rows, error } = await query;
 
   if (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
+    return json({ error: error.message }, 500);
   }
 
   type Row = {
@@ -120,6 +211,10 @@ export async function GET(request: Request) {
     sectors: string[];
     ai_summary: string | null;
     why_it_matters: string | null;
+    matched_stock_tags: string[];
+    match_reason_codes: MatchReasonCode[] | null;
+    display_effect: string;
+    source_confidence: string;
     news_items: {
       id: string;
       headline: string;
@@ -127,6 +222,13 @@ export async function GET(request: Request) {
       url: string | null;
       published_at: string;
       angle: string | null;
+      category: string;
+      stock_tags: string[];
+      global_summary: string | null;
+      overall_effect: string;
+      ticker_impacts: TickerImpact[] | null;
+      source_type: string;
+      metadata: Record<string, unknown> | null;
     } | null;
   };
 
@@ -134,13 +236,14 @@ export async function GET(request: Request) {
   let feed = rawRows.map((row) => {
     const news = row.news_items ?? null;
     const publishedAt = news?.published_at ?? new Date().toISOString();
-    const minutesAgoVal = minutesAgo(publishedAt);
     return {
       id: row.id,
+      newsItemId: news?.id ?? "",
       headline: news?.headline ?? "",
       source: news?.source ?? "",
+      url: news?.url ?? undefined,
       publishedAt: formatPublishedAt(publishedAt),
-      publishedMinutesAgo: minutesAgoVal,
+      publishedMinutesAgo: minutesAgo(publishedAt),
       relevanceScore: row.relevance_score,
       sentiment: row.sentiment,
       impact: row.impact,
@@ -149,18 +252,136 @@ export async function GET(request: Request) {
       aiSummary: row.ai_summary ?? "",
       whyItMatters: row.why_it_matters ?? "",
       angle: news?.angle ?? "",
+      category: news?.category ?? "other",
+      stockTags: news?.stock_tags ?? [],
+      matchedStockTags: row.matched_stock_tags ?? [],
+      matchReasonCodes: row.match_reason_codes ?? [],
+      globalSummary: news?.global_summary ?? "",
+      displayEffect: row.display_effect ?? "neutral",
+      tickerImpacts: news?.ticker_impacts ?? [],
+      sourceType: news?.source_type ?? "other",
+      sourceConfidence: row.source_confidence ?? "standard",
+      metadata: news?.metadata ?? {},
     };
   });
 
-  if (maxMinutes) {
-    const max = parseInt(maxMinutes, 10);
-    if (!Number.isNaN(max)) {
-      feed = feed.filter((item) => item.publishedMinutesAgo <= max);
-    }
+  if (opts.category) {
+    feed = feed.filter((item) => item.category === opts.category);
+  }
+  const cap = effectiveRecencyCap(opts.maxMinutes);
+  feed = feed.filter((item) => item.publishedMinutesAgo <= cap);
+
+  return json({
+    feed,
+    portfolioId: opts.portfolioId,
+    mode: "personal" as const,
+    portfolioSymbols: opts.portfolioSymbols,
+    portfolioSectors: opts.portfolioSectors,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Market mode — reads from news_items directly, highlights portfolio matches
+// ---------------------------------------------------------------------------
+
+async function handleMarketMode(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  opts: {
+    portfolioId: string;
+    portfolioSymbols: string[];
+    portfolioSectors: string[];
+    category: string | null;
+    maxMinutes: string | null;
+    sourceType: string | null;
+  },
+) {
+  const holdingSymbols = new Set(opts.portfolioSymbols.map((symbol) => symbol.toUpperCase()));
+
+  const publishedSince = new Date(
+    Date.now() - FEED_MAX_AGE_MINUTES * 60 * 1000,
+  ).toISOString();
+
+  let query = supabase
+    .from("news_items")
+    .select(
+      "id, headline, source, url, published_at, angle, category, stock_tags, " +
+      "global_summary, overall_effect, ticker_impacts, source_type, metadata, raw_content",
+    )
+    .gte("published_at", publishedSince)
+    .order("published_at", { ascending: false })
+    .limit(60);
+
+  if (opts.category) {
+    query = query.eq("category", opts.category);
+  }
+  if (opts.sourceType) {
+    query = query.eq("source_type", opts.sourceType);
   }
 
-  return new Response(
-    JSON.stringify({ feed, portfolioId }),
-    { status: 200, headers: { "Content-Type": "application/json" } }
-  );
+  const { data: rows, error } = await query;
+
+  if (error) {
+    return json({ error: error.message }, 500);
+  }
+
+  type NewsRow = {
+    id: string;
+    headline: string;
+    source: string;
+    url: string | null;
+    published_at: string;
+    angle: string | null;
+    category: string;
+    stock_tags: string[];
+    global_summary: string | null;
+    overall_effect: string;
+    ticker_impacts: TickerImpact[] | null;
+    source_type: string;
+    metadata: Record<string, unknown> | null;
+    raw_content: string | null;
+  };
+
+  const rawRows = (rows ?? []) as unknown as NewsRow[];
+  let feed = rawRows.map((row) => {
+    const publishedAt = row.published_at ?? new Date().toISOString();
+    const directMatch = resolveDirectStockMatch(
+      row.stock_tags ?? [],
+      row.ticker_impacts ?? [],
+      holdingSymbols,
+    );
+    const isPortfolioMatch = directMatch.matchedSymbols.length > 0;
+
+    return {
+      id: row.id,
+      newsItemId: row.id,
+      headline: row.headline,
+      source: row.source,
+      url: row.url ?? undefined,
+      publishedAt: formatPublishedAt(publishedAt),
+      publishedMinutesAgo: minutesAgo(publishedAt),
+      angle: row.angle ?? "",
+      category: row.category ?? "other",
+      stockTags: row.stock_tags ?? [],
+      globalSummary: row.global_summary ?? "",
+      displayEffect: row.overall_effect ?? "neutral",
+      tickerImpacts: row.ticker_impacts ?? [],
+      sourceType: row.source_type ?? "other",
+      sourceConfidence:
+        row.source_type === "edgar" ? "high" : ("standard" as const),
+      metadata: row.metadata ?? {},
+      isPortfolioMatch,
+      matchedStockTags: directMatch.matchedSymbols,
+    };
+  });
+
+  const cap = effectiveRecencyCap(opts.maxMinutes);
+  feed = feed.filter((item) => item.publishedMinutesAgo <= cap);
+
+  return json({
+    feed,
+    portfolioId: opts.portfolioId,
+    mode: "market" as const,
+    portfolioSymbols: opts.portfolioSymbols,
+    portfolioSectors: opts.portfolioSectors,
+  });
 }

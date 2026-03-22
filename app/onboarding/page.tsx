@@ -1,395 +1,457 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import {
   ArrowRight,
-  Link2,
+  FileSpreadsheet,
+  Loader2,
   PencilLine,
   Plus,
   ShieldCheck,
-  TriangleAlert,
+  Trash2,
 } from "lucide-react";
 
 import { AppShell } from "@/components/app/app-shell";
-import { ProviderCard } from "@/components/app/provider-card";
+import { CSVDropzone } from "@/components/app/csv-dropzone";
+import { ColumnMapper } from "@/components/app/column-mapper";
+import { HoldingsReviewTable } from "@/components/app/holdings-review-table";
+import { SymbolSearch } from "@/components/app/symbol-search";
 import { Badge } from "@/components/ui/badge";
 import { buttonStyles } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
-import { createPortfolio } from "@/lib/actions/portfolio";
-import { manualPortfolioSeed, providers } from "@/lib/mock-data";
-import { cn } from "@/lib/utils";
+import {
+  getUserPortfolios,
+  previewCSVImport,
+  previewCSVWithMapping,
+  saveHoldings,
+} from "@/lib/actions/portfolio";
+import type {
+  HoldingDraft,
+  HoldingResolutionCandidate,
+  SaveMode,
+} from "@/lib/types";
+import { cn, formatPrice } from "@/lib/utils";
 
-type Method = "connect" | "manual";
-
-const extraHolding = {
-  id: "cost-live",
-  symbol: "COST",
-  company: "Costco Wholesale",
-  sector: "Consumer",
-  market: "NASDAQ",
-  source: "Manual",
-  price: 749.12,
-  dailyChange: 0.9,
-  allocation: 8,
-  thesis: "Quality consumer compounder with defensive demand.",
-};
+type Method = "csv" | "manual";
+type Step = "method" | "intake" | "review";
 
 export default function OnboardingPage() {
   const router = useRouter();
-  const [method, setMethod] = useState<Method>("connect");
-  const [selectedProviderId, setSelectedProviderId] = useState("wealthsimple");
-  const [draftHoldings, setDraftHoldings] = useState(manualPortfolioSeed);
+  const [method, setMethod] = useState<Method>("csv");
+  const [step, setStep] = useState<Step>("method");
+  const [drafts, setDrafts] = useState<HoldingDraft[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
 
-  const selectedProvider =
-    providers.find((provider) => provider.id === selectedProviderId) ?? providers[0];
+  // CSV state
+  const [csvText, setCsvText] = useState<string | null>(null);
+  const [needsMapping, setNeedsMapping] = useState(false);
+  const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
+  const [suggestedMapping, setSuggestedMapping] = useState<Record<string, number>>({});
 
-  const totalAllocation = useMemo(
-    () => draftHoldings.reduce((sum, holding) => sum + holding.allocation, 0),
-    [draftHoldings],
+  // Save mode
+  const [existingPortfolioId, setExistingPortfolioId] = useState<string | null>(null);
+  const [saveMode, setSaveMode] = useState<SaveMode>("replace");
+  const [hasCheckedExisting, setHasCheckedExisting] = useState(false);
+
+  // Manual entry state
+  const [manualRows, setManualRows] = useState<
+    Array<{ tempId: string; quantity: string; avgCost: string; thesis: string }>
+  >([]);
+
+  const confirmedCount = useMemo(
+    () => drafts.filter((d) => d.status === "confirmed").length,
+    [drafts],
   );
+  const unresolvedCount = useMemo(
+    () => drafts.filter((d) => d.status === "unresolved").length,
+    [drafts],
+  );
+  const canSave = confirmedCount > 0 && unresolvedCount === 0;
 
-  const isAllocationBalanced = totalAllocation === 100;
+  // Check for existing portfolios when entering review
+  const checkExistingPortfolios = useCallback(async () => {
+    if (hasCheckedExisting) return;
+    try {
+      const { data } = await getUserPortfolios();
+      if (data && data.length > 0) {
+        setExistingPortfolioId(data[0].id);
+      }
+    } catch {
+      // ignore
+    }
+    setHasCheckedExisting(true);
+  }, [hasCheckedExisting]);
 
-  function adjustAllocation(id: string, delta: number) {
-    setDraftHoldings((current) =>
-      current.map((holding) =>
-        holding.id === id
-          ? { ...holding, allocation: Math.max(0, holding.allocation + delta) }
-          : holding,
-      ),
+  // CSV handlers
+  async function handleCSVUpload(content: string) {
+    setCsvText(content);
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await previewCSVImport(content);
+      if (result.error) {
+        setError(result.error);
+        setLoading(false);
+        return;
+      }
+      if (result.needsMapping) {
+        setNeedsMapping(true);
+        setCsvHeaders(result.headers);
+        setSuggestedMapping(result.suggestedMapping);
+        setStep("intake");
+      } else {
+        setDrafts(result.drafts);
+        setStep("review");
+        checkExistingPortfolios();
+      }
+    } catch {
+      setError("Failed to parse CSV. Please check the file format.");
+    }
+    setLoading(false);
+  }
+
+  async function handleMappingConfirm(
+    mapping: Record<string, number>,
+    isTransactionFile: boolean,
+  ) {
+    if (!csvText) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await previewCSVWithMapping(csvText, mapping, isTransactionFile);
+      if (result.error) {
+        setError(result.error);
+      } else {
+        setDrafts(result.drafts);
+        setNeedsMapping(false);
+        setStep("review");
+        checkExistingPortfolios();
+      }
+    } catch {
+      setError("Failed to process CSV with mapping.");
+    }
+    setLoading(false);
+  }
+
+  // Manual entry handlers
+  function handleSymbolSelect(candidate: HoldingResolutionCandidate) {
+    const tempId = `manual-${Date.now()}-${candidate.symbol}`;
+    setDrafts((prev) => [
+      ...prev,
+      {
+        tempId,
+        symbol: candidate.symbol,
+        company: candidate.name,
+        quantity: 0,
+        averageCost: 0,
+        sector: "",
+        market: candidate.exchange,
+        exchange: candidate.exchange,
+        currency: "USD",
+        thesis: "",
+        importSource: "manual",
+        status: "unresolved",
+        issues: [
+          { field: "quantity", message: "Enter quantity" },
+          { field: "averageCost", message: "Enter average cost" },
+        ],
+        candidates: [],
+      },
+    ]);
+    setManualRows((prev) => [
+      ...prev,
+      { tempId, quantity: "", avgCost: "", thesis: "" },
+    ]);
+  }
+
+  function updateManualRow(tempId: string, field: "quantity" | "avgCost" | "thesis", value: string) {
+    setManualRows((prev) =>
+      prev.map((r) => (r.tempId === tempId ? { ...r, [field]: value } : r)),
+    );
+
+    setDrafts((prev) =>
+      prev.map((d) => {
+        if (d.tempId !== tempId) return d;
+
+        const row = manualRows.find((r) => r.tempId === tempId);
+        const qty = field === "quantity" ? parseFloat(value) || 0 : parseFloat(row?.quantity ?? "0") || 0;
+        const cost = field === "avgCost" ? parseFloat(value) || 0 : parseFloat(row?.avgCost ?? "0") || 0;
+        const thesis = field === "thesis" ? value : row?.thesis ?? "";
+
+        const issues = [];
+        if (qty <= 0) issues.push({ field: "quantity", message: "Enter quantity" });
+        if (cost <= 0) issues.push({ field: "averageCost", message: "Enter average cost" });
+
+        return {
+          ...d,
+          quantity: qty,
+          averageCost: cost,
+          thesis,
+          status: issues.length > 0 ? ("unresolved" as const) : ("confirmed" as const),
+          issues,
+        };
+      }),
     );
   }
 
-  function addHolding() {
-    setDraftHoldings((current) => {
-      if (current.some((holding) => holding.id === extraHolding.id)) {
-        return current;
-      }
-
-      return [...current, extraHolding];
-    });
+  function removeManualRow(tempId: string) {
+    setDrafts((prev) => prev.filter((d) => d.tempId !== tempId));
+    setManualRows((prev) => prev.filter((r) => r.tempId !== tempId));
   }
 
-  async function handleContinue() {
-    setSubmitError(null);
+  // Review handlers
+  function toggleStatus(tempId: string) {
+    setDrafts((prev) =>
+      prev.map((d) => {
+        if (d.tempId !== tempId) return d;
+        if (d.status === "skipped") {
+          return {
+            ...d,
+            status: d.issues.length > 0 ? ("unresolved" as const) : ("confirmed" as const),
+          };
+        }
+        return { ...d, status: "skipped" as const };
+      }),
+    );
+  }
+
+  function selectCandidate(tempId: string, candidate: HoldingResolutionCandidate) {
+    setDrafts((prev) =>
+      prev.map((d) => {
+        if (d.tempId !== tempId) return d;
+        const newIssues = d.issues.filter((i) => i.field !== "symbol");
+        return {
+          ...d,
+          symbol: candidate.symbol,
+          company: candidate.name,
+          market: candidate.exchange,
+          exchange: candidate.exchange,
+          candidates: [],
+          issues: newIssues,
+          status: newIssues.length > 0 ? ("unresolved" as const) : ("confirmed" as const),
+        };
+      }),
+    );
+  }
+
+  // Save
+  async function handleSave() {
     setSubmitting(true);
-    const sourceType =
-      method === "manual"
-        ? "manual"
-        : (selectedProviderId as "wealthsimple" | "interactive-brokers" | "demo");
-    const { error, portfolioId } = await createPortfolio({
-      name: "My Portfolio",
-      sourceType,
-      holdings: draftHoldings.map((h) => ({
-        symbol: h.symbol,
-        company: h.company,
-        sector: h.sector,
-        market: h.market,
-        source: h.source,
-        price: h.price,
-        dailyChange: h.dailyChange,
-        allocation: h.allocation,
-        thesis: h.thesis,
-      })),
-    });
-    setSubmitting(false);
-    if (error) {
-      setSubmitError(error);
-      return;
-    }
-    if (portfolioId) {
-      router.push(`/analysis?portfolioId=${portfolioId}`);
-    } else {
-      router.push("/analysis");
+    setError(null);
+    const confirmed = drafts.filter((d) => d.status === "confirmed");
+    try {
+      const result = await saveHoldings({
+        portfolioId: existingPortfolioId,
+        portfolioName: "My Portfolio",
+        sourceType: method === "csv" ? "csv" : "manual",
+        mode: existingPortfolioId ? saveMode : "replace",
+        holdings: confirmed.map((d) => ({
+          symbol: d.symbol,
+          company: d.company,
+          quantity: d.quantity,
+          averageCost: d.averageCost,
+          sector: d.sector,
+          market: d.market,
+          thesis: d.thesis,
+          importSource: d.importSource,
+        })),
+      });
+      if (result.error) {
+        setError(result.error);
+        setSubmitting(false);
+        return;
+      }
+      router.push(
+        result.portfolioId
+          ? `/analysis?portfolioId=${result.portfolioId}`
+          : "/portfolio",
+      );
+    } catch {
+      setError("Failed to save portfolio.");
+      setSubmitting(false);
     }
   }
 
   return (
     <AppShell
       eyebrow="Onboarding"
-      title="Bring your first portfolio into one intelligent home"
-      description="Start with a linked account or create a portfolio manually. Either way, the user lands in the same clear, guided finance experience."
+      title="Bring your portfolio into one intelligent home"
+      description="Import a CSV from your broker or create holdings manually. Review and confirm before saving."
       activePath="/onboarding"
       actions={
-        <>
-          <Link
-            href="/analysis"
-            className={buttonStyles({ variant: "secondary" })}
-          >
-            Skip to analysis
-          </Link>
+        step === "review" ? (
+          <>
+            <button
+              type="button"
+              onClick={() => setStep("intake")}
+              className={buttonStyles({ variant: "secondary" })}
+            >
+              Back
+            </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={!canSave || submitting}
+              className={buttonStyles({
+                size: "lg",
+                className: !canSave ? "opacity-50" : "",
+              })}
+            >
+              {submitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  Save portfolio
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </>
+              )}
+            </button>
+          </>
+        ) : step === "intake" && method === "manual" ? (
+          <>
+            <button
+              type="button"
+              onClick={() => setStep("method")}
+              className={buttonStyles({ variant: "secondary" })}
+            >
+              Back
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setStep("review");
+                checkExistingPortfolios();
+              }}
+              disabled={drafts.length === 0}
+              className={buttonStyles({
+                size: "lg",
+                className: drafts.length === 0 ? "opacity-50" : "",
+              })}
+            >
+              Review holdings
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </button>
+          </>
+        ) : step === "intake" ? (
           <button
             type="button"
-            onClick={handleContinue}
-            disabled={submitting || (method === "manual" && !isAllocationBalanced)}
-            className={buttonStyles({ size: "lg" })}
+            onClick={() => {
+              setStep("method");
+              setNeedsMapping(false);
+              setCsvText(null);
+            }}
+            className={buttonStyles({ variant: "secondary" })}
           >
-            {submitting ? "Creating…" : "Continue"}
-            <ArrowRight className="ml-2 h-4 w-4" />
+            Back
           </button>
-        </>
+        ) : (
+          <Link
+            href="/portfolio"
+            className={buttonStyles({ variant: "secondary" })}
+          >
+            Skip to portfolio
+          </Link>
+        )
       }
     >
-      {submitError ? (
+      {error && (
         <div className="mb-6 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
-          {submitError}
+          {error}
         </div>
-      ) : null}
-      <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-        <div className="space-y-6">
-          <Panel className="space-y-5 border-black/6 bg-white/84">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+      )}
+
+      {/* STEP 1: Method selection */}
+      {step === "method" && (
+        <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+          <div className="space-y-6">
+            <Panel className="space-y-5 border-black/6 bg-white/84">
               <div>
                 <p className="text-sm font-semibold uppercase tracking-[0.24em] text-brand">
-                  Method selection
+                  Choose a method
                 </p>
                 <p className="mt-2 text-sm leading-7 text-slate-600">
-                  Let users start with the lowest-friction path, then keep the
-                  rest of the product consistent after onboarding.
+                  Import holdings from a CSV file or add them manually one by one.
                 </p>
               </div>
-              <Badge tone="brand">
-                {method === "connect" ? "method_selected" : "manual_editing"}
-              </Badge>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <button
-                type="button"
-                onClick={() => setMethod("connect")}
-                className={cn(
-                  "rounded-3xl border p-5 text-left transition",
-                  method === "connect"
-                    ? "border-brand/28 bg-brand/10"
-                    : "border-black/6 bg-white/72 hover:bg-white/84",
-                )}
-              >
-                <div className="flex items-center gap-3">
-                  <span className="rounded-2xl border border-black/6 bg-[#f7f2ea] p-3 text-brand">
-                    <Link2 className="h-5 w-5" />
-                  </span>
-                  <div>
-                    <p className="text-lg font-semibold text-slate-950">
-                      Connect existing portfolio
-                    </p>
-                    <p className="text-sm text-slate-600">
-                      Read-only broker flow with sync states and provider status.
-                    </p>
-                  </div>
-                </div>
-              </button>
-              <button
-                type="button"
-                onClick={() => setMethod("manual")}
-                className={cn(
-                  "rounded-3xl border p-5 text-left transition",
-                  method === "manual"
-                    ? "border-brand/28 bg-brand/10"
-                    : "border-black/6 bg-white/72 hover:bg-white/84",
-                )}
-              >
-                <div className="flex items-center gap-3">
-                  <span className="rounded-2xl border border-black/6 bg-[#f7f2ea] p-3 text-brand">
-                    <PencilLine className="h-5 w-5" />
-                  </span>
-                  <div>
-                    <p className="text-lg font-semibold text-slate-950">
-                      Create manually
-                    </p>
-                    <p className="text-sm text-slate-600">
-                      Great for early users who want to feel the product before a
-                      live integration exists.
-                    </p>
-                  </div>
-                </div>
-              </button>
-            </div>
-          </Panel>
-
-          {method === "connect" ? (
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {providers.map((provider) => (
-                <ProviderCard
-                  key={provider.id}
-                  provider={provider}
-                  selected={provider.id === selectedProviderId}
-                  onSelect={() => setSelectedProviderId(provider.id)}
-                />
-              ))}
-            </div>
-          ) : (
-            <Panel className="space-y-5 border-black/6 bg-white/84">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                <div>
-                  <p className="text-sm font-semibold uppercase tracking-[0.24em] text-brand">
-                    Manual portfolio builder
-                  </p>
-                  <p className="mt-2 text-sm leading-7 text-slate-600">
-                    This mocked editor shows how users can shape a starter
-                    portfolio before analysis begins.
-                  </p>
-                </div>
+              <div className="grid gap-3 sm:grid-cols-2">
                 <button
                   type="button"
-                  onClick={addHolding}
-                  className={buttonStyles({ variant: "secondary" })}
+                  onClick={() => {
+                    setMethod("csv");
+                    setStep("intake");
+                    setDrafts([]);
+                  }}
+                  className={cn(
+                    "rounded-3xl border p-5 text-left transition",
+                    "border-black/6 bg-white/72 hover:border-brand/28 hover:bg-brand/6",
+                  )}
                 >
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add sample holding
+                  <div className="flex items-center gap-3">
+                    <span className="rounded-2xl border border-black/6 bg-[#f7f2ea] p-3 text-brand">
+                      <FileSpreadsheet className="h-5 w-5" />
+                    </span>
+                    <div>
+                      <p className="text-lg font-semibold text-slate-950">Import CSV</p>
+                      <p className="text-sm text-slate-600">
+                        Upload a file from your broker or spreadsheet.
+                      </p>
+                    </div>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMethod("manual");
+                    setStep("intake");
+                    setDrafts([]);
+                    setManualRows([]);
+                  }}
+                  className={cn(
+                    "rounded-3xl border p-5 text-left transition",
+                    "border-black/6 bg-white/72 hover:border-brand/28 hover:bg-brand/6",
+                  )}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="rounded-2xl border border-black/6 bg-[#f7f2ea] p-3 text-brand">
+                      <PencilLine className="h-5 w-5" />
+                    </span>
+                    <div>
+                      <p className="text-lg font-semibold text-slate-950">Create manually</p>
+                      <p className="text-sm text-slate-600">
+                        Search and add stocks one by one with quantity and cost.
+                      </p>
+                    </div>
+                  </div>
                 </button>
               </div>
-              <div className="space-y-3">
-                {draftHoldings.map((holding) => (
-                  <div
-                    key={holding.id}
-                    className="flex flex-col gap-4 rounded-3xl border border-black/6 bg-[#fffdf9] p-5 lg:flex-row lg:items-center lg:justify-between"
-                  >
-                    <div>
-                      <div className="flex items-center gap-3">
-                        <p className="text-lg font-semibold text-slate-950">
-                          {holding.symbol}
-                        </p>
-                        <Badge tone="neutral">{holding.sector}</Badge>
-                      </div>
-                      <p className="mt-2 text-sm text-slate-500">
-                        {holding.company}
-                      </p>
-                      <p className="mt-3 text-sm leading-7 text-slate-600">
-                        {holding.thesis}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <button
-                        type="button"
-                        onClick={() => adjustAllocation(holding.id, -2)}
-                        className="rounded-full border border-black/8 bg-[#f7f2ea] px-3 py-2 text-sm text-slate-700 transition hover:bg-white hover:text-slate-950"
-                      >
-                        -2%
-                      </button>
-                      <div className="min-w-20 text-center">
-                        <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
-                          Weight
-                        </p>
-                        <p className="mt-1 text-xl font-semibold text-slate-950">
-                          {holding.allocation}%
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => adjustAllocation(holding.id, 2)}
-                        className="rounded-full border border-black/8 bg-[#f7f2ea] px-3 py-2 text-sm text-slate-700 transition hover:bg-white hover:text-slate-950"
-                      >
-                        +2%
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
             </Panel>
-          )}
-        </div>
-
-        <div className="space-y-6">
-          <Panel className="space-y-5 border-black/6 bg-white/84">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-sm font-semibold uppercase tracking-[0.24em] text-brand">
-                  Current state
-                </p>
-                <h2 className="mt-3 text-2xl font-semibold text-slate-950">
-                  {method === "connect"
-                    ? `Ready to import from ${selectedProvider.name}`
-                    : "Manual portfolio ready for validation"}
-                </h2>
-              </div>
-              <Badge tone={isAllocationBalanced ? "success" : "warning"}>
-                {isAllocationBalanced ? "validation_ready" : "validation_error"}
-              </Badge>
-            </div>
-            {method === "connect" ? (
-              <div className="space-y-3">
-                {[
-                  "method_selected",
-                  "provider_selected",
-                  "connecting",
-                  "importing",
-                  "success",
-                ].map((state, index) => (
-                  <div
-                    key={state}
-                    className="flex items-center justify-between rounded-2xl border border-black/6 bg-[#fffdf9] px-4 py-3"
-                  >
-                    <div>
-                      <p className="text-sm font-semibold text-slate-950">{state}</p>
-                      <p className="text-sm text-slate-600">
-                        {index < 2
-                          ? "Completed by the current UI state."
-                          : index === 2
-                            ? "Connection modal and permissions screen."
-                            : index === 3
-                              ? "Import progress and retry handling."
-                              : "Hand off into analysis once synced."}
-                      </p>
-                    </div>
-                    <Badge tone={index < 2 ? "success" : index === 2 ? "brand" : "neutral"}>
-                      {index < 2 ? "done" : index === 2 ? "next" : "pending"}
-                    </Badge>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <div className="rounded-3xl border border-black/6 bg-[#fffdf9] p-5">
-                  <p className="text-sm uppercase tracking-[0.18em] text-slate-500">
-                    Allocation total
-                  </p>
-                  <p className="mt-3 text-4xl font-semibold text-slate-950">
-                    {totalAllocation}%
-                  </p>
-                  <p className="mt-2 text-sm leading-7 text-slate-600">
-                    The manual editor makes validation states obvious before the AI
-                    analysis begins.
-                  </p>
-                </div>
-                {!isAllocationBalanced ? (
-                  <div className="rounded-3xl border border-amber-300/20 bg-amber-300/10 p-5">
-                    <div className="flex items-center gap-3 text-amber-100">
-                      <TriangleAlert className="h-5 w-5" />
-                      <p className="text-sm font-semibold uppercase tracking-[0.2em]">
-                        Validation message
-                      </p>
-                    </div>
-                    <p className="mt-3 text-sm leading-7 text-amber-900">
-                      Allocation should total 100% before analysis. This is where
-                      inline guidance and field-level validation will appear.
-                    </p>
-                  </div>
-                ) : null}
-              </div>
-            )}
-          </Panel>
+          </div>
 
           <Panel className="space-y-4 border-black/6 bg-white/84">
             <p className="text-sm font-semibold uppercase tracking-[0.24em] text-brand">
-              Edge states
+              What to expect
             </p>
             <div className="space-y-3">
-              <StateCard
-                title="empty_portfolio_detected"
-                detail="Guide the user toward manual entry or a second provider if the import returns no positions."
+              <InfoCard
+                title="Review before save"
+                detail="Every holding is shown in a review table before it reaches your portfolio. Nothing saves until you confirm."
               />
-              <StateCard
-                title="sync_error"
-                detail="Show a recovery path with retry text, provider detail, and a fallback demo option."
+              <InfoCard
+                title="Symbol resolution"
+                detail="Partial or ambiguous tickers are matched against Yahoo Finance. You choose the correct match."
               />
-              <StateCard
-                title="disconnected"
-                detail="Keep the feed available while marking the portfolio as stale and inviting a refresh."
+              <InfoCard
+                title="Replace or merge"
+                detail="If you already have a portfolio, you can replace all holdings or merge new ones in."
               />
             </div>
             <div className="rounded-3xl border border-brand/16 bg-brand/10 p-5">
@@ -400,18 +462,268 @@ export default function OnboardingPage() {
                 </p>
               </div>
               <p className="mt-3 text-sm leading-7 text-slate-700">
-                The UX positions broker connections as informational only, which
-                sets up a clear trust story for the backend and security phase.
+                Broker connections are informational only. CSV import reads your
+                file locally and sends data to your own Supabase project.
               </p>
             </div>
           </Panel>
         </div>
-      </div>
+      )}
+
+      {/* STEP 2a: CSV intake */}
+      {step === "intake" && method === "csv" && (
+        <div className="space-y-6">
+          {!needsMapping && (
+            <CSVDropzone
+              onFileContent={handleCSVUpload}
+              disabled={loading}
+            />
+          )}
+          {loading && (
+            <div className="flex items-center justify-center gap-3 py-8">
+              <Loader2 className="h-5 w-5 animate-spin text-brand" />
+              <span className="text-sm text-slate-600">Parsing and validating...</span>
+            </div>
+          )}
+          {needsMapping && (
+            <ColumnMapper
+              headers={csvHeaders}
+              suggestedMapping={suggestedMapping}
+              onConfirm={handleMappingConfirm}
+              onCancel={() => {
+                setNeedsMapping(false);
+                setCsvText(null);
+                setStep("method");
+              }}
+            />
+          )}
+        </div>
+      )}
+
+      {/* STEP 2b: Manual entry */}
+      {step === "intake" && method === "manual" && (
+        <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+          <div className="space-y-6">
+            <Panel className="space-y-5 border-black/6 bg-white/84">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <p className="text-sm font-semibold uppercase tracking-[0.24em] text-brand">
+                    Add holdings
+                  </p>
+                  <p className="mt-2 text-sm leading-7 text-slate-600">
+                    Search for a ticker or company name, then enter quantity and average cost.
+                  </p>
+                </div>
+                <Badge tone="brand">{drafts.length} holding{drafts.length !== 1 ? "s" : ""}</Badge>
+              </div>
+              <SymbolSearch onSelect={handleSymbolSelect} />
+            </Panel>
+
+            {drafts.length > 0 && (
+              <div className="space-y-3">
+                {drafts.map((draft) => {
+                  const row = manualRows.find((r) => r.tempId === draft.tempId);
+                  return (
+                    <Panel
+                      key={draft.tempId}
+                      className="space-y-4 border-black/6 bg-white/84"
+                    >
+                      <div className="flex items-center justify-between gap-4">
+                        <div>
+                          <div className="flex items-center gap-3">
+                            <p className="text-lg font-semibold text-slate-950">
+                              {draft.symbol}
+                            </p>
+                            <Badge tone={draft.status === "confirmed" ? "success" : "warning"}>
+                              {draft.status}
+                            </Badge>
+                          </div>
+                          <p className="mt-1 text-sm text-slate-500">
+                            {draft.company} {draft.market && `· ${draft.market}`}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeManualRow(draft.tempId)}
+                          className="rounded-full p-2 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-3">
+                        <div>
+                          <label className="mb-1 block text-xs uppercase tracking-[0.18em] text-slate-500">
+                            Shares
+                          </label>
+                          <input
+                            type="number"
+                            step="any"
+                            min="0"
+                            value={row?.quantity ?? ""}
+                            onChange={(e) => updateManualRow(draft.tempId, "quantity", e.target.value)}
+                            placeholder="e.g. 50"
+                            className="w-full rounded-xl border border-black/8 bg-white px-3 py-2.5 text-sm text-slate-950 outline-none focus:border-brand focus:ring-1 focus:ring-brand"
+                          />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs uppercase tracking-[0.18em] text-slate-500">
+                            Avg cost
+                          </label>
+                          <input
+                            type="number"
+                            step="any"
+                            min="0"
+                            value={row?.avgCost ?? ""}
+                            onChange={(e) => updateManualRow(draft.tempId, "avgCost", e.target.value)}
+                            placeholder="e.g. 142.50"
+                            className="w-full rounded-xl border border-black/8 bg-white px-3 py-2.5 text-sm text-slate-950 outline-none focus:border-brand focus:ring-1 focus:ring-brand"
+                          />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs uppercase tracking-[0.18em] text-slate-500">
+                            Thesis (optional)
+                          </label>
+                          <input
+                            type="text"
+                            value={row?.thesis ?? ""}
+                            onChange={(e) => updateManualRow(draft.tempId, "thesis", e.target.value)}
+                            placeholder="Why you own this"
+                            className="w-full rounded-xl border border-black/8 bg-white px-3 py-2.5 text-sm text-slate-950 outline-none focus:border-brand focus:ring-1 focus:ring-brand"
+                          />
+                        </div>
+                      </div>
+                    </Panel>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <Panel className="space-y-4 border-black/6 bg-white/84">
+            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-brand">
+              Summary
+            </p>
+            <div className="rounded-3xl border border-black/6 bg-[#fffdf9] p-5">
+              <p className="text-sm uppercase tracking-[0.18em] text-slate-500">
+                Holdings added
+              </p>
+              <p className="mt-3 text-4xl font-semibold text-slate-950">
+                {drafts.length}
+              </p>
+            </div>
+            <div className="rounded-3xl border border-black/6 bg-[#fffdf9] p-5">
+              <p className="text-sm uppercase tracking-[0.18em] text-slate-500">
+                Ready to save
+              </p>
+              <p className="mt-3 text-4xl font-semibold text-slate-950">
+                {confirmedCount}
+              </p>
+              {unresolvedCount > 0 && (
+                <p className="mt-2 text-sm text-amber-700">
+                  {unresolvedCount} need quantity or cost
+                </p>
+              )}
+            </div>
+          </Panel>
+        </div>
+      )}
+
+      {/* STEP 3: Review */}
+      {step === "review" && (
+        <div className="space-y-6">
+          {existingPortfolioId && (
+            <Panel className="space-y-4 border-black/6 bg-white/84">
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-[0.24em] text-brand">
+                  Existing portfolio detected
+                </p>
+                <p className="mt-2 text-sm leading-7 text-slate-600">
+                  You already have a portfolio. Choose how to handle the new holdings.
+                </p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => setSaveMode("replace")}
+                  className={cn(
+                    "rounded-2xl border p-4 text-left transition",
+                    saveMode === "replace"
+                      ? "border-brand/28 bg-brand/10"
+                      : "border-black/6 bg-[#fffdf9] hover:bg-brand/4",
+                  )}
+                >
+                  <p className="text-sm font-semibold text-slate-950">Replace all</p>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Delete existing holdings and use only the confirmed set below.
+                  </p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSaveMode("merge")}
+                  className={cn(
+                    "rounded-2xl border p-4 text-left transition",
+                    saveMode === "merge"
+                      ? "border-brand/28 bg-brand/10"
+                      : "border-black/6 bg-[#fffdf9] hover:bg-brand/4",
+                  )}
+                >
+                  <p className="text-sm font-semibold text-slate-950">Merge</p>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Update matching tickers and add new ones. Keep unmatched existing holdings.
+                  </p>
+                </button>
+              </div>
+            </Panel>
+          )}
+
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-[0.24em] text-brand">
+                Review holdings
+              </p>
+              <p className="mt-1 text-sm text-slate-600">
+                {confirmedCount} confirmed, {unresolvedCount} unresolved,{" "}
+                {drafts.filter((d) => d.status === "skipped").length} skipped
+              </p>
+            </div>
+            <Badge tone={canSave ? "success" : "warning"}>
+              {canSave ? "Ready to save" : "Resolve issues first"}
+            </Badge>
+          </div>
+
+          <HoldingsReviewTable
+            drafts={drafts}
+            onToggleStatus={toggleStatus}
+            onSelectCandidate={selectCandidate}
+          />
+
+          {confirmedCount > 0 && (
+            <Panel className="flex flex-col gap-3 border-black/6 bg-[#fffdf9] p-5 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm text-slate-500">
+                  Estimated cost basis
+                </p>
+                <p className="text-2xl font-semibold text-slate-950">
+                  {formatPrice(
+                    drafts
+                      .filter((d) => d.status === "confirmed")
+                      .reduce((sum, d) => sum + d.quantity * d.averageCost, 0),
+                  )}
+                </p>
+              </div>
+              <div className="text-sm text-slate-500">
+                {confirmedCount} holding{confirmedCount !== 1 ? "s" : ""} will be saved
+                {existingPortfolioId && ` (${saveMode} mode)`}
+              </div>
+            </Panel>
+          )}
+        </div>
+      )}
     </AppShell>
   );
 }
 
-function StateCard({ title, detail }: { title: string; detail: string }) {
+function InfoCard({ title, detail }: { title: string; detail: string }) {
   return (
     <div className="rounded-2xl border border-black/6 bg-[#fffdf9] p-4">
       <p className="text-sm font-semibold text-slate-950">{title}</p>

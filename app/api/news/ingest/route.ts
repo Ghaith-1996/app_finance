@@ -1,49 +1,120 @@
 import { createClient } from "@/lib/supabase/server";
-import { ingestNewsToSupabase } from "@/lib/services/news/ingest";
+import { createServiceClient } from "@/lib/supabase/service";
+import { ingestNewsToSupabase } from "@/lib/services/news";
+import { ENRICHABLE_SOURCE_TYPES } from "@/lib/services/news/source-config";
+import { runPythonWorker, type WorkerResult } from "@/lib/services/news/worker";
+import { resolveGlobalTickers } from "@/lib/services/ticker-resolver";
 
 /**
  * POST /api/news/ingest
- * Fetches news from the configured provider and inserts into news_items.
- * Automatically passes the user's holding tickers so MarketAux returns relevant articles.
+ *
+ * Body (JSON, optional): { lookbackHours?, maxArticles? }
+ *
+ * Uses the global ticker universe plus global headline sources via the Python worker, then AI enrichment.
  */
-export async function POST() {
+export async function POST(request: Request) {
   const supabase = await createClient();
   const {
     data: { user },
     error: authError,
   } = await supabase.auth.getUser();
+
   if (authError || !user) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      status: 401,
-      headers: { "Content-Type": "application/json" },
-    });
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { data: portfolios } = await supabase
-    .from("portfolios")
-    .select("id")
-    .eq("user_id", user.id)
-    .order("created_at", { ascending: false })
-    .limit(1);
-
-  let tickers: string[] = [];
-  if (portfolios?.[0]) {
-    const { data: holdings } = await supabase
-      .from("holdings")
-      .select("symbol")
-      .eq("portfolio_id", portfolios[0].id);
-    tickers = (holdings ?? []).map((h) => h.symbol as string);
+  let body: { lookbackHours?: number; maxArticles?: number } = {};
+  try {
+    const text = await request.text();
+    if (text) body = JSON.parse(text);
+  } catch {
+    /* empty */
   }
 
-  const result = await ingestNewsToSupabase(supabase, { tickers });
-  if (result.error) {
-    return new Response(
-      JSON.stringify({ error: result.error, inserted: result.inserted, skipped: result.skipped }),
-      { status: 500, headers: { "Content-Type": "application/json" } }
+  const lookbackHours = Math.max(1, Math.min(body.lookbackHours ?? 24, 168));
+  const maxArticles = Math.max(1, Math.min(body.maxArticles ?? 20, 100));
+
+  const serviceSupabase = createServiceClient();
+  const { tickers, error: tickerError } = await resolveGlobalTickers(serviceSupabase);
+
+  if (tickerError) {
+    return Response.json(
+      { error: tickerError, tickers: [], totalInserted: 0, enriched: 0 },
+      { status: 500 },
     );
   }
-  return new Response(
-    JSON.stringify({ ok: true, inserted: result.inserted, skipped: result.skipped }),
-    { status: 200, headers: { "Content-Type": "application/json" } }
-  );
+
+  const workerResult: WorkerResult = await runPythonWorker(tickers, lookbackHours, maxArticles);
+
+  const ingestBreakdown = {
+    edgar: workerResult.edgar,
+    newsapi: workerResult.newsapi,
+    gnews: workerResult.gnews,
+    ingest_status: workerResult.ingest_status,
+    ingest_detail: workerResult.ingest_detail,
+    total_inserted: workerResult.total_inserted,
+  };
+
+  if (workerResult.error && workerResult.ingest_status === undefined) {
+    return Response.json({
+      tickers,
+      lookbackHours,
+      ingestBreakdown,
+      sources: {
+        edgar: workerResult.edgar,
+        newsapi: workerResult.newsapi,
+        gnews: workerResult.gnews,
+      },
+      totalInserted: 0,
+      enriched: 0,
+      workerError: workerResult.error,
+      workerChecks: workerResult.checks ?? null,
+      enrichmentError: null,
+    }, { status: 502 });
+  }
+
+  if (workerResult.ingest_status === "failed") {
+    return Response.json({
+      tickers,
+      lookbackHours,
+      ingestBreakdown,
+      sources: {
+        edgar: workerResult.edgar,
+        newsapi: workerResult.newsapi,
+        gnews: workerResult.gnews,
+      },
+      totalInserted: workerResult.total_inserted,
+      enriched: 0,
+      workerError: workerResult.error ?? null,
+      workerChecks: workerResult.checks ?? null,
+      enrichmentError: null,
+    }, { status: 502 });
+  }
+
+  const enrichmentResult = workerResult.total_inserted > 0
+    ? await ingestNewsToSupabase(supabase, {
+        sourceTypes: [...ENRICHABLE_SOURCE_TYPES],
+        limit: workerResult.total_inserted + 5,
+      })
+    : { enriched: 0, skipped: 0, error: undefined };
+
+  const httpStatus = enrichmentResult.error ? 207 : 200;
+
+  return Response.json({
+    tickers,
+    lookbackHours,
+    ingestBreakdown,
+    sources: {
+      edgar: workerResult.edgar,
+      newsapi: workerResult.newsapi,
+      gnews: workerResult.gnews,
+    },
+    totalInserted: workerResult.total_inserted,
+    enriched: enrichmentResult.enriched,
+    ingest_status: workerResult.ingest_status,
+    ingest_detail: workerResult.ingest_detail,
+    workerError: workerResult.error ?? null,
+    workerChecks: workerResult.checks ?? null,
+    enrichmentError: enrichmentResult.error ?? null,
+  }, { status: httpStatus });
 }

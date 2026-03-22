@@ -54,12 +54,16 @@ export async function POST(request: Request) {
   const result = await runAnalysis(supabase, portfolioId);
   if (result.error) {
     return new Response(
-      JSON.stringify({ error: result.error, runId: result.runId }),
+      JSON.stringify({
+        error: result.error,
+        runId: result.runId,
+        meta: result.meta ?? null,
+      }),
       { status: 500, headers: { "Content-Type": "application/json" } }
     );
   }
   return new Response(
-    JSON.stringify({ runId: result.runId }),
+    JSON.stringify({ runId: result.runId, meta: result.meta ?? null }),
     { status: 200, headers: { "Content-Type": "application/json" } }
   );
 }

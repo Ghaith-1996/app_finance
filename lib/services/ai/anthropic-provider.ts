@@ -1,42 +1,63 @@
-import type { Holding, PortfolioInsight } from "@/lib/types";
-import type { IAIProvider, NewsContext, Sentiment } from "./provider";
+import type { PortfolioInsight } from "@/lib/types";
+import { NEWS_CATEGORIES } from "@/lib/types";
+import type {
+  ArticleAnalysis,
+  ArticleChatContext,
+  IAIProvider,
+  PortfolioMatchAssessment,
+  PortfolioCopilotContext,
+  Sentiment,
+} from "./provider";
 import { stubAIProvider } from "./stub-provider";
+import {
+  parseNumericRelevance,
+  parsePortfolioMatchAssessment,
+} from "./portfolio-match";
+import {
+  articleEnrichmentPrompt,
+  articleChatPrompt,
+  portfolioCopilotPrompt,
+  portfolioMatchPrompt,
+  summaryPrompt,
+  sentimentPrompt,
+  relevancePrompt,
+  whyItMattersPrompt,
+  insightsPrompt,
+} from "./prompts";
 
-/**
- * Anthropic Claude-based AI provider. Uses stub when ANTHROPIC_API_KEY is not set.
- */
+type AnthropicResponse = { content?: Array<{ text?: string }> };
+
+async function ask(
+  key: string,
+  prompt: string,
+  maxTokens: number,
+): Promise<string | null> {
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": key,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model: "claude-3-5-haiku-20241022",
+      max_tokens: maxTokens,
+      messages: [{ role: "user", content: prompt }],
+    }),
+  });
+  const data = (await res.json()) as AnthropicResponse;
+  return data.content?.[0]?.text?.trim() ?? null;
+}
+
 export function createAnthropicProvider(): IAIProvider {
   const key = process.env.ANTHROPIC_API_KEY;
-  if (!key) {
-    return stubAIProvider;
-  }
+  if (!key) return stubAIProvider;
 
   return {
     async generateSummary(article, holdings) {
       try {
-        const res = await fetch(
-          "https://api.anthropic.com/v1/messages",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "x-api-key": key,
-              "anthropic-version": "2023-06-01",
-            },
-            body: JSON.stringify({
-              model: "claude-3-5-haiku-20241022",
-              max_tokens: 150,
-              messages: [
-                {
-                  role: "user",
-                  content: `Summarize this financial news in 1-2 sentences for an investor who holds: ${holdings.map((h) => h.symbol).join(", ")}.\n\n${article.slice(0, 4000)}`,
-                },
-              ],
-            }),
-          }
-        );
-        const data = (await res.json()) as { content?: Array<{ text?: string }> };
-        const text = data.content?.[0]?.text?.trim();
+        const p = summaryPrompt(article, holdings);
+        const text = await ask(key, `${p.system}\n\n${p.user}`, 150);
         return text ?? (await stubAIProvider.generateSummary(article, holdings));
       } catch {
         return stubAIProvider.generateSummary(article, holdings);
@@ -45,141 +66,99 @@ export function createAnthropicProvider(): IAIProvider {
 
     async scoreSentiment(article) {
       try {
-        const res = await fetch(
-          "https://api.anthropic.com/v1/messages",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "x-api-key": key,
-              "anthropic-version": "2023-06-01",
-            },
-            body: JSON.stringify({
-              model: "claude-3-5-haiku-20241022",
-              max_tokens: 10,
-              messages: [
-                {
-                  role: "user",
-                  content: `Reply with exactly one word: positive, watch, negative, or neutral. Sentiment of: ${article.slice(0, 500)}`,
-                },
-              ],
-            }),
-          }
-        );
-        const data = (await res.json()) as { content?: Array<{ text?: string }> };
-        const word = data.content?.[0]?.text?.trim()?.toLowerCase();
-        if (
-          word === "positive" ||
-          word === "watch" ||
-          word === "negative" ||
-          word === "neutral"
-        ) {
+        const p = sentimentPrompt(article);
+        const word = (await ask(key, `${p.system}\n\n${p.user}`, 10))?.toLowerCase();
+        if (word === "positive" || word === "watch" || word === "negative" || word === "neutral") {
           return word as Sentiment;
         }
-      } catch {
-        // fallback
-      }
+      } catch { /* fallback */ }
       return stubAIProvider.scoreSentiment(article);
     },
 
     async scoreRelevance(article, holdings) {
       try {
-        const res = await fetch(
-          "https://api.anthropic.com/v1/messages",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "x-api-key": key,
-              "anthropic-version": "2023-06-01",
-            },
-            body: JSON.stringify({
-              model: "claude-3-5-haiku-20241022",
-              max_tokens: 5,
-              messages: [
-                {
-                  role: "user",
-                  content: `Reply with a number 0-100 for relevance to holdings ${holdings.map((h) => h.symbol).join(", ")}. Only the number.\n\n${article.slice(0, 1000)}`,
-                },
-              ],
-            }),
-          }
-        );
-        const data = (await res.json()) as { content?: Array<{ text?: string }> };
-        const num = parseInt(
-          data.content?.[0]?.text?.replace(/\D/g, "") ?? "75",
-          10
-        );
-        return Math.min(100, Math.max(0, num));
+        const p = relevancePrompt(article, holdings);
+        const raw = await ask(key, `${p.system}\n\n${p.user}`, 5);
+        return parseNumericRelevance(raw);
       } catch {
         return stubAIProvider.scoreRelevance(article, holdings);
       }
     },
 
+    async assessPortfolioMatch(article, holdings): Promise<PortfolioMatchAssessment> {
+      try {
+        const p = portfolioMatchPrompt(article, holdings);
+        const raw = await ask(key, `${p.system}\n\n${p.user}`, 250);
+        return parsePortfolioMatchAssessment(raw, holdings);
+      } catch {
+        return stubAIProvider.assessPortfolioMatch(article, holdings);
+      }
+    },
+
     async generateInsights(holdings, newsContexts) {
       try {
-        const headlines = newsContexts.map((n) => n.headline).slice(0, 10).join("\n");
-        const res = await fetch(
-          "https://api.anthropic.com/v1/messages",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "x-api-key": key,
-              "anthropic-version": "2023-06-01",
-            },
-            body: JSON.stringify({
-              model: "claude-3-5-haiku-20241022",
-              max_tokens: 400,
-              messages: [
-                {
-                  role: "user",
-                  content: `Holdings: ${holdings.map((h) => h.symbol).join(", ")}. Headlines:\n${headlines}\n\nOutput 3 insights as JSON array: [{"title":"...","value":"...","detail":"..."}].`,
-                },
-              ],
-            }),
-          }
-        );
-        const data = (await res.json()) as { content?: Array<{ text?: string }> };
-        const raw = data.content?.[0]?.text ?? "";
-        const parsed = JSON.parse(raw.replace(/```json?\s*|\s*```/g, "").trim()) as PortfolioInsight[];
-        if (Array.isArray(parsed) && parsed.length >= 1) {
-          return parsed.slice(0, 3);
+        const p = insightsPrompt(holdings, newsContexts);
+        const raw = await ask(key, `${p.system}\n\n${p.user}`, 400);
+        if (raw) {
+          const parsed = JSON.parse(raw.replace(/```json?\s*|\s*```/g, "").trim()) as PortfolioInsight[];
+          if (Array.isArray(parsed) && parsed.length >= 1) return parsed.slice(0, 3);
         }
-      } catch {
-        // fallback
-      }
+      } catch { /* fallback */ }
       return stubAIProvider.generateInsights(holdings, newsContexts);
     },
 
     async explainWhyItMatters(article, holdings) {
       try {
-        const res = await fetch(
-          "https://api.anthropic.com/v1/messages",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "x-api-key": key,
-              "anthropic-version": "2023-06-01",
-            },
-            body: JSON.stringify({
-              model: "claude-3-5-haiku-20241022",
-              max_tokens: 100,
-              messages: [
-                {
-                  role: "user",
-                  content: `In one sentence, why does this news matter to an investor holding ${holdings.map((h) => h.symbol).join(", ")}?\n\n${article.slice(0, 3000)}`,
-                },
-              ],
-            }),
-          }
-        );
-        const data = (await res.json()) as { content?: Array<{ text?: string }> };
-        const text = data.content?.[0]?.text?.trim();
+        const p = whyItMattersPrompt(article, holdings);
+        const text = await ask(key, `${p.system}\n\n${p.user}`, 100);
         return text ?? (await stubAIProvider.explainWhyItMatters(article, holdings));
       } catch {
         return stubAIProvider.explainWhyItMatters(article, holdings);
+      }
+    },
+
+    async analyzeArticle(headline, content, hintTickers): Promise<ArticleAnalysis> {
+      try {
+        const p = articleEnrichmentPrompt(headline, content, hintTickers);
+        const raw = await ask(key, `${p.system}\n\nHeadline: ${headline}\n\n${(content ?? "").slice(0, 4000)}`, 500);
+        if (raw) {
+          const parsed = JSON.parse(raw.replace(/```json?\s*|\s*```/g, "").trim());
+          return {
+            category: NEWS_CATEGORIES.includes(parsed.category) ? parsed.category : "other",
+            globalSummary: parsed.globalSummary || headline,
+            overallEffect: ["bullish", "bearish", "neutral"].includes(parsed.overallEffect) ? parsed.overallEffect : "neutral",
+            stockTags: Array.isArray(parsed.stockTags) ? parsed.stockTags.map((t: string) => String(t).toUpperCase()) : (hintTickers ?? []),
+            tickerImpacts: Array.isArray(parsed.tickerImpacts)
+              ? parsed.tickerImpacts
+                  .filter((i: { symbol?: string; effect?: string }) => i.symbol && i.effect)
+                  .map((i: { symbol: string; effect: string }) => ({
+                    symbol: i.symbol.toUpperCase(),
+                    effect: ["bullish", "bearish", "neutral"].includes(i.effect) ? i.effect : "neutral",
+                  }))
+              : [],
+          } as ArticleAnalysis;
+        }
+      } catch { /* fallback */ }
+      return stubAIProvider.analyzeArticle(headline, content, hintTickers);
+    },
+
+    async answerArticleQuestion(context: ArticleChatContext) {
+      try {
+        const p = articleChatPrompt(context);
+        const text = await ask(key, `${p.system}\n\n${p.user}`, 350);
+        return text ?? (await stubAIProvider.answerArticleQuestion(context));
+      } catch {
+        return stubAIProvider.answerArticleQuestion(context);
+      }
+    },
+
+    async answerPortfolioQuestion(context: PortfolioCopilotContext) {
+      try {
+        const p = portfolioCopilotPrompt(context);
+        const text = await ask(key, `${p.system}\n\n${p.user}`, 450);
+        return text ?? (await stubAIProvider.answerPortfolioQuestion(context));
+      } catch {
+        return stubAIProvider.answerPortfolioQuestion(context);
       }
     },
   };

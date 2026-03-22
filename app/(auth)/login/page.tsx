@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { buttonStyles } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
@@ -13,7 +13,7 @@ export default function LoginPage() {
   const error = searchParams.get("error");
   const [loading, setLoading] = useState<string | null>(null);
 
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   useEffect(() => {
     const {
@@ -22,7 +22,7 @@ export default function LoginPage() {
       if (event === "SIGNED_IN") setLoading(null);
     });
     return () => subscription.unsubscribe();
-  }, []);
+  }, [supabase]);
 
   async function signInWith(provider: "google" | "github") {
     setLoading(provider);

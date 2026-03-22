@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 import Link from "next/link";
 
-import { ArrowUpRight } from "lucide-react";
+import { ArrowLeft, ArrowUpRight } from "lucide-react";
 
 import { UserMenu } from "@/components/app/user-menu";
 import { buttonStyles } from "@/components/ui/button";
@@ -22,6 +22,9 @@ export function AppShell({
   children,
   activePath,
   actions,
+  mainClassName,
+  backHref,
+  backLabel = "Back to portfolio",
 }: {
   eyebrow: string;
   title: string;
@@ -29,6 +32,11 @@ export function AppShell({
   children: ReactNode;
   activePath: string;
   actions?: ReactNode;
+  /** Optional class for `<main>` (e.g. page-specific background). */
+  mainClassName?: string;
+  /** When set, shows a top-left back control above the page title. */
+  backHref?: string;
+  backLabel?: string;
 }) {
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -78,14 +86,34 @@ export function AppShell({
           </div>
         </div>
       </header>
-      <main className="relative px-6 py-10 lg:px-8 lg:py-12">
+      <main
+        className={cn(
+          "relative px-6 py-10 lg:px-8 lg:py-12",
+          mainClassName,
+        )}
+      >
         <div className="absolute inset-x-0 top-0 -z-10 h-[420px] bg-[radial-gradient(circle_at_top_left,rgba(23,182,122,0.08),transparent_26%),linear-gradient(180deg,rgba(255,255,255,0.5),transparent)]" />
         <div className="mx-auto max-w-7xl space-y-10">
+          {backHref ? (
+            <div>
+              <Link
+                href={backHref}
+                className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 transition hover:text-slate-950"
+              >
+                <span className="flex h-9 w-9 items-center justify-center rounded-full border border-black/8 bg-white/80 text-slate-700 shadow-sm transition hover:border-black/12 hover:bg-white">
+                  <ArrowLeft className="h-4 w-4" aria-hidden />
+                </span>
+                {backLabel}
+              </Link>
+            </div>
+          ) : null}
           <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div className="max-w-3xl space-y-4">
-              <p className="text-sm font-semibold uppercase tracking-[0.24em] text-brand">
-                {eyebrow}
-              </p>
+              {eyebrow ? (
+                <p className="text-sm font-semibold uppercase tracking-[0.24em] text-brand">
+                  {eyebrow}
+                </p>
+              ) : null}
               <div className="space-y-3">
                 <h1 className="text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">
                   {title}

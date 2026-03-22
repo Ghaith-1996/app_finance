@@ -17,7 +17,7 @@ export async function computePortfolioOverview(
 ): Promise<PortfolioOverviewResult> {
   const { data: holdings } = await supabase
     .from("holdings")
-    .select("symbol, price, daily_change, allocation")
+    .select("symbol, price, daily_change, allocation, quantity, current_price, average_cost")
     .eq("portfolio_id", portfolioId);
 
   const rows = holdings ?? [];
@@ -34,22 +34,25 @@ export async function computePortfolioOverview(
 
   const enriched = rows.map((h) => {
     const live = quotes.get((h.symbol as string).toUpperCase());
+    const qty = Number(h.quantity ?? 0);
+    const livePrice = live?.price ?? Number(h.current_price ?? h.price ?? 0);
+    const dailyChange = live?.dailyChange ?? Number(h.daily_change ?? 0);
+
     return {
-      price: live?.price ?? Number(h.price),
-      dailyChange: live?.dailyChange ?? Number(h.daily_change),
-      allocation: Number(h.allocation),
+      price: livePrice,
+      dailyChange,
+      quantity: qty,
+      allocation: Number(h.allocation ?? 0),
+      value: qty > 0 ? qty * livePrice : livePrice * (Number(h.allocation ?? 0) / 100) * 1000,
     };
   });
 
-  const totalValue = enriched.reduce(
-    (sum, h) => sum + h.price * (h.allocation / 100) * 1000,
-    0
-  );
+  const totalValue = enriched.reduce((sum, h) => sum + h.value, 0);
 
   const weightedDayChange =
     totalValue > 0
       ? enriched.reduce(
-          (sum, h) => sum + h.dailyChange * (h.allocation / 100),
+          (sum, h) => sum + h.dailyChange * (h.value / totalValue),
           0
         )
       : 0;

@@ -19,6 +19,14 @@
 .DS_Store
 *.pem
 
+# edgartools local cache (news ingestion worker)
+.edgar_data
+
+# yfinance worker cache / temp (writable project-local dirs)
+.yfinance_data
+.yfinance_tmp
+.yfinance_local
+
 # debug
 npm-debug.log*
 yarn-debug.log*
@@ -34,3 +42,5 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+.skills

@@ -1,0 +1,532 @@
+import Link from "next/link";
+import {
+  BarChart3,
+  Cpu,
+  Landmark,
+  Layers3,
+  Sparkles,
+  Zap,
+} from "lucide-react";
+
+import { PortfolioCopilotPanel } from "@/components/app/portfolio-copilot-panel";
+import { PortfolioHoldingsTable } from "@/components/app/portfolio-holdings-table";
+import { AppShell } from "@/components/app/app-shell";
+import { RefreshPricesButton } from "@/components/app/refresh-prices-button";
+import { buttonStyles } from "@/components/ui/button";
+import {
+  getPortfolio,
+  getPortfolioFeedHighlights,
+  getPortfolioInsights,
+  getPortfolioOverview,
+  getUserPortfolios,
+} from "@/lib/actions/portfolio";
+import type {
+  Holding,
+  PortfolioFeedHighlight,
+  PortfolioInsight,
+} from "@/lib/types";
+import { categoryLabel, formatCurrency } from "@/lib/utils";
+
+interface SectorCard {
+  label: string;
+  percent: number;
+  detail: string;
+  icon: typeof Cpu;
+  iconClassName: string;
+  barClassName: string;
+}
+
+function getHoldingPrice(holding: Holding) {
+  return holding.currentPrice || holding.price || 0;
+}
+
+function getHoldingValue(holding: Holding) {
+  if (holding.currentValue > 0) return holding.currentValue;
+  const price = getHoldingPrice(holding);
+  if (holding.quantity > 0) return holding.quantity * price;
+  if (holding.allocation > 0) return holding.allocation;
+  return 0;
+}
+
+function getSectorVisuals(sector: string) {
+  const normalized = sector.toLowerCase();
+  if (normalized.includes("tech")) {
+    return {
+      icon: Cpu,
+      iconClassName: "bg-[#E8F8ED] text-[#009B5A]",
+      barClassName: "bg-[#009B5A]",
+    };
+  }
+  if (normalized.includes("energy")) {
+    return {
+      icon: Zap,
+      iconClassName: "bg-[#FFF5EB] text-[#FF9E2C]",
+      barClassName: "bg-[#FF9E2C]",
+    };
+  }
+  return {
+    icon: Layers3,
+    iconClassName: "bg-[#F0F4F8] text-[#5C7E9E]",
+    barClassName: "bg-[#5C7E9E]",
+  };
+}
+
+function classifyHoldingBucket(holding: Holding): "technology" | "energy" | "others" {
+  const symbol = holding.symbol.trim().toUpperCase();
+  const sector = holding.sector.trim().toLowerCase();
+  const company = holding.company.trim().toLowerCase();
+
+  const technologySymbols = new Set([
+    "AAPL",
+    "APPL",
+    "MSFT",
+    "NVDA",
+    "GOOG",
+    "GOOGL",
+    "META",
+    "AMZN",
+    "TSM",
+    "AMD",
+    "AVGO",
+    "ORCL",
+    "CRM",
+    "ADBE",
+    "INTC",
+  ]);
+
+  if (technologySymbols.has(symbol)) {
+    return "technology";
+  }
+
+  if (
+    sector.includes("technology") ||
+    sector.includes("tech") ||
+    sector.includes("communication") ||
+    sector.includes("semiconductor") ||
+    sector.includes("software") ||
+    sector.includes("internet") ||
+    sector.includes("interactive media") ||
+    sector.includes("consumer electronics") ||
+    sector.includes("hardware")
+  ) {
+    return "technology";
+  }
+
+  if (
+    company.includes("apple") ||
+    company.includes("microsoft") ||
+    company.includes("nvidia") ||
+    company.includes("alphabet") ||
+    company.includes("google") ||
+    company.includes("meta")
+  ) {
+    return "technology";
+  }
+
+  if (
+    sector.includes("energy") ||
+    sector.includes("oil") ||
+    sector.includes("gas") ||
+    sector.includes("utilities")
+  ) {
+    return "energy";
+  }
+
+  return "others";
+}
+
+function buildSectorCards(holdings: Holding[]): SectorCard[] {
+  if (holdings.length === 0) {
+    return [
+      {
+        label: "Technology",
+        percent: 0,
+        detail: "No holdings loaded",
+        ...getSectorVisuals("technology"),
+      },
+      {
+        label: "Energy",
+        percent: 0,
+        detail: "No holdings loaded",
+        ...getSectorVisuals("energy"),
+      },
+      {
+        label: "Others",
+        percent: 0,
+        detail: "No holdings loaded",
+        ...getSectorVisuals("others"),
+      },
+    ];
+  }
+
+  let technologyValue = 0;
+  let energyValue = 0;
+  let othersValue = 0;
+
+  for (const holding of holdings) {
+    const value = getHoldingValue(holding);
+    const bucket = classifyHoldingBucket(holding);
+
+    if (bucket === "technology") {
+      technologyValue += value;
+      continue;
+    }
+    if (bucket === "energy") {
+      energyValue += value;
+      continue;
+    }
+
+    othersValue += value;
+  }
+
+  const totalValue = technologyValue + energyValue + othersValue;
+
+  return [
+    {
+      label: "Technology",
+      percent: totalValue > 0 ? (technologyValue / totalValue) * 100 : 0,
+      detail:
+        technologyValue > 0
+          ? `${formatCurrency(Math.round(technologyValue))} current value`
+          : "No allocation",
+      ...getSectorVisuals("technology"),
+    },
+    {
+      label: "Energy",
+      percent: totalValue > 0 ? (energyValue / totalValue) * 100 : 0,
+      detail:
+        energyValue > 0
+          ? `${formatCurrency(Math.round(energyValue))} current value`
+          : "No allocation",
+      ...getSectorVisuals("energy"),
+    },
+    {
+      label: "Others",
+      percent: totalValue > 0 ? (othersValue / totalValue) * 100 : 0,
+      detail:
+        othersValue > 0
+          ? `${formatCurrency(Math.round(othersValue))} across remaining sectors`
+          : "No remaining sectors",
+      ...getSectorVisuals("others"),
+    },
+  ];
+}
+
+function findInsight(insights: PortfolioInsight[], key: string) {
+  return insights.find((insight) => insight.title.toLowerCase().includes(key));
+}
+
+function buildInsightSummary(
+  insights: PortfolioInsight[],
+  feedHighlights: PortfolioFeedHighlight[],
+  sectorCards: SectorCard[],
+) {
+  const topThemeInsight = findInsight(insights, "most exposed");
+  const macroInsight = findInsight(insights, "macro");
+  const catalystInsight = findInsight(insights, "catalyst");
+  const leadingFeed = feedHighlights[0];
+  const macroFeed =
+    feedHighlights.find((item) => item.category === "macro") ?? leadingFeed;
+
+  return {
+    topTheme: {
+      value: topThemeInsight?.value ?? sectorCards[0]?.label ?? "No concentration yet",
+      detail:
+        topThemeInsight?.detail ??
+        `${Math.round(sectorCards[0]?.percent ?? 0)}% of tracked portfolio value`,
+    },
+    macroWatch: {
+      value:
+        macroInsight?.value ??
+        (macroFeed ? categoryLabel(macroFeed.category) : "No macro signal yet"),
+      detail:
+        macroInsight?.detail ??
+        macroFeed?.whyItMatters ??
+        macroFeed?.aiSummary ??
+        "Run analysis to see a current macro watch item.",
+    },
+    freshCatalyst: {
+      value:
+        leadingFeed?.headline ??
+        catalystInsight?.value ??
+        "No catalyst available yet",
+      detail:
+        leadingFeed?.whyItMatters ??
+        leadingFeed?.aiSummary ??
+        catalystInsight?.detail ??
+        "Run analysis to generate a portfolio-specific catalyst.",
+    },
+  };
+}
+
+export default async function FullPortfolioPage() {
+  const { data: portfolios } = await getUserPortfolios();
+  const portfolioId = portfolios?.[0]?.id ?? null;
+
+  if (!portfolioId) {
+    return (
+      <AppShell
+        eyebrow="Portfolio"
+        title="No portfolio yet"
+        description="Create a portfolio from onboarding to unlock the detailed holdings view."
+        activePath="/portfolio"
+        backHref="/portfolio"
+        actions={
+          <Link href="/portfolio" className={buttonStyles({ variant: "secondary" })}>
+            Back to overview
+          </Link>
+        }
+      >
+        <div className="space-y-4 rounded-[2rem] border border-black/5 bg-white/84 p-8 text-center shadow-sm">
+          <p className="text-slate-600">
+            You need a portfolio before the full holdings breakdown can load.
+          </p>
+          <div className="mt-4 flex flex-wrap justify-center gap-3">
+            <Link href="/onboarding" className={buttonStyles({ size: "lg" })}>
+              Start onboarding
+            </Link>
+            <Link href="/portfolio" className={buttonStyles({ variant: "secondary" })}>
+              Portfolio overview
+            </Link>
+          </div>
+        </div>
+      </AppShell>
+    );
+  }
+
+  const [portfolioResult, overviewResult, insightsResult, feedResult] =
+    await Promise.all([
+      getPortfolio(portfolioId),
+      getPortfolioOverview(portfolioId),
+      getPortfolioInsights(portfolioId),
+      getPortfolioFeedHighlights(portfolioId),
+    ]);
+
+  const holdings = portfolioResult.data?.holdings ?? [];
+  const portfolioOverview = overviewResult.data ?? {
+    totalValue: 0,
+    dayChange: 0,
+    monthlyChange: 0,
+    lastSyncedAt: "Not synced",
+    lastAnalyzedAt: "Never",
+    coverage: "0 stories",
+    primaryGoal: "Add holdings and run analysis.",
+  };
+  const insights = insightsResult.data ?? [];
+  const feedHighlights = feedResult.data ?? [];
+  const portfolioDayChange = portfolioOverview.dayChange ?? 0;
+  const sectorCards = buildSectorCards(holdings);
+  const insightSummary = buildInsightSummary(insights, feedHighlights, sectorCards);
+
+  return (
+    <AppShell
+      eyebrow=""
+      title="Portfolio Strategy"
+      description="Advanced position oversight for your diversified Signal Emerald custody account."
+      activePath="/portfolio"
+      backHref="/portfolio"
+      actions={
+        <div className="flex flex-wrap items-end gap-4">
+          <div className="flex min-w-[200px] flex-col justify-center rounded-[1.5rem] bg-[#586475] px-6 py-3.5 text-white shadow-sm">
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#A1B2C6]">
+              TOTAL PORTFOLIO VALUE
+            </p>
+            <p className="mt-1 text-[28px] font-bold tracking-tight">
+              {formatCurrency(portfolioOverview.totalValue).split(".")[0]}{" "}
+              <span className="ml-1 text-sm font-semibold text-[#A1B2C6]">USD</span>
+            </p>
+          </div>
+          <div className="flex min-w-[160px] flex-col justify-center rounded-[1.5rem] border border-black/5 bg-white px-6 py-3.5 shadow-sm">
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
+              DAY CHANGE
+            </p>
+            <p
+              className={`mt-1 text-[28px] font-bold tracking-tight ${
+                portfolioDayChange >= 0 ? "text-emerald-500" : "text-[#FF6B6B]"
+              }`}
+            >
+              {portfolioDayChange >= 0 ? "+" : "-"} {Math.abs(portfolioDayChange)}%
+            </p>
+          </div>
+          <RefreshPricesButton portfolioId={portfolioId} />
+        </div>
+      }
+    >
+      <div className="-mx-4 rounded-[2.5rem] bg-[#F4F5F4] p-6 shadow-inner sm:mx-0 lg:p-10">
+        <div className="flex flex-col gap-10 lg:flex-row">
+          <div className="flex-1 space-y-12">
+            <div>
+              <h2 className="mb-6 text-[22px] font-bold tracking-tight text-slate-900">
+                Allocation & Position
+              </h2>
+              <div className="grid gap-4 md:grid-cols-3">
+                {sectorCards.map((card) => {
+                  const Icon = card.icon;
+
+                  return (
+                    <div
+                      key={card.label}
+                      className="rounded-[1.5rem] border border-black/5 bg-white p-6 shadow-sm"
+                    >
+                      <div className="mb-4 flex items-start justify-between">
+                        <div className={`rounded-xl p-2.5 ${card.iconClassName}`}>
+                          <Icon className="h-5 w-5" />
+                        </div>
+                        <span
+                          className={`text-[14px] font-bold ${
+                            card.label === "Energy"
+                              ? "text-[#FF9E2C]"
+                              : card.label === "Others"
+                                ? "text-[#5C7E9E]"
+                                : "text-[#009B5A]"
+                          }`}
+                        >
+                          {Math.round(card.percent)}%
+                        </span>
+                      </div>
+                      <h3 className="font-bold text-slate-900">{card.label}</h3>
+                      <p className="mt-1 text-[12px] text-slate-500">{card.detail}</p>
+                      <div className="mt-4 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+                        <div
+                          className={`h-full rounded-full ${card.barClassName}`}
+                          style={{ width: `${card.percent}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div>
+              <div className="mb-6 flex items-end justify-between gap-4">
+                <div>
+                  <h2 className="text-[22px] font-bold tracking-tight text-slate-900">
+                    Active Holdings
+                  </h2>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Synced {portfolioOverview.lastSyncedAt}
+                  </p>
+                </div>
+                <p className="text-[12px] font-bold uppercase tracking-widest text-[#009B5A]">
+                  {holdings.length} positions
+                </p>
+              </div>
+
+              {holdings.length > 0 ? (
+                <PortfolioHoldingsTable holdings={holdings} />
+              ) : (
+                <div className="rounded-[1.5rem] border border-black/5 bg-white px-6 py-8 text-center text-sm text-slate-500 shadow-sm">
+                  No holdings available yet.
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="w-full shrink-0 space-y-4 lg:w-[340px]">
+            <div className="relative overflow-hidden rounded-[2.5rem] border border-[#E1E3CF]/50 bg-[#F2F3EB] p-8 shadow-sm">
+              <div className="pointer-events-none absolute top-0 right-0 h-32 w-32 rounded-bl-full bg-gradient-to-bl from-white/40 to-transparent" />
+
+              <div className="mb-8 flex items-center gap-3">
+                <div className="text-[#009B5A]">
+                  <Sparkles className="h-6 w-6 fill-current" />
+                </div>
+                <h2 className="text-[20px] font-bold tracking-tight text-slate-900">
+                  Insight Summary
+                </h2>
+              </div>
+
+              <div className="space-y-8">
+                <div>
+                  <p className="mb-4 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
+                    MOST EXPOSED THEME
+                  </p>
+                  <div className="flex items-center gap-4">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#00B86F] text-white shadow-sm shadow-[#009B5A]/20">
+                      <Cpu className="h-6 w-6" />
+                    </div>
+                    <div>
+                      <p className="text-[15px] font-bold text-slate-900">
+                        {insightSummary.topTheme.value}
+                      </p>
+                      <p className="mt-0.5 text-sm text-slate-600">
+                        {insightSummary.topTheme.detail}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <p className="mb-4 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
+                    MACRO WATCH
+                  </p>
+                  <div className="flex items-center gap-4">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-black/10 bg-white/50 text-slate-500">
+                      <BarChart3 className="h-6 w-6" />
+                    </div>
+                    <div>
+                      <p className="text-[15px] font-bold text-slate-900">
+                        {insightSummary.macroWatch.value}
+                      </p>
+                      <p className="mt-0.5 text-sm text-slate-600">
+                        {insightSummary.macroWatch.detail}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <p className="mb-4 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
+                    FRESH CATALYST
+                  </p>
+                  <div className="flex flex-col gap-2 rounded-2xl border-l-4 border-[#009B5A] bg-white p-4 shadow-sm">
+                    <p className="text-[14px] font-bold text-slate-900">
+                      {insightSummary.freshCatalyst.value}
+                    </p>
+                    <p className="text-[13px] leading-snug text-slate-600">
+                      {insightSummary.freshCatalyst.detail}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <PortfolioCopilotPanel portfolioId={portfolioId} />
+
+            <div className="rounded-[2.5rem] border border-[#009B5A]/10 bg-[#E8F8ED] p-8 shadow-sm">
+              <p className="mb-3 text-[13px] font-bold text-[#009B5A]">Emerald Advisor</p>
+              <p className="text-[15px] leading-relaxed text-slate-700">
+                {feedHighlights[0]?.whyItMatters ||
+                  insights[0]?.detail ||
+                  "Run analysis to surface a more specific recommendation for this portfolio."}
+              </p>
+              <div className="mt-5">
+                <Link
+                  href="/analysis"
+                  className="inline-flex items-center gap-1 border-b-2 border-[#009B5A]/20 pb-0.5 text-[14px] font-bold text-slate-900 transition-colors hover:border-[#009B5A]"
+                >
+                  Review Analysis
+                </Link>
+              </div>
+            </div>
+
+            <div className="rounded-[2rem] border border-black/5 bg-white/84 p-5 shadow-sm">
+              <div className="flex items-center gap-3">
+                <Landmark className="h-5 w-5 text-slate-500" />
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">Latest analysis</p>
+                  <p className="text-sm text-slate-500">
+                    {portfolioOverview.lastAnalyzedAt}
+                  </p>
+                </div>
+              </div>
+              <p className="mt-4 text-sm leading-7 text-slate-600">
+                {portfolioOverview.coverage}. {portfolioOverview.primaryGoal}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </AppShell>
+  );
+}

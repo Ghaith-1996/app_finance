@@ -10,6 +10,7 @@ const seedStories: RawNewsItem[] = [
     angle: "Demand signal",
     rawContent:
       "Enterprise cloud and AI infrastructure spending continues to accelerate into 2026, with major hyperscalers expanding capacity.",
+    entityTickers: ["MSFT", "NVDA", "AMZN", "GOOGL"],
   },
   {
     headline:
@@ -20,6 +21,7 @@ const seedStories: RawNewsItem[] = [
     angle: "Macro cross-current",
     rawContent:
       "Oil prices hold gains following supply curbs; inflation expectations remain in focus for central banks.",
+    entityTickers: ["XOM", "CVX"],
   },
   {
     headline: "New obesity treatment data sharpens focus on pharma winners",
@@ -29,6 +31,7 @@ const seedStories: RawNewsItem[] = [
     angle: "Company catalyst",
     rawContent:
       "Latest clinical data on obesity treatments reinforces demand for leading pharma names in the space.",
+    entityTickers: ["LLY", "NVO"],
   },
   {
     headline: "Treasury yields rise as investors reprice the timing of rate cuts",
@@ -48,6 +51,7 @@ const seedStories: RawNewsItem[] = [
     angle: "Execution tailwind",
     rawContent:
       "Semiconductor supply constraints ease amid strong data center and AI buildout demand.",
+    entityTickers: ["NVDA", "AMD", "INTC"],
   },
 ];
 

@@ -31,6 +31,7 @@ function deriveAngle(article: MarketAuxArticle): string {
   return "Market update";
 }
 
+/** Optional Node provider when `NEWS_PROVIDER=marketaux` (not used by the Python ingest worker). */
 export function createMarketAuxProvider(): INewsProvider {
   const key = process.env.MARKETAUX_API_KEY;
   if (!key) {
@@ -74,14 +75,20 @@ export function createMarketAuxProvider(): INewsProvider {
 
       const json = (await res.json()) as MarketAuxResponse;
 
-      return (json.data ?? []).map((article) => ({
-        headline: article.title,
-        source: article.source,
-        url: article.url,
-        publishedAt: new Date(article.published_at),
-        angle: deriveAngle(article),
-        rawContent: article.snippet || article.description || undefined,
-      }));
+      return (json.data ?? []).map((article) => {
+        const entityTickers = (article.entities ?? [])
+          .map((e) => e.symbol?.trim().toUpperCase())
+          .filter((s): s is string => !!s);
+        return {
+          headline: article.title,
+          source: article.source,
+          url: article.url,
+          publishedAt: new Date(article.published_at),
+          angle: deriveAngle(article),
+          rawContent: article.snippet || article.description || undefined,
+          entityTickers: entityTickers.length > 0 ? [...new Set(entityTickers)] : undefined,
+        };
+      });
     },
   };
 }

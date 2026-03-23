@@ -21,10 +21,10 @@ async function requireAuthedContext() {
   } = await supabase.auth.getUser();
 
   if (authError || !user) {
-    return { supabase, user: null, response: json({ error: "Unauthorized" }, 401) };
+    return { supabase, user: null as null, response: json({ error: "Unauthorized" }, 401) };
   }
 
-  return { supabase, user, response: null as Response | null };
+  return { supabase, user, response: undefined as undefined };
 }
 
 async function verifyPortfolioOwnership(
@@ -190,7 +190,7 @@ async function loadPromptContext(
 
 export async function GET(request: Request) {
   const { supabase, user, response } = await requireAuthedContext();
-  if (response || !user) return response;
+  if (response) return response;
 
   const { searchParams } = new URL(request.url);
   const portfolioId = searchParams.get("portfolioId");
@@ -216,7 +216,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const { supabase, user, response } = await requireAuthedContext();
-  if (response || !user) return response;
+  if (response) return response;
 
   let body: { portfolioId?: string; newsItemId?: string; message?: string } = {};
   try {

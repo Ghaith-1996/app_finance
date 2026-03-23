@@ -28,6 +28,7 @@ except ImportError:
     pass
 
 from .bootstrap import configure_worker_environment, prepare_worker_runtime
+from .extract_full_text import backfill_full_text, extract_full_text_for_ids
 from .fetchers.edgar_fetcher import fetch_edgar_news
 from .fetchers.gnews_fetcher import fetch_gnews_news
 from .fetchers.newsapi_fetcher import fetch_newsapi_news
@@ -389,6 +390,23 @@ def run(
         stats[key] = upsert_articles(bundles[key].articles, source_label=key)
 
     total_inserted = sum(stats[key].inserted for key in active_source_keys)
+
+    all_inserted_ids: list[str] = []
+    for key in active_source_keys:
+        all_inserted_ids.extend(stats[key].inserted_ids)
+
+    extraction_stats = None
+    if all_inserted_ids:
+        logger.info("Extracting full text for %d newly inserted articles...", len(all_inserted_ids))
+        extraction_result = extract_full_text_for_ids(all_inserted_ids)
+        extraction_stats = extraction_result.to_dict()
+        logger.info(
+            "Full-text extraction: extracted=%d failed=%d skipped=%d",
+            extraction_result.extracted,
+            extraction_result.failed,
+            extraction_result.skipped,
+        )
+
     ingest_status, ingest_detail = _summarize_ingest(
         bundles,
         stats,
@@ -404,12 +422,15 @@ def run(
         total_inserted,
     )
 
-    return {
+    result = {
         "ingest_status": ingest_status,
         "ingest_detail": ingest_detail,
         **_source_rows_from_maps(bundles, stats),
         "total_inserted": total_inserted,
     }
+    if extraction_stats:
+        result["full_text_extraction"] = extraction_stats
+    return result
 
 
 def main() -> None:
@@ -456,7 +477,26 @@ def main() -> None:
         default="",
         help="Optional JSON array of refresh-only targeted GNews queries.",
     )
+    parser.add_argument(
+        "--backfill",
+        action="store_true",
+        help="Run full-text extraction on existing articles missing full_content (no ingestion).",
+    )
+    parser.add_argument(
+        "--backfill-limit",
+        type=int,
+        default=50,
+        dest="backfill_limit",
+        help="Max articles to backfill (default: 50). Only used with --backfill.",
+    )
     args = parser.parse_args()
+
+    if args.backfill:
+        prepare_worker_runtime()
+        logger.info("Running full-text backfill (limit=%d)...", args.backfill_limit)
+        result = backfill_full_text(limit=args.backfill_limit)
+        print(json.dumps({"backfill": True, **result.to_dict()}), flush=True)
+        sys.exit(0)
 
     if args.check:
         try:

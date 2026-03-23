@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { buttonStyles } from "@/components/ui/button";
+import { LogOut } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
 
 export function UserMenu() {
@@ -46,32 +46,30 @@ export function UserMenu() {
     "User";
 
   return (
-    <div className="flex items-center gap-3">
-      <div className="hidden items-center gap-2 md:flex">
-        {avatarUrl ? (
-          <img
-            src={avatarUrl}
-            alt=""
-            className="h-8 w-8 rounded-full border border-black/8 object-cover"
-          />
-        ) : (
-          <span className="flex h-8 w-8 items-center justify-center rounded-full border border-black/8 bg-brand/15 text-sm font-medium text-brand">
-            {name.charAt(0).toUpperCase()}
-          </span>
-        )}
-        <span className="max-w-[120px] truncate text-sm text-slate-600">
-          {name}
+    <div className="flex items-center gap-3 rounded-xl px-3 py-2">
+      {avatarUrl ? (
+        <img
+          src={avatarUrl}
+          alt=""
+          className="h-8 w-8 rounded-lg border border-white/10 object-cover"
+        />
+      ) : (
+        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand/15 text-sm font-medium text-brand">
+          {name.charAt(0).toUpperCase()}
         </span>
+      )}
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium text-slate-300">
+          {name}
+        </p>
       </div>
       <button
         type="button"
         onClick={signOut}
-        className={buttonStyles({
-          variant: "ghost",
-          className: "text-slate-700 hover:bg-black/5 hover:text-slate-950",
-        })}
+        className="rounded-lg p-1.5 text-slate-600 transition hover:bg-white/5 hover:text-slate-400"
+        title="Sign out"
       >
-        Sign out
+        <LogOut className="h-4 w-4" />
       </button>
     </div>
   );

@@ -14,8 +14,8 @@ export function Panel({
   return (
     <div
       className={cn(
-        "rounded-[32px] border border-black/6 bg-white/80 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.06)] backdrop-blur-xl",
-        glow && "shadow-[0_26px_90px_rgba(23,182,122,0.12)]",
+        "rounded-2xl border border-white/[0.06] bg-surface-raised p-6 shadow-sm backdrop-blur-xl",
+        glow && "shadow-[0_0_40px_rgba(16,185,129,0.08)]",
         className,
       )}
       {...props}

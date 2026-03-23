@@ -19,7 +19,6 @@ function parseCoverageCount(coverage: string): number {
   return m ? Number(m[1]) : 0;
 }
 
-/** Visual fill for “analysis pulse” bar from human-readable time labels. */
 function analysisPulseFill(lastAnalyzedAt: string): number {
   if (lastAnalyzedAt === "Never") return 12;
   if (lastAnalyzedAt.includes("Just now")) return 98;
@@ -73,12 +72,11 @@ export default async function FeedPage({
       title="A personalized news feed built around what you own."
       description="Leveraging compound analysis to distill 14,000+ daily data points into your critical performance drivers."
       activePath="/feed"
-      mainClassName="bg-[#f0f1f4]"
       actions={
         <>
           <Link
             href={portfolioId ? `/analysis?portfolioId=${portfolioId}` : "/analysis"}
-            className={buttonStyles({ variant: "ghost", className: "text-slate-600" })}
+            className={buttonStyles({ variant: "ghost", className: "text-slate-500" })}
           >
             Refresh analysis
           </Link>
@@ -91,38 +89,38 @@ export default async function FeedPage({
     >
       <div className="space-y-8">
         <div className="grid gap-4 md:grid-cols-3">
-          <Panel className="space-y-3 rounded-2xl border-black/[0.06] bg-white p-6 shadow-sm">
+          <Panel className="space-y-3 rounded-2xl p-6">
             <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
               Intelligence coverage
             </p>
-            <p className="text-3xl font-semibold tracking-tight text-slate-950">
+            <p className="text-3xl font-semibold tracking-tight text-white">
               {storyCount}
             </p>
             <p className="text-sm text-slate-500">high-signal stories today</p>
             <div className="pt-1">
-              <span className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800">
-                <span className="h-2 w-2 rounded-full bg-emerald-500" />
+              <span className="inline-flex items-center gap-2 rounded-lg border border-brand/25 bg-brand/10 px-3 py-1 text-xs font-semibold text-brand">
+                <span className="h-2 w-2 rounded-full bg-brand" />
                 Feed ready
               </span>
             </div>
           </Panel>
 
-          <div className="flex flex-col justify-between rounded-2xl border border-black/[0.06] bg-[#0d1117] p-6 text-white shadow-[0_24px_60px_rgba(13,17,23,0.35)]">
+          <div className="flex flex-col justify-between rounded-2xl border border-white/[0.06] bg-surface-raised p-6">
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
                 Active portfolio value
               </p>
-              <p className="mt-2 text-3xl font-semibold tracking-tight">
+              <p className="mt-2 text-3xl font-semibold tracking-tight text-white">
                 {formatPrice(portfolioOverview.totalValue)}
               </p>
             </div>
             <div
               className={`mt-4 flex flex-wrap items-center gap-2 text-sm font-semibold ${
                 dayPct < 0
-                  ? "text-rose-400"
+                  ? "text-red-400"
                   : dayPct > 0
                     ? "text-emerald-400"
-                    : "text-slate-400"
+                    : "text-slate-500"
               }`}
             >
               {dayPct < 0 ? (
@@ -136,18 +134,18 @@ export default async function FeedPage({
             </div>
           </div>
 
-          <Panel className="space-y-3 rounded-2xl border-black/[0.06] bg-white p-6 shadow-sm">
+          <Panel className="space-y-3 rounded-2xl p-6">
             <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
               Analysis pulse
             </p>
-            <p className="text-3xl font-semibold tracking-tight text-slate-950">
+            <p className="text-3xl font-semibold tracking-tight text-white">
               {portfolioOverview.lastAnalyzedAt}
             </p>
             <p className="text-sm text-slate-500">Compound analysis refreshed</p>
             <div className="pt-2">
-              <div className="h-2 overflow-hidden rounded-full bg-slate-200">
+              <div className="h-2 overflow-hidden rounded-full bg-white/5">
                 <div
-                  className="h-full rounded-full bg-[#17b67a] transition-[width] duration-500"
+                  className="h-full rounded-full bg-brand transition-[width] duration-500"
                   style={{ width: `${pulsePct}%` }}
                 />
               </div>

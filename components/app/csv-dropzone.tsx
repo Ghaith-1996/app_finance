@@ -65,21 +65,21 @@ export function CSVDropzone({ onFileContent, disabled }: CSVDropzoneProps) {
       onDragLeave={() => setDragging(false)}
       onDrop={onDrop}
       className={cn(
-        "relative flex flex-col items-center gap-4 rounded-3xl border-2 border-dashed p-10 text-center transition",
+        "relative flex flex-col items-center gap-4 rounded-2xl border-2 border-dashed p-10 text-center transition",
         dragging
-          ? "border-brand bg-brand/6"
-          : "border-black/10 bg-[#fffdf9] hover:border-brand/30 hover:bg-brand/4",
+          ? "border-brand bg-brand/5"
+          : "border-white/10 bg-surface-raised hover:border-brand/30 hover:bg-surface-hover",
         disabled && "pointer-events-none opacity-50",
       )}
     >
       {fileName ? (
         <div className="flex items-center gap-3">
           <FileUp className="h-6 w-6 text-brand" />
-          <span className="text-sm font-semibold text-slate-950">{fileName}</span>
+          <span className="text-sm font-semibold text-white">{fileName}</span>
           <button
             type="button"
             onClick={clear}
-            className="rounded-full p-1 text-slate-400 transition hover:bg-black/5 hover:text-slate-700"
+            className="rounded-lg p-1 text-slate-500 transition hover:bg-white/5 hover:text-slate-300"
           >
             <X className="h-4 w-4" />
           </button>
@@ -88,7 +88,7 @@ export function CSVDropzone({ onFileContent, disabled }: CSVDropzoneProps) {
         <>
           <FileUp className="h-8 w-8 text-brand" />
           <div>
-            <p className="text-sm font-semibold text-slate-950">
+            <p className="text-sm font-semibold text-white">
               Drop a CSV file here or{" "}
               <button
                 type="button"

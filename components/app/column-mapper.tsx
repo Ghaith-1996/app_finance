@@ -49,12 +49,12 @@ export function ColumnMapper({
   }
 
   return (
-    <Panel className="space-y-5 border-black/6 bg-white/84">
+    <Panel className="space-y-5">
       <div>
         <p className="text-sm font-semibold uppercase tracking-[0.24em] text-brand">
           Map CSV columns
         </p>
-        <p className="mt-2 text-sm leading-7 text-slate-600">
+        <p className="mt-2 text-sm leading-7 text-slate-400">
           We couldn&apos;t auto-detect all columns. Map each field to a CSV header below.
         </p>
       </div>
@@ -62,12 +62,12 @@ export function ColumnMapper({
         {REQUIRED_FIELDS.map((field) => (
           <div
             key={field.key}
-            className="flex flex-col gap-2 rounded-2xl border border-black/6 bg-[#fffdf9] p-4 sm:flex-row sm:items-center sm:justify-between"
+            className="flex flex-col gap-2 rounded-xl border border-white/[0.06] bg-white/[0.03] p-4 sm:flex-row sm:items-center sm:justify-between"
           >
             <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold text-slate-950">{field.label}</span>
+              <span className="text-sm font-semibold text-white">{field.label}</span>
               {field.required && (
-                <span className="text-xs text-rose-500">required</span>
+                <span className="text-xs text-rose-400">required</span>
               )}
             </div>
             <select
@@ -84,7 +84,7 @@ export function ColumnMapper({
                   return next;
                 });
               }}
-              className="rounded-xl border border-black/8 bg-white px-3 py-2 text-sm text-slate-950 outline-none focus:border-brand focus:ring-1 focus:ring-brand"
+              className="rounded-xl border border-white/10 bg-surface-raised px-3 py-2 text-sm text-slate-200 outline-none focus:border-brand focus:ring-1 focus:ring-brand"
             >
               <option value="">-- skip --</option>
               {headers.map((header, idx) => (

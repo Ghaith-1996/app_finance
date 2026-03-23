@@ -5,7 +5,6 @@ export function SectionHeading({
   title,
   description,
   align = "left",
-  theme = "dark",
 }: {
   eyebrow: string;
   title: string;
@@ -23,20 +22,10 @@ export function SectionHeading({
       <p className="text-sm font-semibold uppercase tracking-[0.24em] text-brand">
         {eyebrow}
       </p>
-      <h2
-        className={cn(
-          "text-3xl font-semibold tracking-tight sm:text-4xl",
-          theme === "light" ? "text-slate-950" : "text-white",
-        )}
-      >
+      <h2 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
         {title}
       </h2>
-      <p
-        className={cn(
-          "text-base leading-7 sm:text-lg",
-          theme === "light" ? "text-slate-600" : "text-slate-300",
-        )}
-      >
+      <p className="text-base leading-7 text-slate-400 sm:text-lg">
         {description}
       </p>
     </div>

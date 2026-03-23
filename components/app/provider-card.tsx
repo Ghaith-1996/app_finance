@@ -32,11 +32,11 @@ function providerIcon(status: Provider["status"]) {
 function providerGradient(id: Provider["id"]) {
   switch (id) {
     case "wealthsimple":
-      return "bg-gradient-to-br from-brand/18 via-brand/6 to-transparent";
+      return "bg-gradient-to-br from-brand/10 via-brand/5 to-transparent";
     case "interactive-brokers":
-      return "bg-gradient-to-br from-slate-950/10 via-slate-900/6 to-transparent";
+      return "bg-gradient-to-br from-white/5 via-white/[0.02] to-transparent";
     default:
-      return "bg-gradient-to-br from-amber-200/45 via-amber-100/18 to-transparent";
+      return "bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-transparent";
   }
 }
 
@@ -52,8 +52,8 @@ export function ProviderCard({
   return (
     <Panel
       className={cn(
-        "relative overflow-hidden border-black/6 bg-white/82 p-6",
-        selected && "border-brand/28 bg-brand/10 shadow-[0_18px_45px_rgba(23,182,122,0.1)]",
+        "relative overflow-hidden p-6",
+        selected && "border-brand/25 bg-brand/5 shadow-[0_0_30px_rgba(16,185,129,0.08)]",
       )}
     >
       <div
@@ -65,8 +65,8 @@ export function ProviderCard({
       <div className="relative space-y-5">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-lg font-semibold text-slate-950">{provider.name}</p>
-            <p className="mt-2 text-sm leading-6 text-slate-600">
+            <p className="text-lg font-semibold text-white">{provider.name}</p>
+            <p className="mt-2 text-sm leading-6 text-slate-400">
               {provider.summary}
             </p>
           </div>
@@ -77,7 +77,7 @@ export function ProviderCard({
         </div>
         <div className="space-y-2">
           {provider.capabilities.map((capability) => (
-            <div key={capability} className="flex items-center gap-3 text-sm text-slate-600">
+            <div key={capability} className="flex items-center gap-3 text-sm text-slate-400">
               <span className="h-1.5 w-1.5 rounded-full bg-brand" />
               <span>{capability}</span>
             </div>

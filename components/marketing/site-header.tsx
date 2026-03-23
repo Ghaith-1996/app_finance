@@ -6,14 +6,14 @@ import { buttonStyles } from "@/components/ui/button";
 
 export function SiteHeader() {
   return (
-    <header className="sticky top-0 z-40 border-b border-black/6 bg-white/92 backdrop-blur-xl">
+    <header className="sticky top-0 z-40 border-b border-white/[0.06] bg-background/95 backdrop-blur-xl">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-6 px-6 py-4 lg:px-8">
         <Link href="/" className="flex items-center gap-3">
-          <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-brand/20 bg-white/80 text-sm font-semibold text-brand shadow-sm">
+          <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-brand/15 text-sm font-semibold text-brand">
             PS
           </span>
           <div>
-            <span className="block text-sm font-semibold tracking-[0.18em] uppercase text-slate-950">
+            <span className="block text-sm font-semibold tracking-[0.18em] uppercase text-white">
               PortfolioSignal
             </span>
             <span className="block text-xs text-slate-500">
@@ -21,14 +21,14 @@ export function SiteHeader() {
             </span>
           </div>
         </Link>
-        <nav className="hidden items-center gap-8 text-sm text-slate-600 md:flex">
-          <a href="#platform" className="transition hover:text-slate-950">
+        <nav className="hidden items-center gap-8 text-sm text-slate-500 md:flex">
+          <a href="#platform" className="transition hover:text-slate-300">
             Product
           </a>
-          <a href="#workflow" className="transition hover:text-slate-950">
+          <a href="#workflow" className="transition hover:text-slate-300">
             How it works
           </a>
-          <a href="#faq" className="transition hover:text-slate-950">
+          <a href="#faq" className="transition hover:text-slate-300">
             FAQ
           </a>
         </nav>
@@ -37,7 +37,7 @@ export function SiteHeader() {
             href="/feed"
             className={buttonStyles({
               variant: "ghost",
-              className: "hidden sm:inline-flex text-slate-700 hover:bg-black/5 hover:text-slate-950",
+              className: "hidden sm:inline-flex",
             })}
           >
             View demo

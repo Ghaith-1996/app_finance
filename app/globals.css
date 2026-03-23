@@ -1,11 +1,21 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #0f172a;
-  --brand: #17b67a;
-  --brand-strong: #67d6ab;
+  --background: #080c11;
+  --foreground: #e2e8f0;
+  --brand: #10b981;
+  --brand-strong: #34d399;
   --muted: #64748b;
+  --surface: #0f1419;
+  --surface-raised: #151c28;
+  --surface-hover: #1a2332;
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-medium: rgba(255, 255, 255, 0.1);
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --positive: #10b981;
+  --negative: #ef4444;
 }
 
 @theme inline {
@@ -14,35 +24,29 @@
   --color-brand: var(--brand);
   --color-brand-strong: var(--brand-strong);
   --color-muted: var(--muted);
-  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-hover: var(--surface-hover);
+  --color-positive: var(--positive);
+  --color-negative: var(--negative);
+  --font-sans: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 }
 
 * {
-  border-color: rgba(15, 23, 42, 0.08);
+  border-color: var(--border-subtle);
 }
 
 html {
   scroll-behavior: smooth;
+  color-scheme: dark;
 }
 
 body {
   min-height: 100vh;
   background: var(--background);
   color: var(--foreground);
-  background-image:
-    radial-gradient(circle at top left, rgba(23, 182, 122, 0.06), transparent 24%),
-    linear-gradient(180deg, #ffffff 0%, #ffffff 100%);
   font-family: var(--font-sans);
-}
-
-body::before {
-  pointer-events: none;
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  background-image: none;
-  content: "";
 }
 
 a {
@@ -51,6 +55,24 @@ a {
 }
 
 ::selection {
-  background: rgba(23, 182, 122, 0.28);
-  color: #0f172a;
+  background: rgba(16, 185, 129, 0.3);
+  color: #f1f5f9;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.18);
 }

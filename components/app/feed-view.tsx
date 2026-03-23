@@ -54,7 +54,7 @@ const sourceTypeOptions = [
 ];
 
 const selectTriggerClass =
-  "w-full min-w-0 appearance-none rounded-xl border border-black/10 bg-white py-2.5 pl-3 pr-9 text-sm font-medium text-slate-900 shadow-sm focus:border-[#17b67a] focus:outline-none focus:ring-2 focus:ring-[#17b67a]/20";
+  "w-full min-w-0 appearance-none rounded-xl border border-white/10 bg-surface-raised py-2.5 pl-3 pr-9 text-sm font-medium text-slate-200 shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20";
 
 export function FeedView({
   portfolioId,
@@ -296,11 +296,11 @@ export function FeedView({
 
   if (error) {
     return (
-      <Panel className="space-y-4 border-black/6 bg-white/82 p-8 text-center">
+      <Panel className="space-y-4 border-white/[0.06] bg-surface-raised p-8 text-center">
         <Badge tone="warning" className="mx-auto">
           Error
         </Badge>
-        <p className="text-slate-600">{error}</p>
+        <p className="text-slate-400">{error}</p>
         <Button onClick={fetchFeed}>Retry</Button>
       </Panel>
     );
@@ -308,8 +308,8 @@ export function FeedView({
 
   if (loading) {
     return (
-      <Panel className="space-y-4 border-black/6 bg-white/82 p-8 text-center">
-        <p className="text-slate-600">Loading feed…</p>
+      <Panel className="space-y-4 border-white/[0.06] bg-surface-raised p-8 text-center">
+        <p className="text-slate-400">Loading feed…</p>
       </Panel>
     );
   }
@@ -317,7 +317,7 @@ export function FeedView({
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
       <div className="space-y-6">
-        <div className="rounded-2xl border border-black/[0.06] bg-white p-5 shadow-sm">
+        <div className="rounded-2xl border border-white/[0.06] bg-surface-raised p-5 shadow-sm">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
             <ModeToggle mode={mode} onChange={handleModeChange} />
             {mode === "personal" ? (
@@ -424,8 +424,8 @@ export function FeedView({
             )}
           </div>
           {mode === "personal" ? (
-            <details className="group mt-4 border-t border-black/6 pt-4">
-              <summary className="cursor-pointer list-none text-sm font-medium text-slate-600 hover:text-slate-950 [&::-webkit-details-marker]:hidden">
+            <details className="group mt-4 border-t border-white/[0.06] pt-4">
+              <summary className="cursor-pointer list-none text-sm font-medium text-slate-500 hover:text-slate-300 [&::-webkit-details-marker]:hidden">
                 <span className="inline-flex items-center gap-2">
                   Refine by sector or category
                   <ChevronDown className="h-4 w-4 transition group-open:rotate-180" />
@@ -477,7 +477,7 @@ export function FeedView({
             <button
               type="button"
               onClick={resetFilters}
-              className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 transition hover:text-slate-800"
+              className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 transition hover:text-slate-300"
             >
               <RefreshCw className="h-3.5 w-3.5" />
               Reset filters
@@ -509,7 +509,7 @@ export function FeedView({
               <button
                 type="button"
                 onClick={() => setVisibleCount((c) => c + 10)}
-                className="flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-slate-300 bg-white py-4 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-400 hover:bg-slate-50"
+                className="flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-white/10 bg-white/5 py-4 text-sm font-semibold text-slate-300 shadow-sm transition hover:border-white/16 hover:bg-surface-hover"
               >
                 View {remainingStories} more intelligence reports
                 <ChevronDown className="h-4 w-4" />
@@ -639,15 +639,15 @@ function ModeToggle({
   onChange: (m: FeedMode) => void;
 }) {
   return (
-    <div className="inline-flex rounded-full bg-slate-200/90 p-1">
+    <div className="inline-flex rounded-full bg-white/5 p-1">
       <button
         type="button"
         onClick={() => onChange("personal")}
         className={cn(
           "rounded-full px-5 py-2.5 text-sm font-semibold transition",
           mode === "personal"
-            ? "bg-white text-slate-950 shadow-sm"
-            : "text-slate-600 hover:text-slate-900",
+            ? "bg-brand/15 text-brand"
+            : "text-slate-500 hover:text-slate-300",
         )}
       >
         Personal Feed
@@ -658,8 +658,8 @@ function ModeToggle({
         className={cn(
           "rounded-full px-5 py-2.5 text-sm font-semibold transition",
           mode === "market"
-            ? "bg-white text-slate-950 shadow-sm"
-            : "text-slate-600 hover:text-slate-900",
+            ? "bg-brand/15 text-brand"
+            : "text-slate-500 hover:text-slate-300",
         )}
       >
         Full Market
@@ -688,11 +688,11 @@ function DetailPanel({
 
   if (!story) {
     return (
-      <div className="flex h-fit min-h-[320px] flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-300 bg-slate-100/50 px-6 py-12 text-center xl:sticky xl:top-28">
-        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-white shadow-sm ring-1 ring-black/5">
-          <FileText className="h-7 w-7 text-slate-400" />
+      <div className="flex h-fit min-h-[320px] flex-col items-center justify-center rounded-2xl border-2 border-dashed border-white/10 bg-surface-raised/50 px-6 py-12 text-center xl:sticky xl:top-28">
+        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-white/5">
+          <FileText className="h-7 w-7 text-slate-500" />
         </div>
-        <h2 className="mt-6 text-lg font-semibold text-slate-950">
+        <h2 className="mt-6 text-lg font-semibold text-white">
           Pick a story to dive deep
         </h2>
         <p className="mt-3 max-w-xs text-sm leading-relaxed text-slate-500">
@@ -704,19 +704,19 @@ function DetailPanel({
   }
 
   return (
-    <Panel className="h-fit space-y-5 rounded-2xl border-black/[0.06] bg-white p-6 shadow-sm xl:sticky xl:top-28">
+    <Panel className="h-fit space-y-5 rounded-2xl border-white/[0.06] bg-surface-raised p-6 shadow-sm xl:sticky xl:top-28">
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-2">
           <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
             Article detail
           </p>
-          <h2 className="text-xl font-semibold leading-snug tracking-tight text-slate-950">
+          <h2 className="text-xl font-semibold leading-snug tracking-tight text-white">
             {story.headline}
           </h2>
         </div>
         <button
           type="button"
-          className="shrink-0 rounded-full border border-black/8 bg-slate-100 p-2 text-slate-500 transition hover:bg-white hover:text-slate-950"
+          className="shrink-0 rounded-full border border-white/10 bg-white/5 p-2 text-slate-500 transition hover:bg-white/10 hover:text-slate-300"
           onClick={onClose}
         >
           <X className="h-4 w-4" />
@@ -782,7 +782,7 @@ function DetailPanel({
             <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
               {isMarket ? "Summary" : "AI summary"}
             </p>
-            <p className="text-sm leading-7 text-slate-600">
+            <p className="text-sm leading-7 text-slate-400">
               {story.globalSummary || story.aiSummary || ""}
             </p>
           </div>
@@ -793,7 +793,7 @@ function DetailPanel({
               <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
                 Why it matters
               </p>
-              <p className="text-sm leading-7 text-slate-600">
+              <p className="text-sm leading-7 text-slate-400">
                 {story.whyItMatters}
               </p>
             </div>
@@ -860,7 +860,7 @@ function DetailPanel({
             </a>
           )}
 
-          <div className="border-t border-black/6 pt-5">
+          <div className="border-t border-white/[0.06] pt-5">
             <Button
               type="button"
               variant="secondary"
@@ -896,17 +896,17 @@ function FeedEmptyState({
 }) {
   if (hasAnyData) {
     return (
-      <Panel className="space-y-4 border-black/6 bg-white/82 p-8 text-center">
+      <Panel className="space-y-4 border-white/[0.06] bg-surface-raised p-8 text-center">
         <Badge tone="warning" className="mx-auto">
           No exact matches
         </Badge>
         <div className="space-y-2">
-          <h2 className="text-2xl font-semibold text-slate-950">
+          <h2 className="text-2xl font-semibold text-white">
             {mode === "personal"
               ? "No stories match these filters"
               : "No market stories match these filters"}
           </h2>
-          <p className="mx-auto max-w-xl text-sm leading-7 text-slate-600">
+          <p className="mx-auto max-w-xl text-sm leading-7 text-slate-400">
             Try broadening your filters to see more articles.
           </p>
         </div>
@@ -936,28 +936,28 @@ function FeedEmptyState({
       presentSources.every((key) => bd?.[key]?.fetch_outcome === "empty_window");
 
     return (
-      <Panel className="space-y-4 border-black/6 bg-white/82 p-8 text-center">
+      <Panel className="space-y-4 border-white/[0.06] bg-surface-raised p-8 text-center">
         <Badge tone="neutral" className="mx-auto">
           No feed yet
         </Badge>
         <div className="space-y-2">
-          <h2 className="text-2xl font-semibold text-slate-950">
+          <h2 className="text-2xl font-semibold text-white">
             Your personal feed is empty
           </h2>
-          <p className="mx-auto max-w-xl text-sm leading-7 text-slate-600">
+          <p className="mx-auto max-w-xl text-sm leading-7 text-slate-400">
             {recent
               ? "Nothing in the current 24-hour market pool qualified for your portfolio. Try refreshing later when new articles are available."
               : <>Go to the Analysis page and press <strong>Refresh news &amp; analysis</strong> to fetch the latest articles and build your feed.</>}
           </p>
           {failedOrPartial && ingest?.detail ? (
-            <p className="mx-auto max-w-xl text-sm leading-7 text-amber-800">
+            <p className="mx-auto max-w-xl text-sm leading-7 text-amber-400">
               Last refresh: <strong>{ingest.status}</strong> — {ingest.detail}
             </p>
           ) : null}
           {allDuplicates ? (
             <p
               data-testid="ingest-hint-duplicates"
-              className="mx-auto max-w-xl text-sm leading-7 text-slate-600"
+              className="mx-auto max-w-xl text-sm leading-7 text-slate-400"
             >
               The last refresh fetched {totalFetched} article{totalFetched === 1 ? "" : "s"} but
               they were already in the database — nothing new to add.
@@ -965,7 +965,7 @@ function FeedEmptyState({
           ) : allEmptyWindow ? (
             <p
               data-testid="ingest-hint-empty-window"
-              className="mx-auto max-w-xl text-sm leading-7 text-slate-600"
+              className="mx-auto max-w-xl text-sm leading-7 text-slate-400"
             >
               No articles were returned by EDGAR, NewsAPI, or GNews in the current lookback window.
               Broader market stories may still appear in <strong>Market</strong> mode.
@@ -973,7 +973,7 @@ function FeedEmptyState({
           ) : recent &&
             ingest?.status === "empty" &&
             (bd?.total_inserted ?? 0) === 0 ? (
-            <p className="mx-auto max-w-xl text-sm leading-7 text-slate-600">
+            <p className="mx-auto max-w-xl text-sm leading-7 text-slate-400">
               Last run found no new articles in the global lookback window (sources succeeded).
               Broader market stories may still appear in <strong>Market</strong> mode.
             </p>
@@ -994,25 +994,25 @@ function FeedEmptyState({
 
   if (recent && ingest?.status === "failed") {
     return (
-      <Panel className="space-y-4 border-black/6 bg-white/82 p-8 text-center">
+      <Panel className="space-y-4 border-white/[0.06] bg-surface-raised p-8 text-center">
         <Badge tone="warning" className="mx-auto">
           Ingestion failed
         </Badge>
         <div className="space-y-2">
-          <h2 className="text-2xl font-semibold text-slate-950">
+          <h2 className="text-2xl font-semibold text-white">
             Market feed could not load new articles
           </h2>
-          <p className="mx-auto max-w-xl text-sm leading-7 text-slate-600">
+          <p className="mx-auto max-w-xl text-sm leading-7 text-slate-400">
             {ingest.detail ?? "Both news sources failed or all database writes failed."}
           </p>
           {sourceErrors.length > 0 && (
-            <ul className="mx-auto max-w-xl list-disc pl-5 text-left text-sm text-slate-600">
+            <ul className="mx-auto max-w-xl list-disc pl-5 text-left text-sm text-slate-400">
               {sourceErrors.map((line) => <li key={line}>{line}</li>)}
             </ul>
           )}
-          <p className="mx-auto max-w-xl text-sm leading-7 text-slate-600">
+          <p className="mx-auto max-w-xl text-sm leading-7 text-slate-400">
             Open <strong>Analysis</strong> for the full pipeline view, or see{" "}
-            <code className="rounded bg-black/5 px-1">workers/news_ingestion/TROUBLESHOOTING.md</code>{" "}
+            <code className="rounded bg-white/5 px-1">workers/news_ingestion/TROUBLESHOOTING.md</code>{" "}
             for Python worker setup and API key notes.
           </p>
         </div>
@@ -1022,19 +1022,19 @@ function FeedEmptyState({
 
   if (recent && ingest?.status === "partial") {
     return (
-      <Panel className="space-y-4 border-black/6 bg-white/82 p-8 text-center">
+      <Panel className="space-y-4 border-white/[0.06] bg-surface-raised p-8 text-center">
         <Badge tone="warning" className="mx-auto">
           Partial ingest
         </Badge>
         <div className="space-y-2">
-          <h2 className="text-2xl font-semibold text-slate-950">
+          <h2 className="text-2xl font-semibold text-white">
             Some market sources did not return articles
           </h2>
-          <p className="mx-auto max-w-xl text-sm leading-7 text-slate-600">
+          <p className="mx-auto max-w-xl text-sm leading-7 text-slate-400">
             {ingest.detail}
           </p>
           {sourceErrors.length > 0 && (
-            <ul className="mx-auto max-w-xl list-disc pl-5 text-left text-sm text-slate-600">
+            <ul className="mx-auto max-w-xl list-disc pl-5 text-left text-sm text-slate-400">
               {sourceErrors.map((line) => <li key={line}>{line}</li>)}
             </ul>
           )}
@@ -1055,18 +1055,18 @@ function FeedEmptyState({
       presentSources.every((key) => bd?.[key]?.fetch_outcome === "empty_window");
 
     return (
-      <Panel className="space-y-4 border-black/6 bg-white/82 p-8 text-center">
+      <Panel className="space-y-4 border-white/[0.06] bg-surface-raised p-8 text-center">
         <Badge tone="neutral" className="mx-auto">
           No articles in window
         </Badge>
         <div className="space-y-2">
-          <h2 className="text-2xl font-semibold text-slate-950">
+          <h2 className="text-2xl font-semibold text-white">
             No market news in the last {lb} hour{lb === 1 ? "" : "s"}
           </h2>
           {allDuplicates ? (
             <p
               data-testid="ingest-hint-duplicates"
-              className="mx-auto max-w-xl text-sm leading-7 text-slate-600"
+              className="mx-auto max-w-xl text-sm leading-7 text-slate-400"
             >
               The last refresh fetched {totalFetched} article{totalFetched === 1 ? "" : "s"} but
               they were already in the database.
@@ -1074,12 +1074,12 @@ function FeedEmptyState({
           ) : allEmptyWindow ? (
             <p
               data-testid="ingest-hint-empty-window"
-              className="mx-auto max-w-xl text-sm leading-7 text-slate-600"
+              className="mx-auto max-w-xl text-sm leading-7 text-slate-400"
             >
               No articles were returned by EDGAR, NewsAPI, or GNews in the current lookback window.
             </p>
           ) : (
-            <p className="mx-auto max-w-xl text-sm leading-7 text-slate-600">
+            <p className="mx-auto max-w-xl text-sm leading-7 text-slate-400">
               {ingest.detail ??
                 "Sources completed without errors but returned nothing in the current lookback window."}
             </p>
@@ -1090,15 +1090,15 @@ function FeedEmptyState({
   }
 
   return (
-    <Panel className="space-y-4 border-black/6 bg-white/82 p-8 text-center">
+    <Panel className="space-y-4 border-white/[0.06] bg-surface-raised p-8 text-center">
       <Badge tone="neutral" className="mx-auto">
         No articles
       </Badge>
       <div className="space-y-2">
-        <h2 className="text-2xl font-semibold text-slate-950">
+        <h2 className="text-2xl font-semibold text-white">
           No market news ingested yet
         </h2>
-        <p className="mx-auto max-w-xl text-sm leading-7 text-slate-600">
+        <p className="mx-auto max-w-xl text-sm leading-7 text-slate-400">
           Run a news refresh from the Analysis page to populate the market feed
           with SEC filings and market headlines. If the feed stays empty, check the Analysis
           pipeline for EDGAR, NewsAPI, or GNews errors (API key, firewall, or network issues).

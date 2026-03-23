@@ -52,71 +52,71 @@ export function NewsFeedCard({
         }
       }}
       className={cn(
-        "rounded-2xl border border-black/[0.06] bg-white p-6 shadow-sm transition",
-        "hover:border-black/10 hover:shadow-[0_18px_40px_rgba(15,23,42,0.08)]",
-        selected && "ring-2 ring-[#17b67a]/35 ring-offset-2 ring-offset-[#f0f1f4]",
+        "rounded-2xl border border-white/[0.06] bg-surface-raised p-6 transition",
+        "hover:border-white/10 hover:bg-surface-hover",
+        selected && "ring-2 ring-brand/30 ring-offset-2 ring-offset-background",
       )}
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           {isMarket && isHeadline ? (
-            <span className="rounded-full bg-teal-50 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.14em] text-teal-800">
+            <span className="rounded-lg bg-teal-500/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.14em] text-teal-400">
               Market headline
             </span>
           ) : null}
           {!isMarket && story.relevanceScore != null ? (
-            <span className="rounded-full bg-[#17b67a] px-3 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-white">
+            <span className="rounded-lg bg-brand px-3 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-[#080c11]">
               {story.relevanceScore}% match
             </span>
           ) : null}
           {!isMarket && story.impact ? (
             <Badge
               tone={impactTone(story.impact)}
-              className="border-slate-200/80 bg-slate-100 text-[11px] tracking-[0.12em] text-slate-700"
+              className="text-[11px] tracking-[0.12em]"
             >
               {story.impact} impact
             </Badge>
           ) : null}
           {isMarket && story.isPortfolioMatch ? (
-            <span className="rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-emerald-800">
+            <span className="rounded-lg bg-brand/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-brand">
               In portfolio
             </span>
           ) : null}
         </div>
-        <p className="text-right text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+        <p className="text-right text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-600">
           {meta}
         </p>
       </div>
 
-      <h3 className="mt-4 text-xl font-semibold leading-snug tracking-tight text-slate-950">
+      <h3 className="mt-4 text-xl font-semibold leading-snug tracking-tight text-white">
         {story.headline}
       </h3>
 
-      <p className="mt-3 line-clamp-3 text-sm leading-relaxed text-slate-600">
+      <p className="mt-3 line-clamp-3 text-sm leading-relaxed text-slate-400">
         {story.globalSummary || story.aiSummary || ""}
       </p>
 
       {chips.length > 0 ? (
-        <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-black/[0.06] pt-4">
+        <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-white/[0.06] pt-4">
           <div className="flex -space-x-2">
             {chips.map((sym) => (
               <span
                 key={sym}
                 title={sym}
-                className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-white bg-slate-200 text-[10px] font-bold uppercase text-slate-700 shadow-sm"
+                className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-surface-raised bg-white/5 text-[10px] font-bold uppercase text-slate-400"
               >
                 {sym.slice(0, 3)}
               </span>
             ))}
           </div>
-          <span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+          <span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-600">
             Affected holdings
           </span>
         </div>
       ) : null}
 
       {!isMarket && story.displayEffect !== "neutral" ? (
-        <p className="mt-3 text-xs font-medium uppercase tracking-wider text-slate-400">
+        <p className="mt-3 text-xs font-medium uppercase tracking-wider text-slate-600">
           Sentiment: {effectLabel(story.displayEffect)}
         </p>
       ) : null}

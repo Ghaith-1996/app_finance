@@ -16,12 +16,12 @@ export function Badge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold tracking-[0.12em] uppercase",
-        tone === "brand" && "border-brand/25 bg-brand/12 text-emerald-700",
-        tone === "success" && "border-brand/25 bg-brand/12 text-emerald-700",
-        tone === "warning" && "border-amber-200 bg-amber-50 text-amber-700",
-        tone === "danger" && "border-rose-200 bg-rose-50 text-rose-700",
-        tone === "neutral" && "border-black/8 bg-[#f7f2ea] text-slate-700",
+        "inline-flex items-center gap-2 rounded-lg border px-3 py-1 text-xs font-semibold tracking-[0.12em] uppercase",
+        tone === "brand" && "border-brand/25 bg-brand/10 text-emerald-400",
+        tone === "success" && "border-brand/25 bg-brand/10 text-emerald-400",
+        tone === "warning" && "border-amber-500/25 bg-amber-500/10 text-amber-400",
+        tone === "danger" && "border-rose-500/25 bg-rose-500/10 text-rose-400",
+        tone === "neutral" && "border-white/8 bg-white/5 text-slate-400",
         className,
       )}
     >

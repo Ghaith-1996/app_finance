@@ -10,6 +10,7 @@ import {
 
 import { PortfolioCopilotPanel } from "@/components/app/portfolio-copilot-panel";
 import { PortfolioHoldingsTable } from "@/components/app/portfolio-holdings-table";
+import { PortfolioPerformanceChart } from "@/components/app/portfolio-performance-chart";
 import { AppShell } from "@/components/app/app-shell";
 import { RefreshPricesButton } from "@/components/app/refresh-prices-button";
 import { buttonStyles } from "@/components/ui/button";
@@ -53,21 +54,21 @@ function getSectorVisuals(sector: string) {
   if (normalized.includes("tech")) {
     return {
       icon: Cpu,
-      iconClassName: "bg-[#E8F8ED] text-[#009B5A]",
-      barClassName: "bg-[#009B5A]",
+      iconClassName: "bg-brand/10 text-brand",
+      barClassName: "bg-brand",
     };
   }
   if (normalized.includes("energy")) {
     return {
       icon: Zap,
-      iconClassName: "bg-[#FFF5EB] text-[#FF9E2C]",
-      barClassName: "bg-[#FF9E2C]",
+      iconClassName: "bg-amber-500/10 text-amber-400",
+      barClassName: "bg-amber-400",
     };
   }
   return {
     icon: Layers3,
-    iconClassName: "bg-[#F0F4F8] text-[#5C7E9E]",
-    barClassName: "bg-[#5C7E9E]",
+    iconClassName: "bg-white/5 text-slate-400",
+    barClassName: "bg-slate-500",
   };
 }
 
@@ -277,8 +278,8 @@ export default async function FullPortfolioPage() {
           </Link>
         }
       >
-        <div className="space-y-4 rounded-[2rem] border border-black/5 bg-white/84 p-8 text-center shadow-sm">
-          <p className="text-slate-600">
+        <div className="space-y-4 rounded-[2rem] border border-white/[0.06] bg-surface-raised p-8 text-center shadow-sm">
+          <p className="text-slate-400">
             You need a portfolio before the full holdings breakdown can load.
           </p>
           <div className="mt-4 flex flex-wrap justify-center gap-3">
@@ -325,38 +326,22 @@ export default async function FullPortfolioPage() {
       description="Advanced position oversight for your diversified Signal Emerald custody account."
       activePath="/portfolio"
       backHref="/portfolio"
-      actions={
-        <div className="flex flex-wrap items-end gap-4">
-          <div className="flex min-w-[200px] flex-col justify-center rounded-[1.5rem] bg-[#586475] px-6 py-3.5 text-white shadow-sm">
-            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#A1B2C6]">
-              TOTAL PORTFOLIO VALUE
-            </p>
-            <p className="mt-1 text-[28px] font-bold tracking-tight">
-              {formatCurrency(portfolioOverview.totalValue).split(".")[0]}{" "}
-              <span className="ml-1 text-sm font-semibold text-[#A1B2C6]">USD</span>
-            </p>
-          </div>
-          <div className="flex min-w-[160px] flex-col justify-center rounded-[1.5rem] border border-black/5 bg-white px-6 py-3.5 shadow-sm">
-            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
-              DAY CHANGE
-            </p>
-            <p
-              className={`mt-1 text-[28px] font-bold tracking-tight ${
-                portfolioDayChange >= 0 ? "text-emerald-500" : "text-[#FF6B6B]"
-              }`}
-            >
-              {portfolioDayChange >= 0 ? "+" : "-"} {Math.abs(portfolioDayChange)}%
-            </p>
-          </div>
-          <RefreshPricesButton portfolioId={portfolioId} />
-        </div>
-      }
+      actions={<RefreshPricesButton portfolioId={portfolioId} />}
     >
-      <div className="-mx-4 rounded-[2.5rem] bg-[#F4F5F4] p-6 shadow-inner sm:mx-0 lg:p-10">
+      <div className="-mx-4 rounded-[2.5rem] bg-[#0a0f15] p-6 shadow-inner sm:mx-0 lg:p-10">
+        {/* Performance chart hero */}
+        <div className="mb-10">
+          <PortfolioPerformanceChart
+            totalValue={portfolioOverview.totalValue}
+            dayChange={portfolioDayChange}
+            portfolioCreatedAt={portfolios[0]?.createdAt ?? new Date().toISOString()}
+          />
+        </div>
+
         <div className="flex flex-col gap-10 lg:flex-row">
           <div className="flex-1 space-y-12">
             <div>
-              <h2 className="mb-6 text-[22px] font-bold tracking-tight text-slate-900">
+              <h2 className="mb-6 text-[22px] font-bold tracking-tight text-white">
                 Allocation & Position
               </h2>
               <div className="grid gap-4 md:grid-cols-3">
@@ -366,7 +351,7 @@ export default async function FullPortfolioPage() {
                   return (
                     <div
                       key={card.label}
-                      className="rounded-[1.5rem] border border-black/5 bg-white p-6 shadow-sm"
+                      className="rounded-[1.5rem] border border-white/[0.06] bg-surface-raised p-6 shadow-sm"
                     >
                       <div className="mb-4 flex items-start justify-between">
                         <div className={`rounded-xl p-2.5 ${card.iconClassName}`}>
@@ -375,18 +360,18 @@ export default async function FullPortfolioPage() {
                         <span
                           className={`text-[14px] font-bold ${
                             card.label === "Energy"
-                              ? "text-[#FF9E2C]"
+                              ? "text-amber-400"
                               : card.label === "Others"
-                                ? "text-[#5C7E9E]"
-                                : "text-[#009B5A]"
+                                ? "text-slate-400"
+                                : "text-brand"
                           }`}
                         >
                           {Math.round(card.percent)}%
                         </span>
                       </div>
-                      <h3 className="font-bold text-slate-900">{card.label}</h3>
+                      <h3 className="font-bold text-white">{card.label}</h3>
                       <p className="mt-1 text-[12px] text-slate-500">{card.detail}</p>
-                      <div className="mt-4 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+                      <div className="mt-4 h-1.5 w-full overflow-hidden rounded-full bg-white/5">
                         <div
                           className={`h-full rounded-full ${card.barClassName}`}
                           style={{ width: `${card.percent}%` }}
@@ -401,14 +386,14 @@ export default async function FullPortfolioPage() {
             <div>
               <div className="mb-6 flex items-end justify-between gap-4">
                 <div>
-                  <h2 className="text-[22px] font-bold tracking-tight text-slate-900">
+                  <h2 className="text-[22px] font-bold tracking-tight text-white">
                     Active Holdings
                   </h2>
                   <p className="mt-1 text-sm text-slate-500">
                     Synced {portfolioOverview.lastSyncedAt}
                   </p>
                 </div>
-                <p className="text-[12px] font-bold uppercase tracking-widest text-[#009B5A]">
+                <p className="text-[12px] font-bold uppercase tracking-widest text-brand">
                   {holdings.length} positions
                 </p>
               </div>
@@ -416,7 +401,7 @@ export default async function FullPortfolioPage() {
               {holdings.length > 0 ? (
                 <PortfolioHoldingsTable holdings={holdings} />
               ) : (
-                <div className="rounded-[1.5rem] border border-black/5 bg-white px-6 py-8 text-center text-sm text-slate-500 shadow-sm">
+                <div className="rounded-[1.5rem] border border-white/[0.06] bg-surface-raised px-6 py-8 text-center text-sm text-slate-500 shadow-sm">
                   No holdings available yet.
                 </div>
               )}
@@ -424,14 +409,14 @@ export default async function FullPortfolioPage() {
           </div>
 
           <div className="w-full shrink-0 space-y-4 lg:w-[340px]">
-            <div className="relative overflow-hidden rounded-[2.5rem] border border-[#E1E3CF]/50 bg-[#F2F3EB] p-8 shadow-sm">
-              <div className="pointer-events-none absolute top-0 right-0 h-32 w-32 rounded-bl-full bg-gradient-to-bl from-white/40 to-transparent" />
+            <div className="relative overflow-hidden rounded-[2.5rem] border border-white/[0.06] bg-surface-raised p-8 shadow-sm">
+              <div className="pointer-events-none absolute top-0 right-0 h-32 w-32 rounded-bl-full bg-gradient-to-bl from-white/5 to-transparent" />
 
               <div className="mb-8 flex items-center gap-3">
-                <div className="text-[#009B5A]">
+                <div className="text-brand">
                   <Sparkles className="h-6 w-6 fill-current" />
                 </div>
-                <h2 className="text-[20px] font-bold tracking-tight text-slate-900">
+                <h2 className="text-[20px] font-bold tracking-tight text-white">
                   Insight Summary
                 </h2>
               </div>
@@ -442,14 +427,14 @@ export default async function FullPortfolioPage() {
                     MOST EXPOSED THEME
                   </p>
                   <div className="flex items-center gap-4">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#00B86F] text-white shadow-sm shadow-[#009B5A]/20">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand text-white shadow-sm shadow-brand/20">
                       <Cpu className="h-6 w-6" />
                     </div>
                     <div>
-                      <p className="text-[15px] font-bold text-slate-900">
+                      <p className="text-[15px] font-bold text-white">
                         {insightSummary.topTheme.value}
                       </p>
-                      <p className="mt-0.5 text-sm text-slate-600">
+                      <p className="mt-0.5 text-sm text-slate-400">
                         {insightSummary.topTheme.detail}
                       </p>
                     </div>
@@ -461,14 +446,14 @@ export default async function FullPortfolioPage() {
                     MACRO WATCH
                   </p>
                   <div className="flex items-center gap-4">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-black/10 bg-white/50 text-slate-500">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-slate-500">
                       <BarChart3 className="h-6 w-6" />
                     </div>
                     <div>
-                      <p className="text-[15px] font-bold text-slate-900">
+                      <p className="text-[15px] font-bold text-white">
                         {insightSummary.macroWatch.value}
                       </p>
-                      <p className="mt-0.5 text-sm text-slate-600">
+                      <p className="mt-0.5 text-sm text-slate-400">
                         {insightSummary.macroWatch.detail}
                       </p>
                     </div>
@@ -479,11 +464,11 @@ export default async function FullPortfolioPage() {
                   <p className="mb-4 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
                     FRESH CATALYST
                   </p>
-                  <div className="flex flex-col gap-2 rounded-2xl border-l-4 border-[#009B5A] bg-white p-4 shadow-sm">
-                    <p className="text-[14px] font-bold text-slate-900">
+                  <div className="flex flex-col gap-2 rounded-2xl border-l-4 border-brand bg-surface-raised p-4 shadow-sm">
+                    <p className="text-[14px] font-bold text-white">
                       {insightSummary.freshCatalyst.value}
                     </p>
-                    <p className="text-[13px] leading-snug text-slate-600">
+                    <p className="text-[13px] leading-snug text-slate-400">
                       {insightSummary.freshCatalyst.detail}
                     </p>
                   </div>
@@ -493,9 +478,9 @@ export default async function FullPortfolioPage() {
 
             <PortfolioCopilotPanel portfolioId={portfolioId} />
 
-            <div className="rounded-[2.5rem] border border-[#009B5A]/10 bg-[#E8F8ED] p-8 shadow-sm">
-              <p className="mb-3 text-[13px] font-bold text-[#009B5A]">Emerald Advisor</p>
-              <p className="text-[15px] leading-relaxed text-slate-700">
+            <div className="rounded-[2.5rem] border border-brand/15 bg-brand/10 p-8 shadow-sm">
+              <p className="mb-3 text-[13px] font-bold text-brand">Emerald Advisor</p>
+              <p className="text-[15px] leading-relaxed text-slate-400">
                 {feedHighlights[0]?.whyItMatters ||
                   insights[0]?.detail ||
                   "Run analysis to surface a more specific recommendation for this portfolio."}
@@ -503,24 +488,24 @@ export default async function FullPortfolioPage() {
               <div className="mt-5">
                 <Link
                   href="/analysis"
-                  className="inline-flex items-center gap-1 border-b-2 border-[#009B5A]/20 pb-0.5 text-[14px] font-bold text-slate-900 transition-colors hover:border-[#009B5A]"
+                  className="inline-flex items-center gap-1 border-b-2 border-brand/20 pb-0.5 text-[14px] font-bold text-white transition-colors hover:border-brand"
                 >
                   Review Analysis
                 </Link>
               </div>
             </div>
 
-            <div className="rounded-[2rem] border border-black/5 bg-white/84 p-5 shadow-sm">
+            <div className="rounded-[2rem] border border-white/[0.06] bg-surface-raised p-5 shadow-sm">
               <div className="flex items-center gap-3">
                 <Landmark className="h-5 w-5 text-slate-500" />
                 <div>
-                  <p className="text-sm font-semibold text-slate-900">Latest analysis</p>
+                  <p className="text-sm font-semibold text-white">Latest analysis</p>
                   <p className="text-sm text-slate-500">
                     {portfolioOverview.lastAnalyzedAt}
                   </p>
                 </div>
               </div>
-              <p className="mt-4 text-sm leading-7 text-slate-600">
+              <p className="mt-4 text-sm leading-7 text-slate-400">
                 {portfolioOverview.coverage}. {portfolioOverview.primaryGoal}
               </p>
             </div>

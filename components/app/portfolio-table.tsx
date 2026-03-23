@@ -80,15 +80,15 @@ export function PortfolioTable({ holdings }: { holdings: Holding[] }) {
   return (
     <Panel className="overflow-hidden p-0">
       <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-black/6">
-          <thead className="bg-[#f7f2ea]">
+        <table className="min-w-full divide-y divide-white/[0.06]">
+          <thead className="bg-white/[0.03]">
             <tr>
               {COLUMNS.map((col) => (
                 <th key={col.key} className="px-5 py-4">
                   <button
                     type="button"
                     onClick={() => handleSort(col.key)}
-                    className="inline-flex items-center gap-1.5 text-xs uppercase tracking-[0.22em] text-slate-500 transition hover:text-slate-950"
+                    className="inline-flex items-center gap-1.5 text-xs uppercase tracking-[0.22em] text-slate-500 transition hover:text-slate-300"
                   >
                     {col.label}
                     {sortKey === col.key ? (
@@ -105,7 +105,7 @@ export function PortfolioTable({ holdings }: { holdings: Holding[] }) {
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-black/6">
+          <tbody className="divide-y divide-white/[0.06]">
             {sorted.map((holding) => {
               const hasPosition = holding.quantity > 0;
               const displayPrice = holding.currentPrice || holding.price;
@@ -114,11 +114,11 @@ export function PortfolioTable({ holdings }: { holdings: Holding[] }) {
               const gainPct = hasPosition ? holding.unrealizedGainPercent : 0;
 
               return (
-                <tr key={holding.id} className="bg-white/88 transition hover:bg-[#fffdf9]">
+                <tr key={holding.id} className="transition hover:bg-white/[0.02]">
                   <td className="px-5 py-5">
                     <div className="space-y-1">
                       <div className="flex items-center gap-3">
-                        <span className="text-sm font-semibold text-slate-950">
+                        <span className="text-sm font-semibold text-white">
                           {holding.symbol}
                         </span>
                         <Badge tone="neutral">{holding.market}</Badge>
@@ -126,25 +126,25 @@ export function PortfolioTable({ holdings }: { holdings: Holding[] }) {
                       <p className="text-sm text-slate-500">{holding.company}</p>
                     </div>
                   </td>
-                  <td className="px-5 py-5 text-sm text-slate-950">
+                  <td className="px-5 py-5 text-sm text-slate-300">
                     {hasPosition ? holding.quantity : "—"}
                   </td>
-                  <td className="px-5 py-5 text-sm text-slate-950">
+                  <td className="px-5 py-5 text-sm text-slate-300">
                     {holding.averageCost > 0 ? formatPrice(holding.averageCost) : "—"}
                   </td>
-                  <td className="px-5 py-5 text-sm text-slate-950">
+                  <td className="px-5 py-5 text-sm text-white">
                     {formatPrice(displayPrice)}
                   </td>
                   <td
                     className={
                       holding.dailyChange >= 0
-                        ? "px-5 py-5 text-sm text-emerald-700"
-                        : "px-5 py-5 text-sm text-rose-700"
+                        ? "px-5 py-5 text-sm text-emerald-400"
+                        : "px-5 py-5 text-sm text-red-400"
                     }
                   >
                     {formatPercent(holding.dailyChange)}
                   </td>
-                  <td className="px-5 py-5 text-sm font-semibold text-slate-950">
+                  <td className="px-5 py-5 text-sm font-semibold text-white">
                     {hasPosition ? formatPrice(displayValue) : "—"}
                   </td>
                   <td className="px-5 py-5">
@@ -153,8 +153,8 @@ export function PortfolioTable({ holdings }: { holdings: Holding[] }) {
                         <p
                           className={
                             gainAmt >= 0
-                              ? "text-sm font-semibold text-emerald-700"
-                              : "text-sm font-semibold text-rose-700"
+                              ? "text-sm font-semibold text-emerald-400"
+                              : "text-sm font-semibold text-red-400"
                           }
                         >
                           {gainAmt >= 0 ? "+" : ""}
@@ -163,15 +163,15 @@ export function PortfolioTable({ holdings }: { holdings: Holding[] }) {
                         <p
                           className={
                             gainPct >= 0
-                              ? "text-xs text-emerald-600"
-                              : "text-xs text-rose-600"
+                              ? "text-xs text-emerald-500"
+                              : "text-xs text-red-500"
                           }
                         >
                           {formatPercent(gainPct)}
                         </p>
                       </div>
                     ) : (
-                      <span className="text-sm text-slate-400">—</span>
+                      <span className="text-sm text-slate-600">—</span>
                     )}
                   </td>
                 </tr>

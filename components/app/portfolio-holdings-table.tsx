@@ -101,7 +101,7 @@ export function PortfolioHoldingsTable({ holdings }: { holdings: Holding[] }) {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-[1.5fr_1fr_1fr_1fr_1fr_1.2fr_1.2fr] items-center px-6 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-400">
+      <div className="grid grid-cols-[1.5fr_1fr_1fr_1fr_1fr_1.2fr_1.2fr] items-center px-6 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-600">
         {COLUMNS.map((column) => (
           <div
             key={column.key}
@@ -110,7 +110,7 @@ export function PortfolioHoldingsTable({ holdings }: { holdings: Holding[] }) {
             <button
               type="button"
               onClick={() => handleSort(column.key)}
-              className={`inline-flex items-center gap-1.5 transition hover:text-slate-950 ${
+              className={`inline-flex items-center gap-1.5 transition hover:text-slate-300 ${
                 column.align === "right" ? "ml-auto" : ""
               }`}
             >
@@ -141,50 +141,44 @@ export function PortfolioHoldingsTable({ holdings }: { holdings: Holding[] }) {
           return (
             <div
               key={holding.id}
-              className="grid grid-cols-[1.5fr_1fr_1fr_1fr_1fr_1.2fr_1.2fr] items-center rounded-[1.5rem] border border-black/5 bg-white px-6 py-5 shadow-sm transition-transform duration-200 hover:-translate-y-0.5"
+              className="grid grid-cols-[1.5fr_1fr_1fr_1fr_1fr_1.2fr_1.2fr] items-center rounded-2xl border border-white/[0.06] bg-surface-raised px-6 py-5 transition-transform duration-200 hover:-translate-y-0.5 hover:border-white/10"
             >
               <div className="flex items-center gap-3">
-                <div
-                  className={`flex h-10 w-10 items-center justify-center rounded-2xl font-bold ${
-                    holding.symbol === "TSLA"
-                      ? "bg-[#0f172a] text-white"
-                      : "bg-[#E8F8ED] text-[#009B5A]"
-                  }`}
-                >
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand/10 font-bold text-brand">
                   {holding.symbol.charAt(0)}
                 </div>
                 <div>
-                  <p className="font-bold leading-tight text-slate-900">
+                  <p className="font-bold leading-tight text-white">
                     {holding.symbol}
                   </p>
-                  <p className="mt-0.5 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                  <p className="mt-0.5 text-[10px] font-bold uppercase tracking-widest text-slate-600">
                     {holding.company}
                   </p>
                 </div>
               </div>
-              <div className="text-[14px] font-medium text-slate-600">
+              <div className="text-[14px] font-medium text-slate-400">
                 {holding.quantity.toFixed(2)}
               </div>
-              <div className="text-[14px] font-medium text-slate-600">
+              <div className="text-[14px] font-medium text-slate-400">
                 {formatPrice(holding.averageCost)}
               </div>
-              <div className="text-[14px] font-bold text-slate-900">
+              <div className="text-[14px] font-bold text-white">
                 {formatPrice(price)}
               </div>
               <div
                 className={`text-[14px] font-bold ${
-                  isPositiveDay ? "text-[#009B5A]" : "text-[#FF6B6B]"
+                  isPositiveDay ? "text-emerald-400" : "text-red-400"
                 }`}
               >
                 {isPositiveDay ? "+" : ""}
                 {dayChange.toFixed(2)}%
               </div>
-              <div className="text-right text-[15px] font-bold text-slate-900">
+              <div className="text-right text-[15px] font-bold text-white">
                 {formatPrice(value)}
               </div>
               <div
                 className={`text-right text-[15px] font-bold ${
-                  isPositiveTotal ? "text-[#009B5A]" : "text-[#FF6B6B]"
+                  isPositiveTotal ? "text-emerald-400" : "text-red-400"
                 }`}
               >
                 {isPositiveTotal ? "+" : ""}

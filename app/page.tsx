@@ -50,10 +50,9 @@ const updateCards = [
 
 export default function Home() {
   return (
-    <div className="min-h-screen bg-background text-slate-950">
+    <div className="min-h-screen bg-background text-foreground">
       <SiteHeader />
       <main className="relative">
-        <div className="absolute inset-x-0 top-0 -z-10 h-[900px] bg-[radial-gradient(circle_at_top_left,rgba(23,182,122,0.08),transparent_28%),linear-gradient(180deg,#ffffff_0%,#ffffff_100%)]" />
         <Hero />
         <ProblemSection />
         <PlatformSection />
@@ -62,17 +61,17 @@ export default function Home() {
         <FaqSection />
         <FinalCallToAction />
       </main>
-      <footer className="border-t border-black/6 px-6 py-8 lg:px-8">
-        <div className="mx-auto flex max-w-7xl flex-col gap-4 text-sm text-slate-600 md:flex-row md:items-center md:justify-between">
+      <footer className="border-t border-white/[0.06] px-6 py-8 lg:px-8">
+        <div className="mx-auto flex max-w-7xl flex-col gap-4 text-sm text-slate-500 md:flex-row md:items-center md:justify-between">
           <p>PortfolioSignal frontend MVP for portfolio-aware finance workflows.</p>
           <div className="flex flex-wrap items-center gap-4">
-            <Link href="/onboarding" className="transition hover:text-slate-950">
+            <Link href="/onboarding" className="transition hover:text-slate-300">
               Onboarding
             </Link>
-            <Link href="/feed" className="transition hover:text-slate-950">
+            <Link href="/feed" className="transition hover:text-slate-300">
               Feed demo
             </Link>
-            <Link href="/portfolio" className="transition hover:text-slate-950">
+            <Link href="/portfolio" className="transition hover:text-slate-300">
               Portfolio
             </Link>
           </div>
@@ -90,22 +89,21 @@ function ProblemSection() {
           eyebrow="Why this product exists"
           title="Financial products feel smarter when they remember what the user owns"
           description="This first pass keeps the finance workflow approachable: one place to connect a portfolio, understand what changed, and open a feed that already knows what matters."
-          theme="light"
         />
         <div className="grid gap-4 lg:grid-cols-3">
           {painPoints.map((painPoint) => (
             <Panel
               key={painPoint.title}
-              className="space-y-4 border-black/6 bg-white/75 p-6 shadow-[0_16px_40px_rgba(15,23,42,0.06)]"
+              className="space-y-4 p-6"
             >
-              <div className="inline-flex rounded-2xl border border-brand/15 bg-brand/10 p-3 text-brand">
+              <div className="inline-flex rounded-xl border border-brand/15 bg-brand/10 p-3 text-brand">
                 <NotebookPen className="h-5 w-5" />
               </div>
               <div className="space-y-3">
-                <h3 className="text-xl font-semibold text-slate-950">
+                <h3 className="text-xl font-semibold text-white">
                   {painPoint.title}
                 </h3>
-                <p className="text-sm leading-7 text-slate-600">
+                <p className="text-sm leading-7 text-slate-400">
                   {painPoint.description}
                 </p>
               </div>
@@ -125,7 +123,6 @@ function PlatformSection() {
           eyebrow="Product walkthrough"
           title="The frontend now reads like an intelligent financial home"
           description="The structure borrows more from consumer-finance storytelling: clean entry points, lighter surfaces, human copy, and product moments that make AI feel useful instead of abstract."
-          theme="light"
         />
         <div className="grid gap-6 lg:grid-cols-[1.02fr_0.98fr]">
           <div className="grid gap-4">
@@ -135,19 +132,19 @@ function PlatformSection() {
               return (
                 <Panel
                   key={feature.title}
-                  className="space-y-5 border-black/6 bg-white/78 p-6 shadow-[0_16px_40px_rgba(15,23,42,0.06)]"
+                  className="space-y-5 p-6"
                 >
-                  <div className="inline-flex rounded-2xl border border-brand/15 bg-brand/10 p-3 text-brand">
+                  <div className="inline-flex rounded-xl border border-brand/15 bg-brand/10 p-3 text-brand">
                     <Icon className="h-5 w-5" />
                   </div>
                   <div className="space-y-2">
                     <p className="text-sm font-semibold uppercase tracking-[0.2em] text-brand">
                       {feature.eyebrow}
                     </p>
-                    <h3 className="text-2xl font-semibold text-slate-950">
+                    <h3 className="text-2xl font-semibold text-white">
                       {feature.title}
                     </h3>
-                    <p className="text-sm leading-7 text-slate-600">
+                    <p className="text-sm leading-7 text-slate-400">
                       {feature.description}
                     </p>
                   </div>
@@ -155,7 +152,7 @@ function PlatformSection() {
                     {feature.bullets.map((bullet) => (
                       <div
                         key={bullet}
-                        className="rounded-2xl border border-black/6 bg-[#f7f2ea] px-4 py-3 text-sm text-slate-600"
+                        className="rounded-xl border border-white/[0.06] bg-white/[0.03] px-4 py-3 text-sm text-slate-400"
                       >
                         {bullet}
                       </div>
@@ -166,17 +163,17 @@ function PlatformSection() {
             })}
           </div>
           <div className="grid gap-4">
-            <Panel className="space-y-6 border-black/6 bg-[#142033] p-7 shadow-[0_28px_70px_rgba(15,23,42,0.14)]">
+            <Panel className="space-y-6 bg-[#0d1520] p-7">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <Badge tone="brand" className="border-brand/25 bg-brand/12">
+                  <Badge tone="brand">
                     Ask anything
                   </Badge>
                   <h3 className="mt-4 text-3xl font-semibold tracking-tight text-white">
                     AI that can answer in portfolio language
                   </h3>
                 </div>
-                <div className="rounded-2xl border border-white/10 bg-white/6 p-3 text-brand">
+                <div className="rounded-xl border border-white/10 bg-white/5 p-3 text-brand">
                   <Sparkles className="h-5 w-5" />
                 </div>
               </div>
@@ -188,20 +185,20 @@ function PlatformSection() {
                 ].map((prompt) => (
                   <div
                     key={prompt}
-                    className="rounded-2xl border border-white/8 bg-white/6 px-4 py-4 text-sm text-slate-200"
+                    className="rounded-xl border border-white/[0.06] bg-white/[0.03] px-4 py-4 text-sm text-slate-300"
                   >
                     {prompt}
                   </div>
                 ))}
               </div>
-              <div className="rounded-3xl border border-emerald-400/15 bg-emerald-400/10 p-5">
-                <div className="flex items-center gap-3 text-emerald-200">
+              <div className="rounded-2xl border border-brand/15 bg-brand/10 p-5">
+                <div className="flex items-center gap-3 text-brand">
                   <ShieldCheck className="h-5 w-5" />
                   <p className="text-sm font-semibold uppercase tracking-[0.2em]">
                     Trust story
                   </p>
                 </div>
-                <p className="mt-4 text-sm leading-7 text-slate-100">
+                <p className="mt-4 text-sm leading-7 text-slate-300">
                   The current frontend already frames broker connections as
                   read-only and sets up a clean path for secure syncing later.
                 </p>
@@ -211,15 +208,15 @@ function PlatformSection() {
               {portfolioInsights.map((insight) => (
                 <Panel
                   key={insight.title}
-                  className="space-y-3 border-black/6 bg-white/78 p-5 shadow-[0_16px_40px_rgba(15,23,42,0.06)]"
+                  className="space-y-3 p-5"
                 >
                   <p className="text-sm uppercase tracking-[0.18em] text-slate-500">
                     {insight.title}
                   </p>
-                  <p className="text-2xl font-semibold text-slate-950">
+                  <p className="text-2xl font-semibold text-white">
                     {insight.value}
                   </p>
-                  <p className="text-sm leading-7 text-slate-600">
+                  <p className="text-sm leading-7 text-slate-400">
                     {insight.detail}
                   </p>
                 </Panel>
@@ -241,19 +238,18 @@ function ProofSection() {
           title="The frontend now speaks in a warmer, more personal finance language"
           description="Origin's best cue is tone: direct but reassuring, product-led, and centered on helping people feel more in control of their money."
           align="center"
-          theme="light"
         />
         <div className="grid gap-4 lg:grid-cols-2">
           {testimonials.map((testimonial) => (
             <Panel
               key={testimonial.name}
-              className="space-y-5 border-black/6 bg-white/78 p-6 shadow-[0_16px_40px_rgba(15,23,42,0.06)]"
+              className="space-y-5 p-6"
             >
-              <Badge tone="neutral" className="border-black/8 bg-[#f7f2ea] text-slate-600">
+              <Badge tone="neutral">
                 Product sentiment
               </Badge>
-              <p className="text-xl leading-8 text-slate-950">
-                “{testimonial.quote}”
+              <p className="text-xl leading-8 text-white">
+                &ldquo;{testimonial.quote}&rdquo;
               </p>
               <div className="flex items-center gap-3 text-sm text-slate-500">
                 <CheckCircle2 className="h-4 w-4 text-brand" />
@@ -267,13 +263,13 @@ function ProofSection() {
           {updateCards.map((card) => (
             <Panel
               key={card.title}
-              className="space-y-4 border-black/6 bg-[#fffdf9] p-6 shadow-[0_16px_40px_rgba(15,23,42,0.06)]"
+              className="space-y-4 p-6"
             >
               <p className="text-sm font-semibold uppercase tracking-[0.22em] text-brand">
                 {card.eyebrow}
               </p>
-              <h3 className="text-xl font-semibold text-slate-950">{card.title}</h3>
-              <p className="text-sm leading-7 text-slate-600">{card.description}</p>
+              <h3 className="text-xl font-semibold text-white">{card.title}</h3>
+              <p className="text-sm leading-7 text-slate-400">{card.description}</p>
             </Panel>
           ))}
         </div>
@@ -290,16 +286,15 @@ function FaqSection() {
           eyebrow="FAQ"
           title="Questions the frontend already helps answer"
           description="The current build stays frontend-first, but the user journey is already shaped around the broker sync, AI analysis, and personalized feed experience."
-          theme="light"
         />
         <div className="grid gap-4 lg:grid-cols-2">
           {faqs.map((faq) => (
             <Panel
               key={faq.question}
-              className="space-y-4 border-black/6 bg-white/78 p-6 shadow-[0_16px_40px_rgba(15,23,42,0.06)]"
+              className="space-y-4 p-6"
             >
-              <h3 className="text-lg font-semibold text-slate-950">{faq.question}</h3>
-              <p className="text-sm leading-7 text-slate-600">{faq.answer}</p>
+              <h3 className="text-lg font-semibold text-white">{faq.question}</h3>
+              <p className="text-sm leading-7 text-slate-400">{faq.answer}</p>
             </Panel>
           ))}
         </div>
@@ -314,16 +309,16 @@ function FinalCallToAction() {
       <div className="mx-auto max-w-7xl">
         <Panel
           glow
-          className="flex flex-col gap-8 border-black/6 bg-[#142033] p-8 shadow-[0_32px_90px_rgba(15,23,42,0.18)] lg:flex-row lg:items-center lg:justify-between lg:p-10"
+          className="flex flex-col gap-8 bg-[#0d1520] p-8 lg:flex-row lg:items-center lg:justify-between lg:p-10"
         >
           <div className="max-w-2xl space-y-4">
-            <Badge tone="brand" className="border-brand/25 bg-brand/12">
+            <Badge tone="brand">
               Next phase ready
             </Badge>
             <h2 className="text-4xl font-semibold tracking-tight text-white">
               Build the intelligent portfolio home first, then connect the real data.
             </h2>
-            <p className="text-lg leading-8 text-slate-300">
+            <p className="text-lg leading-8 text-slate-400">
               The frontend now has the warmer marketing layer, the onboarding
               flow, and the product routes needed for backend integration without a
               redesign.
@@ -332,11 +327,7 @@ function FinalCallToAction() {
           <div className="flex flex-col gap-3 sm:flex-row">
             <Link
               href="/onboarding"
-              className={buttonStyles({
-                size: "lg",
-                className:
-                  "border-brand bg-brand text-slate-950 hover:border-brand-strong hover:bg-brand-strong",
-              })}
+              className={buttonStyles({ size: "lg" })}
             >
               Get started
               <ArrowRight className="ml-2 h-4 w-4" />
@@ -346,8 +337,6 @@ function FinalCallToAction() {
               className={buttonStyles({
                 variant: "secondary",
                 size: "lg",
-                className:
-                  "border-white/12 bg-white/8 text-white hover:bg-white/12 hover:border-white/18",
               })}
             >
               View feed demo

@@ -67,7 +67,7 @@ export default async function AnalysisPage({
         <div className="space-y-6">
           <Panel
             glow
-            className="space-y-6 border-black/6 bg-[#142033] p-8 shadow-[0_30px_80px_rgba(15,23,42,0.14)]"
+            className="space-y-6 bg-[#0d1520] p-8 border-white/[0.06]"
           >
             {portfolioId ? (
               <AnalysisRunTrigger
@@ -83,7 +83,7 @@ export default async function AnalysisPage({
                 <h2 className="text-3xl font-semibold text-white">
                   Create a portfolio first
                 </h2>
-                <p className="max-w-2xl text-sm leading-7 text-slate-300">
+                <p className="max-w-2xl text-sm leading-7 text-slate-400">
                   Go to onboarding to add a portfolio, then return here to run
                   the AI analysis.
                 </p>
@@ -96,16 +96,16 @@ export default async function AnalysisPage({
         </div>
 
         <div className="space-y-6">
-          <Panel className="space-y-5 border-black/6 bg-white/84">
+          <Panel className="space-y-5">
             <div className="flex items-center gap-3">
-              <div className="rounded-2xl border border-black/6 bg-[#f7f2ea] p-3 text-brand">
+              <div className="rounded-xl border border-white/[0.06] bg-white/5 p-3 text-brand">
                 <Activity className="h-5 w-5" />
               </div>
               <div>
                 <p className="text-sm uppercase tracking-[0.18em] text-slate-500">
                   Portfolio snapshot
                 </p>
-                <p className="text-lg font-semibold text-slate-950">
+                <p className="text-lg font-semibold text-white">
                   {formatCurrency(portfolioOverview.totalValue)}
                 </p>
               </div>
@@ -121,16 +121,16 @@ export default async function AnalysisPage({
             </div>
           </Panel>
 
-          <Panel className="space-y-4 border-black/6 bg-white/84">
+          <Panel className="space-y-4">
             <div className="flex items-center gap-3">
-              <div className="rounded-2xl border border-black/6 bg-[#f7f2ea] p-3 text-brand">
+              <div className="rounded-xl border border-white/[0.06] bg-white/5 p-3 text-brand">
                 <RefreshCw className="h-5 w-5" />
               </div>
               <div>
                 <p className="text-sm uppercase tracking-[0.18em] text-slate-500">
                   Insight priorities
                 </p>
-                <p className="text-lg font-semibold text-slate-950">
+                <p className="text-lg font-semibold text-white">
                   What the feed will emphasize next
                 </p>
               </div>
@@ -140,15 +140,15 @@ export default async function AnalysisPage({
                 portfolioInsights.map((insight) => (
                   <div
                     key={insight.title}
-                    className="rounded-2xl border border-black/6 bg-[#fffdf9] p-4"
+                    className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-4"
                   >
                     <p className="text-sm uppercase tracking-[0.18em] text-slate-500">
                       {insight.title}
                     </p>
-                    <p className="mt-2 text-lg font-semibold text-slate-950">
+                    <p className="mt-2 text-lg font-semibold text-white">
                       {insight.value}
                     </p>
-                    <p className="mt-2 text-sm leading-7 text-slate-600">
+                    <p className="mt-2 text-sm leading-7 text-slate-400">
                       {insight.detail}
                     </p>
                   </div>
@@ -168,9 +168,9 @@ export default async function AnalysisPage({
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-black/6 bg-[#fffdf9] p-4">
+    <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-4">
       <p className="text-sm uppercase tracking-[0.18em] text-slate-500">{label}</p>
-      <p className="mt-2 text-lg font-semibold text-slate-950">{value}</p>
+      <p className="mt-2 text-lg font-semibold text-white">{value}</p>
     </div>
   );
 }

@@ -89,28 +89,28 @@ export function PortfolioCopilotPanel({
   }
 
   return (
-    <div className="space-y-4 rounded-[2rem] border border-black/6 bg-[#fbf7ef] p-5">
+    <div className="space-y-4 rounded-[2rem] border border-white/[0.06] bg-surface-raised p-5">
       <div className="flex items-center gap-3">
-        <div className="text-[#009B5A]">
+        <div className="text-brand">
           <Sparkles className="h-5 w-5 fill-current" />
         </div>
         <div>
-          <p className="text-[15px] font-bold text-slate-900">Portfolio Copilot</p>
-          <p className="text-sm text-slate-600">
+          <p className="text-[15px] font-bold text-white">Portfolio Copilot</p>
+          <p className="text-sm text-slate-400">
             Ask about holdings, exposure, catalysts, or your watchlist.
           </p>
         </div>
       </div>
 
-      <div className="max-h-72 space-y-3 overflow-y-auto rounded-[1.5rem] border border-black/6 bg-white/90 p-3">
+      <div className="max-h-72 space-y-3 overflow-y-auto rounded-[1.5rem] border border-white/[0.06] bg-white/[0.03] p-3">
         {messages.length > 0 ? (
           messages.map((message) => (
             <div
               key={message.id}
               className={
                 message.role === "assistant"
-                  ? "rounded-2xl bg-[#f6efe0] p-3 text-sm text-slate-700"
-                  : "ml-auto max-w-[90%] rounded-2xl bg-[#17243a] p-3 text-sm text-white"
+                  ? "rounded-2xl bg-white/5 p-3 text-sm text-slate-300"
+                  : "ml-auto max-w-[90%] rounded-2xl bg-brand/10 p-3 text-sm text-white"
               }
             >
               <p className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] opacity-70">
@@ -121,7 +121,7 @@ export function PortfolioCopilotPanel({
           ))
         ) : (
           <div className="space-y-3">
-            <p className="text-sm text-slate-600">
+            <p className="text-sm text-slate-400">
               Start with a portfolio question.
             </p>
             <div className="flex flex-wrap gap-2">
@@ -131,7 +131,7 @@ export function PortfolioCopilotPanel({
                   type="button"
                   onClick={() => void sendMessage(question)}
                   disabled={sending}
-                  className="rounded-full border border-black/8 bg-white px-3 py-2 text-left text-sm text-slate-700 transition hover:border-brand/30 hover:text-slate-950"
+                  className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-2 text-left text-sm text-slate-400 transition hover:border-brand/30 hover:text-slate-200"
                 >
                   {question}
                 </button>
@@ -147,10 +147,10 @@ export function PortfolioCopilotPanel({
           onChange={(event) => setDraft(event.target.value)}
           rows={4}
           placeholder="Ask anything about your portfolio or watchlist."
-          className="w-full rounded-[1.5rem] border border-black/8 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-brand/40"
+          className="w-full rounded-[1.5rem] border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-slate-200 outline-none transition focus:border-brand/40"
         />
         <div className="flex items-center justify-between gap-3">
-          {error ? <p className="text-sm text-rose-600">{error}</p> : <span />}
+          {error ? <p className="text-sm text-red-400">{error}</p> : <span />}
           <Button
             type="button"
             onClick={() => void sendMessage(draft)}

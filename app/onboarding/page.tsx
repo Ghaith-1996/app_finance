@@ -364,7 +364,7 @@ export default function OnboardingPage() {
       }
     >
       {error && (
-        <div className="mb-6 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+        <div className="mb-6 rounded-2xl border border-rose-500/25 bg-rose-500/10 px-4 py-3 text-sm text-rose-400">
           {error}
         </div>
       )}
@@ -373,12 +373,12 @@ export default function OnboardingPage() {
       {step === "method" && (
         <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
           <div className="space-y-6">
-            <Panel className="space-y-5 border-black/6 bg-white/84">
+            <Panel className="space-y-5 border-white/[0.06] bg-surface-raised">
               <div>
                 <p className="text-sm font-semibold uppercase tracking-[0.24em] text-brand">
                   Choose a method
                 </p>
-                <p className="mt-2 text-sm leading-7 text-slate-600">
+                <p className="mt-2 text-sm leading-7 text-slate-400">
                   Import holdings from a CSV file or add them manually one by one.
                 </p>
               </div>
@@ -392,16 +392,16 @@ export default function OnboardingPage() {
                   }}
                   className={cn(
                     "rounded-3xl border p-5 text-left transition",
-                    "border-black/6 bg-white/72 hover:border-brand/28 hover:bg-brand/6",
+                    "border-white/[0.06] bg-surface-raised hover:border-brand/28 hover:bg-brand/6",
                   )}
                 >
                   <div className="flex items-center gap-3">
-                    <span className="rounded-2xl border border-black/6 bg-[#f7f2ea] p-3 text-brand">
+                    <span className="rounded-2xl border border-white/[0.06] bg-white/5 p-3 text-brand">
                       <FileSpreadsheet className="h-5 w-5" />
                     </span>
                     <div>
-                      <p className="text-lg font-semibold text-slate-950">Import CSV</p>
-                      <p className="text-sm text-slate-600">
+                      <p className="text-lg font-semibold text-white">Import CSV</p>
+                      <p className="text-sm text-slate-400">
                         Upload a file from your broker or spreadsheet.
                       </p>
                     </div>
@@ -417,16 +417,16 @@ export default function OnboardingPage() {
                   }}
                   className={cn(
                     "rounded-3xl border p-5 text-left transition",
-                    "border-black/6 bg-white/72 hover:border-brand/28 hover:bg-brand/6",
+                    "border-white/[0.06] bg-surface-raised hover:border-brand/28 hover:bg-brand/6",
                   )}
                 >
                   <div className="flex items-center gap-3">
-                    <span className="rounded-2xl border border-black/6 bg-[#f7f2ea] p-3 text-brand">
+                    <span className="rounded-2xl border border-white/[0.06] bg-white/5 p-3 text-brand">
                       <PencilLine className="h-5 w-5" />
                     </span>
                     <div>
-                      <p className="text-lg font-semibold text-slate-950">Create manually</p>
-                      <p className="text-sm text-slate-600">
+                      <p className="text-lg font-semibold text-white">Create manually</p>
+                      <p className="text-sm text-slate-400">
                         Search and add stocks one by one with quantity and cost.
                       </p>
                     </div>
@@ -436,7 +436,7 @@ export default function OnboardingPage() {
             </Panel>
           </div>
 
-          <Panel className="space-y-4 border-black/6 bg-white/84">
+          <Panel className="space-y-4 border-white/[0.06] bg-surface-raised">
             <p className="text-sm font-semibold uppercase tracking-[0.24em] text-brand">
               What to expect
             </p>
@@ -455,13 +455,13 @@ export default function OnboardingPage() {
               />
             </div>
             <div className="rounded-3xl border border-brand/16 bg-brand/10 p-5">
-              <div className="flex items-center gap-3 text-emerald-700">
+              <div className="flex items-center gap-3 text-brand">
                 <ShieldCheck className="h-5 w-5" />
                 <p className="text-sm font-semibold uppercase tracking-[0.2em]">
                   Read-only by design
                 </p>
               </div>
-              <p className="mt-3 text-sm leading-7 text-slate-700">
+              <p className="mt-3 text-sm leading-7 text-slate-300">
                 Broker connections are informational only. CSV import reads your
                 file locally and sends data to your own Supabase project.
               </p>
@@ -482,7 +482,7 @@ export default function OnboardingPage() {
           {loading && (
             <div className="flex items-center justify-center gap-3 py-8">
               <Loader2 className="h-5 w-5 animate-spin text-brand" />
-              <span className="text-sm text-slate-600">Parsing and validating...</span>
+              <span className="text-sm text-slate-400">Parsing and validating...</span>
             </div>
           )}
           {needsMapping && (
@@ -504,13 +504,13 @@ export default function OnboardingPage() {
       {step === "intake" && method === "manual" && (
         <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
           <div className="space-y-6">
-            <Panel className="space-y-5 border-black/6 bg-white/84">
+            <Panel className="space-y-5 border-white/[0.06] bg-surface-raised">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div>
                   <p className="text-sm font-semibold uppercase tracking-[0.24em] text-brand">
                     Add holdings
                   </p>
-                  <p className="mt-2 text-sm leading-7 text-slate-600">
+                  <p className="mt-2 text-sm leading-7 text-slate-400">
                     Search for a ticker or company name, then enter quantity and average cost.
                   </p>
                 </div>
@@ -526,33 +526,33 @@ export default function OnboardingPage() {
                   return (
                     <Panel
                       key={draft.tempId}
-                      className="space-y-4 border-black/6 bg-white/84"
+                      className="space-y-4 border-white/[0.06] bg-surface-raised"
                     >
                       <div className="flex items-center justify-between gap-4">
                         <div>
                           <div className="flex items-center gap-3">
-                            <p className="text-lg font-semibold text-slate-950">
+                            <p className="text-lg font-semibold text-white">
                               {draft.symbol}
                             </p>
                             <Badge tone={draft.status === "confirmed" ? "success" : "warning"}>
                               {draft.status}
                             </Badge>
                           </div>
-                          <p className="mt-1 text-sm text-slate-500">
+                          <p className="mt-1 text-sm text-slate-400">
                             {draft.company} {draft.market && `· ${draft.market}`}
                           </p>
                         </div>
                         <button
                           type="button"
                           onClick={() => removeManualRow(draft.tempId)}
-                          className="rounded-full p-2 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600"
+                          className="rounded-full p-2 text-slate-400 transition hover:bg-rose-500/10 hover:text-rose-400"
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>
                       </div>
                       <div className="grid gap-3 sm:grid-cols-3">
                         <div>
-                          <label className="mb-1 block text-xs uppercase tracking-[0.18em] text-slate-500">
+                          <label className="mb-1 block text-xs uppercase tracking-[0.18em] text-slate-400">
                             Shares
                           </label>
                           <input
@@ -562,11 +562,11 @@ export default function OnboardingPage() {
                             value={row?.quantity ?? ""}
                             onChange={(e) => updateManualRow(draft.tempId, "quantity", e.target.value)}
                             placeholder="e.g. 50"
-                            className="w-full rounded-xl border border-black/8 bg-white px-3 py-2.5 text-sm text-slate-950 outline-none focus:border-brand focus:ring-1 focus:ring-brand"
+                            className="w-full rounded-xl border border-white/10 bg-surface-raised px-3 py-2.5 text-sm text-white outline-none focus:border-brand focus:ring-1 focus:ring-brand"
                           />
                         </div>
                         <div>
-                          <label className="mb-1 block text-xs uppercase tracking-[0.18em] text-slate-500">
+                          <label className="mb-1 block text-xs uppercase tracking-[0.18em] text-slate-400">
                             Avg cost
                           </label>
                           <input
@@ -576,11 +576,11 @@ export default function OnboardingPage() {
                             value={row?.avgCost ?? ""}
                             onChange={(e) => updateManualRow(draft.tempId, "avgCost", e.target.value)}
                             placeholder="e.g. 142.50"
-                            className="w-full rounded-xl border border-black/8 bg-white px-3 py-2.5 text-sm text-slate-950 outline-none focus:border-brand focus:ring-1 focus:ring-brand"
+                            className="w-full rounded-xl border border-white/10 bg-surface-raised px-3 py-2.5 text-sm text-white outline-none focus:border-brand focus:ring-1 focus:ring-brand"
                           />
                         </div>
                         <div>
-                          <label className="mb-1 block text-xs uppercase tracking-[0.18em] text-slate-500">
+                          <label className="mb-1 block text-xs uppercase tracking-[0.18em] text-slate-400">
                             Thesis (optional)
                           </label>
                           <input
@@ -588,7 +588,7 @@ export default function OnboardingPage() {
                             value={row?.thesis ?? ""}
                             onChange={(e) => updateManualRow(draft.tempId, "thesis", e.target.value)}
                             placeholder="Why you own this"
-                            className="w-full rounded-xl border border-black/8 bg-white px-3 py-2.5 text-sm text-slate-950 outline-none focus:border-brand focus:ring-1 focus:ring-brand"
+                            className="w-full rounded-xl border border-white/10 bg-surface-raised px-3 py-2.5 text-sm text-white outline-none focus:border-brand focus:ring-1 focus:ring-brand"
                           />
                         </div>
                       </div>
@@ -599,27 +599,27 @@ export default function OnboardingPage() {
             )}
           </div>
 
-          <Panel className="space-y-4 border-black/6 bg-white/84">
+          <Panel className="space-y-4 border-white/[0.06] bg-surface-raised">
             <p className="text-sm font-semibold uppercase tracking-[0.24em] text-brand">
               Summary
             </p>
-            <div className="rounded-3xl border border-black/6 bg-[#fffdf9] p-5">
-              <p className="text-sm uppercase tracking-[0.18em] text-slate-500">
+            <div className="rounded-3xl border border-white/[0.06] bg-white/[0.03] p-5">
+              <p className="text-sm uppercase tracking-[0.18em] text-slate-400">
                 Holdings added
               </p>
-              <p className="mt-3 text-4xl font-semibold text-slate-950">
+              <p className="mt-3 text-4xl font-semibold text-white">
                 {drafts.length}
               </p>
             </div>
-            <div className="rounded-3xl border border-black/6 bg-[#fffdf9] p-5">
-              <p className="text-sm uppercase tracking-[0.18em] text-slate-500">
+            <div className="rounded-3xl border border-white/[0.06] bg-white/[0.03] p-5">
+              <p className="text-sm uppercase tracking-[0.18em] text-slate-400">
                 Ready to save
               </p>
-              <p className="mt-3 text-4xl font-semibold text-slate-950">
+              <p className="mt-3 text-4xl font-semibold text-white">
                 {confirmedCount}
               </p>
               {unresolvedCount > 0 && (
-                <p className="mt-2 text-sm text-amber-700">
+                <p className="mt-2 text-sm text-amber-400">
                   {unresolvedCount} need quantity or cost
                 </p>
               )}
@@ -632,12 +632,12 @@ export default function OnboardingPage() {
       {step === "review" && (
         <div className="space-y-6">
           {existingPortfolioId && (
-            <Panel className="space-y-4 border-black/6 bg-white/84">
+            <Panel className="space-y-4 border-white/[0.06] bg-surface-raised">
               <div>
                 <p className="text-sm font-semibold uppercase tracking-[0.24em] text-brand">
                   Existing portfolio detected
                 </p>
-                <p className="mt-2 text-sm leading-7 text-slate-600">
+                <p className="mt-2 text-sm leading-7 text-slate-400">
                   You already have a portfolio. Choose how to handle the new holdings.
                 </p>
               </div>
@@ -649,11 +649,11 @@ export default function OnboardingPage() {
                     "rounded-2xl border p-4 text-left transition",
                     saveMode === "replace"
                       ? "border-brand/28 bg-brand/10"
-                      : "border-black/6 bg-[#fffdf9] hover:bg-brand/4",
+                      : "border-white/[0.06] bg-white/[0.03] hover:bg-white/5",
                   )}
                 >
-                  <p className="text-sm font-semibold text-slate-950">Replace all</p>
-                  <p className="mt-1 text-sm text-slate-600">
+                  <p className="text-sm font-semibold text-white">Replace all</p>
+                  <p className="mt-1 text-sm text-slate-400">
                     Delete existing holdings and use only the confirmed set below.
                   </p>
                 </button>
@@ -664,11 +664,11 @@ export default function OnboardingPage() {
                     "rounded-2xl border p-4 text-left transition",
                     saveMode === "merge"
                       ? "border-brand/28 bg-brand/10"
-                      : "border-black/6 bg-[#fffdf9] hover:bg-brand/4",
+                      : "border-white/[0.06] bg-white/[0.03] hover:bg-white/5",
                   )}
                 >
-                  <p className="text-sm font-semibold text-slate-950">Merge</p>
-                  <p className="mt-1 text-sm text-slate-600">
+                  <p className="text-sm font-semibold text-white">Merge</p>
+                  <p className="mt-1 text-sm text-slate-400">
                     Update matching tickers and add new ones. Keep unmatched existing holdings.
                   </p>
                 </button>
@@ -681,7 +681,7 @@ export default function OnboardingPage() {
               <p className="text-sm font-semibold uppercase tracking-[0.24em] text-brand">
                 Review holdings
               </p>
-              <p className="mt-1 text-sm text-slate-600">
+              <p className="mt-1 text-sm text-slate-400">
                 {confirmedCount} confirmed, {unresolvedCount} unresolved,{" "}
                 {drafts.filter((d) => d.status === "skipped").length} skipped
               </p>
@@ -698,12 +698,12 @@ export default function OnboardingPage() {
           />
 
           {confirmedCount > 0 && (
-            <Panel className="flex flex-col gap-3 border-black/6 bg-[#fffdf9] p-5 sm:flex-row sm:items-center sm:justify-between">
+            <Panel className="flex flex-col gap-3 border-white/[0.06] bg-white/[0.03] p-5 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="text-sm text-slate-500">
+                <p className="text-sm text-slate-400">
                   Estimated cost basis
                 </p>
-                <p className="text-2xl font-semibold text-slate-950">
+                <p className="text-2xl font-semibold text-white">
                   {formatPrice(
                     drafts
                       .filter((d) => d.status === "confirmed")
@@ -711,7 +711,7 @@ export default function OnboardingPage() {
                   )}
                 </p>
               </div>
-              <div className="text-sm text-slate-500">
+              <div className="text-sm text-slate-400">
                 {confirmedCount} holding{confirmedCount !== 1 ? "s" : ""} will be saved
                 {existingPortfolioId && ` (${saveMode} mode)`}
               </div>
@@ -725,9 +725,9 @@ export default function OnboardingPage() {
 
 function InfoCard({ title, detail }: { title: string; detail: string }) {
   return (
-    <div className="rounded-2xl border border-black/6 bg-[#fffdf9] p-4">
-      <p className="text-sm font-semibold text-slate-950">{title}</p>
-      <p className="mt-2 text-sm leading-7 text-slate-600">{detail}</p>
+    <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-4">
+      <p className="text-sm font-semibold text-white">{title}</p>
+      <p className="mt-2 text-sm leading-7 text-slate-400">{detail}</p>
     </div>
   );
 }

@@ -28,7 +28,7 @@ export async function ingestNewsToSupabase(
 
   let query = supabase
     .from("news_items")
-    .select("id, headline, source, raw_content, stock_tags, source_type, category_hint")
+    .select("id, headline, source, raw_content, full_content, stock_tags, source_type, category_hint")
     .is("global_summary", null)
     .order("published_at", { ascending: false })
     .limit(options?.limit ?? 20);
@@ -48,19 +48,22 @@ export async function ingestNewsToSupabase(
 
   for (const article of articles ?? []) {
     const providerTags = (article.stock_tags as string[]) ?? [];
+    const fullText = (article.full_content as string | null) || null;
+    const rawText = (article.raw_content as string | null) || null;
+    const articleBody = fullText ?? rawText ?? "";
 
     let analysis;
     try {
       analysis = await ai.analyzeArticle(
         article.headline as string,
-        article.raw_content as string ?? "",
+        articleBody,
         providerTags.length > 0 ? providerTags : undefined,
       );
     } catch {
       analysis = {
         category: (article.category_hint ?? "other") as NewsCategory,
         globalSummary:
-          (article.raw_content as string | null)?.slice(0, 300) ?? (article.headline as string),
+          articleBody.slice(0, 300) || (article.headline as string),
         overallEffect: "neutral" as const,
         stockTags: providerTags,
         tickerImpacts: [],

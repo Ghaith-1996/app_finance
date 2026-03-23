@@ -18,7 +18,7 @@ export function HoldingsReviewTable({
 }: HoldingsReviewTableProps) {
   if (drafts.length === 0) {
     return (
-      <Panel className="border-black/6 bg-white/84 p-8 text-center">
+      <Panel className="p-8 text-center">
         <p className="text-sm text-slate-500">No holdings to review yet.</p>
       </Panel>
     );
@@ -27,8 +27,8 @@ export function HoldingsReviewTable({
   return (
     <Panel className="overflow-hidden p-0">
       <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-black/6">
-          <thead className="bg-[#f7f2ea]">
+        <table className="min-w-full divide-y divide-white/[0.06]">
+          <thead className="bg-white/[0.03]">
             <tr className="text-left text-xs uppercase tracking-[0.22em] text-slate-500">
               <th className="px-5 py-4">Symbol</th>
               <th className="px-5 py-4">Company</th>
@@ -39,24 +39,24 @@ export function HoldingsReviewTable({
               <th className="px-5 py-4">Action</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-black/6">
+          <tbody className="divide-y divide-white/[0.06]">
             {drafts.map((draft) => (
-              <tr key={draft.tempId} className="bg-white/88">
+              <tr key={draft.tempId} className="transition hover:bg-white/[0.02]">
                 <td className="px-5 py-4">
-                  <span className="text-sm font-semibold text-slate-950">
+                  <span className="text-sm font-semibold text-white">
                     {draft.symbol || "—"}
                   </span>
                   {draft.market && (
-                    <span className="ml-2 text-xs text-slate-400">{draft.market}</span>
+                    <span className="ml-2 text-xs text-slate-500">{draft.market}</span>
                   )}
                 </td>
-                <td className="px-5 py-4 text-sm text-slate-600">
+                <td className="px-5 py-4 text-sm text-slate-400">
                   {draft.company || "—"}
                 </td>
-                <td className="px-5 py-4 text-sm text-slate-950">
+                <td className="px-5 py-4 text-sm text-white">
                   {draft.quantity > 0 ? draft.quantity : "—"}
                 </td>
-                <td className="px-5 py-4 text-sm text-slate-950">
+                <td className="px-5 py-4 text-sm text-white">
                   {draft.averageCost > 0 ? formatPrice(draft.averageCost) : "—"}
                 </td>
                 <td className="px-5 py-4">
@@ -72,7 +72,7 @@ export function HoldingsReviewTable({
                     <div className="space-y-1">
                       <Badge tone="warning">Needs review</Badge>
                       {draft.issues.map((issue, i) => (
-                        <p key={i} className="text-xs text-amber-700">
+                        <p key={i} className="text-xs text-amber-400">
                           {issue.message}
                         </p>
                       ))}
@@ -91,9 +91,9 @@ export function HoldingsReviewTable({
                             key={c.symbol}
                             type="button"
                             onClick={() => onSelectCandidate(draft.tempId, c)}
-                            className="block w-full rounded-lg border border-black/6 bg-[#fffdf9] px-3 py-1.5 text-left text-xs transition hover:border-brand/30 hover:bg-brand/6"
+                            className="block w-full rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-1.5 text-left text-xs transition hover:border-brand/30 hover:bg-brand/5"
                           >
-                            <span className="font-semibold">{c.symbol}</span>{" "}
+                            <span className="font-semibold text-white">{c.symbol}</span>{" "}
                             <span className="text-slate-500">{c.name}</span>
                           </button>
                         ))}
@@ -102,7 +102,7 @@ export function HoldingsReviewTable({
                     <button
                       type="button"
                       onClick={() => onToggleStatus(draft.tempId)}
-                      className="text-xs text-slate-500 underline underline-offset-2 transition hover:text-slate-950"
+                      className="text-xs text-slate-500 underline underline-offset-2 transition hover:text-slate-300"
                     >
                       {draft.status === "skipped" ? "Include" : "Skip"}
                     </button>

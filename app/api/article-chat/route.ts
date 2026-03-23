@@ -118,7 +118,7 @@ async function loadPromptContext(
       supabase
         .from("news_items")
         .select(
-          "headline, source, published_at, category, global_summary, raw_content, stock_tags, ticker_impacts, source_type",
+          "headline, source, published_at, category, global_summary, raw_content, extracted_content, stock_tags, ticker_impacts, source_type",
         )
         .eq("id", newsItemId)
         .single(),
@@ -173,6 +173,7 @@ async function loadPromptContext(
       category: (article.category ?? "other") as NewsCategory,
       globalSummary: (article.global_summary as string | null) ?? undefined,
       rawContent: (article.raw_content as string | null) ?? undefined,
+      extractedContent: (article.extracted_content as string | null) ?? undefined,
       stockTags: ((article.stock_tags as string[] | null) ?? []).map((tag) => tag.toUpperCase()),
       tickerImpacts: (article.ticker_impacts as TickerImpact[] | null) ?? [],
       sourceType: (article.source_type as string | null) ?? undefined,

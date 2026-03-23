@@ -49,6 +49,7 @@ export interface ArticleChatContext {
     category: NewsCategory;
     globalSummary?: string;
     rawContent?: string;
+    extractedContent?: string;
     stockTags: string[];
     tickerImpacts: TickerImpact[];
     sourceType?: string;

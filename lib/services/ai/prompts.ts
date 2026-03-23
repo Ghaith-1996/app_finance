@@ -199,6 +199,11 @@ export function articleChatPrompt(
     ? article.matchedHoldings.join(", ")
     : "None";
 
+  const articleBody = (article.extractedContent ?? "").slice(0, 6000)
+    || (article.rawContent ?? "").slice(0, 4000)
+    || "None";
+  const contentSource = article.extractedContent ? "full article" : "provider snippet";
+
   return {
     system:
       "You are an investment-news assistant embedded inside a portfolio feed. " +
@@ -214,7 +219,7 @@ export function articleChatPrompt(
       `Category: ${article.category}\n` +
       `Source type: ${article.sourceType ?? "other"}\n` +
       `Summary: ${article.globalSummary ?? "None"}\n` +
-      `Raw content: ${(article.rawContent ?? "").slice(0, 4000) || "None"}\n` +
+      `Article text (${contentSource}): ${articleBody}\n` +
       `Stock tags: ${article.stockTags.join(", ") || "None"}\n` +
       `Ticker impacts: ${tickerImpacts}\n` +
       `Portfolio why-it-matters: ${article.whyItMatters ?? "None"}\n` +

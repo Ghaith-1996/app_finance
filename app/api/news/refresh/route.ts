@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
-import { ingestNewsToSupabase } from "@/lib/services/news";
+import { ingestNewsToSupabase, extractPublisherContent } from "@/lib/services/news";
 import { runAnalysis } from "@/lib/services/analysis";
 import { formatIngestStage } from "@/lib/ingest-detail";
 import { ingestFinnhubPortfolioNews } from "@/lib/services/news/finnhub-refresh";
@@ -162,8 +162,26 @@ export async function POST(request: Request) {
   }
 
   let enriched = 0;
+  let extractionStats: { extracted: number; attempted: number; failed: number } | null = null;
   const totalInserted = workerResult.total_inserted + finnhubResult.inserted;
   if (totalInserted > 0) {
+    const extractResult = await extractPublisherContent(supabase, {
+      limit: totalInserted + 5,
+    });
+    extractionStats = {
+      extracted: extractResult.extracted,
+      attempted: extractResult.attempted,
+      failed: extractResult.failed,
+    };
+    if (extractResult.extracted > 0 || extractResult.failed > 0) {
+      stages.extraction = {
+        status: extractResult.failed > 0 && extractResult.extracted === 0 ? "failed" : extractResult.failed > 0 ? "partial" : "success",
+        detail: `${extractResult.extracted}/${extractResult.attempted} articles extracted`,
+      };
+    } else {
+      stages.extraction = { status: "skipped", detail: "No extractable articles" };
+    }
+
     const enrichResult = await ingestNewsToSupabase(supabase, {
       sourceTypes: [...ENRICHABLE_SOURCE_TYPES, "finnhub"],
       limit: totalInserted + 5,
@@ -179,6 +197,7 @@ export async function POST(request: Request) {
       };
     }
   } else {
+    stages.extraction = { status: "skipped", detail: "No new articles to extract" };
     stages.enrichment = {
       status: "skipped",
       detail: "No new articles to enrich",
@@ -219,6 +238,7 @@ export async function POST(request: Request) {
     ingestBreakdown,
     totalInserted,
     enriched,
+    extractionStats,
     analysisRunId: analysisResult.runId,
     poolSnapshot,
     poolSnapshotError: poolSnap.error ?? null,

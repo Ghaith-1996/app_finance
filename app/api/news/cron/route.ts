@@ -1,7 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { resolveGlobalTickers } from "@/lib/services/ticker-resolver";
 import { runPythonWorker } from "@/lib/services/news/worker";
-import { ingestNewsToSupabase } from "@/lib/services/news";
+import { ingestNewsToSupabase, extractPublisherContent } from "@/lib/services/news";
 import { formatIngestStage } from "@/lib/ingest-detail";
 import { ENRICHABLE_SOURCE_TYPES } from "@/lib/services/news/source-config";
 
@@ -61,6 +61,10 @@ export async function POST(request: Request) {
   let enriched = 0;
   let enrichError: string | undefined;
   if (workerResult.total_inserted > 0) {
+    await extractPublisherContent(supabase, {
+      limit: workerResult.total_inserted + 10,
+    });
+
     const enrichResult = await ingestNewsToSupabase(supabase, {
       sourceTypes: [...ENRICHABLE_SOURCE_TYPES],
       limit: workerResult.total_inserted + 10,

@@ -15,6 +15,7 @@ export type {
 } from "./types";
 
 export { ingestNewsToSupabase } from "./ingest";
+export { extractPublisherContent } from "./publisher-extract";
 export {
   getNewsPoolSnapshot24h,
   newsWindowCutoffIso,

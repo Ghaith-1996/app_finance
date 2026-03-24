@@ -215,6 +215,38 @@ describe("GET /api/feed personal mode", () => {
 
     expect(body.watchlistSymbols).toEqual(["TSLA"]);
   });
+
+  it("falls back to direct watchlist matching when the user has no portfolio", async () => {
+    currentSupabaseMock = {
+      ...createSupabaseMock(null, null, "tag", ["AAPL"]),
+      from(table: string) {
+        if (table === "portfolios") {
+          return {
+            select: () => ({
+              eq: () => ({
+                order: () => ({
+                  limit: async () => ({ data: [], error: null }),
+                }),
+              }),
+            }),
+          };
+        }
+
+        return createSupabaseMock(null, null, "tag", ["AAPL"]).from(table);
+      },
+    };
+
+    const res = await GET(new Request("http://localhost/api/feed?mode=personal"));
+    const body = await res.json();
+
+    expect(body.mode).toBe("personal");
+    expect(body.portfolioId).toBeNull();
+    expect(body.watchlistSymbols).toEqual(["AAPL"]);
+    expect(body.feed).toHaveLength(1);
+    expect(body.feed[0].matchSources).toEqual(["watchlist"]);
+    expect(body.feed[0].matchReasonCodes).toEqual(["watchlist_ticker_tag"]);
+    expect(body.feed[0].relevanceScore).toBe(75);
+  });
 });
 
 describe("GET /api/feed market mode", () => {

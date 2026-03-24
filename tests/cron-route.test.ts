@@ -6,6 +6,9 @@ const mockIngestNewsToSupabase = vi.fn();
 const mockExtractPublisherContent = vi.fn();
 const mockIngestFinnhubPortfolioNews = vi.fn();
 const mockRunAnalysis = vi.fn();
+const mockLoggerInfo = vi.fn();
+const mockLoggerWarn = vi.fn();
+const mockLoggerError = vi.fn();
 
 vi.mock("@/lib/supabase/service", () => ({
   createServiceClient: () => mockSupabase,
@@ -33,10 +36,14 @@ vi.mock("@/lib/services/analysis", () => ({
 }));
 
 vi.mock("@/lib/logger", () => ({
-  createLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
+  createLogger: () => ({
+    info: mockLoggerInfo,
+    warn: mockLoggerWarn,
+    error: mockLoggerError,
+  }),
 }));
 
-import { POST } from "@/app/api/news/cron/route";
+import { GET, POST } from "@/app/api/news/cron/route";
 
 let mockSupabase: ReturnType<typeof buildMockSupabase>;
 
@@ -96,6 +103,15 @@ function makeRequest(secret?: string): Request {
   });
 }
 
+function makeGetRequest(secret?: string): Request {
+  const headers = new Headers();
+  if (secret) headers.set("Authorization", `Bearer ${secret}`);
+  return new Request("http://localhost/api/news/cron", {
+    method: "GET",
+    headers,
+  });
+}
+
 function emptyRow() {
   return { fetched: 0, inserted: 0, skipped: 0, failed: 0, inserted_ids: [] };
 }
@@ -123,6 +139,9 @@ describe("POST /api/news/cron", () => {
     mockRunAnalysis.mockReset().mockResolvedValue({
       runId: "run-1", error: null, meta: { feedItemsCreated: 2 },
     });
+    mockLoggerInfo.mockReset();
+    mockLoggerWarn.mockReset();
+    mockLoggerError.mockReset();
     mockSupabase = buildMockSupabase([{ id: "p1", user_id: "u1" }]);
     process.env.CRON_SECRET = "test-secret";
     process.env.FINNHUB_API_KEY = "fk";
@@ -160,6 +179,15 @@ describe("POST /api/news/cron", () => {
     );
     expect(mockRunAnalysis).toHaveBeenCalledWith(mockSupabase, "p1");
     expect(body.analysis.portfoliosProcessed).toBe(1);
+    expect(mockLoggerInfo).toHaveBeenCalledWith("Cron run started");
+    expect(mockLoggerInfo).toHaveBeenCalledWith(
+      "Cron run completed",
+      expect.objectContaining({
+        inserted: expect.objectContaining({ total: 6 }),
+        enriched: 6,
+        analysis: expect.objectContaining({ processed: 1 }),
+      }),
+    );
   });
 
   it("includes finnhub in enrichment source types", async () => {
@@ -186,7 +214,7 @@ describe("POST /api/news/cron", () => {
     const recentlyCompleted = new Date(Date.now() - 5 * 60 * 1000).toISOString();
     mockSupabase = {
       ...buildMockSupabase([{ id: "p1", user_id: "u1" }]),
-      from: (table: string) => {
+      from: ((table: string) => {
         if (table === "portfolios") {
           return { select: () => Promise.resolve({ data: [{ id: "p1", user_id: "u1" }], error: null }) };
         }
@@ -209,7 +237,7 @@ describe("POST /api/news/cron", () => {
           };
         }
         return buildMockSupabase().from(table);
-      },
+      }) as typeof mockSupabase.from,
     };
 
     mockResolveGlobalTickers.mockResolvedValue({ tickers: ["AAPL"] });
@@ -234,5 +262,16 @@ describe("POST /api/news/cron", () => {
 
     await POST(makeRequest("test-secret"));
     expect(mockIngestNewsToSupabase).not.toHaveBeenCalled();
+  });
+
+  it("supports GET for Vercel cron invocations", async () => {
+    mockResolveGlobalTickers.mockResolvedValue({ tickers: ["AAPL"] });
+    mockRunPythonWorker.mockResolvedValue({
+      edgar: emptyRow(), newsapi: emptyRow(), gnews: emptyRow(),
+      total_inserted: 0, ingest_status: "empty",
+    });
+
+    const res = await GET(makeGetRequest("test-secret"));
+    expect(res.status).toBe(200);
   });
 });

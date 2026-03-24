@@ -38,3 +38,25 @@ AZURE_OPENAI_REASONING_EFFORT=medium
 node --env-file=.env scripts/test-azure-openai.mjs
 node --env-file=.env scripts/test-openrouter.mjs
 ```
+
+## Vercel cron
+
+Production news ingestion and analysis are driven by `app/api/news/cron/route.ts` on a 20-minute schedule via `vercel.json`.
+
+Required Vercel project env vars for cron:
+
+- `CRON_SECRET`
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `NEWSAPI_KEY`
+- `EDGAR_IDENTITY`
+- `FINNHUB_API_KEY`
+- AI provider envs used by enrichment (`AI_PROVIDER` plus the matching provider credentials)
+
+Notes:
+
+- Vercel cron jobs invoke the route with `GET`, so the route supports both `GET` and `POST`.
+- The 20-minute cadence requires a Vercel plan that supports sub-daily cron schedules.
+- Cron jobs run on production deployments only.
+- Before relying on the schedule, manually call the route once with `Authorization: Bearer <CRON_SECRET>` to confirm the deployed environment can execute `runPythonWorker()`.

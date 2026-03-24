@@ -1,5 +1,11 @@
 import { createClient } from "@/lib/supabase/server";
-import type { FeedMode, MatchReasonCode, MatchSource, TickerImpact } from "@/lib/types";
+import type {
+  FeedMode,
+  MatchReasonCode,
+  MatchSource,
+  NewsItem,
+  TickerImpact,
+} from "@/lib/types";
 import { resolveDirectStockMatch } from "@/lib/services/news/direct-match";
 
 /** Hard cap: only articles from the last 24 hours appear in either feed mode. */
@@ -369,8 +375,7 @@ async function handleWatchlistOnlyMode(
   };
 
   const rawRows = (rows ?? []) as unknown as NewsRow[];
-  let feed = rawRows
-    .map((row) => {
+  const mappedRows: Array<NewsItem | null> = rawRows.map((row) => {
       const publishedAt = row.published_at ?? new Date().toISOString();
       const directMatch = resolveDirectStockMatch(
         row.stock_tags ?? [],
@@ -389,12 +394,12 @@ async function handleWatchlistOnlyMode(
         publishedMinutesAgo: minutesAgo(publishedAt),
         relevanceScore: 75,
         angle: row.angle ?? "",
-        category: row.category ?? "other",
+        category: (row.category ?? "other") as NewsItem["category"],
         stockTags: row.stock_tags ?? [],
         globalSummary: row.global_summary ?? "",
-        displayEffect: row.overall_effect ?? "neutral",
+        displayEffect: (row.overall_effect ?? "neutral") as NewsItem["displayEffect"],
         tickerImpacts: row.ticker_impacts ?? [],
-        sourceType: row.source_type ?? "other",
+        sourceType: (row.source_type ?? "other") as NewsItem["sourceType"],
         sourceConfidence:
           row.source_type === "edgar" ? "high" : ("standard" as const),
         metadata: row.metadata ?? {},
@@ -405,9 +410,12 @@ async function handleWatchlistOnlyMode(
           : ["watchlist_ticker_impact"]) as MatchReasonCode[],
         isWatchlistMatch: true,
         whyItMatters: `Matches watchlist symbol${directMatch.matchedSymbols.length > 1 ? "s" : ""} ${directMatch.matchedSymbols.join(", ")}.`,
-      };
-    })
-    .filter(Boolean) as NonNullable<typeof feed[number]>[];
+      } satisfies NewsItem;
+    });
+
+  let feed: NewsItem[] = mappedRows.filter(
+    (item): item is NewsItem => item !== null,
+  );
 
   const cap = effectiveRecencyCap(opts.maxMinutes);
   feed = feed.filter((item) => item.publishedMinutesAgo <= cap);

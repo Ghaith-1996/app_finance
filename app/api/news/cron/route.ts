@@ -2,7 +2,10 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { resolveGlobalTickers } from "@/lib/services/ticker-resolver";
 import { runPythonWorker } from "@/lib/services/news/worker";
 import { ingestNewsToSupabase, extractPublisherContent } from "@/lib/services/news";
-import { ingestFinnhubPortfolioNews } from "@/lib/services/news/finnhub-refresh";
+import {
+  ingestFinnhubPortfolioNews,
+  type RefreshSourceRow,
+} from "@/lib/services/news/finnhub-refresh";
 import { formatIngestStage } from "@/lib/ingest-detail";
 import { ENRICHABLE_SOURCE_TYPES } from "@/lib/services/news/source-config";
 import { runAnalysis } from "@/lib/services/analysis";
@@ -19,7 +22,8 @@ const ANALYSIS_COOLDOWN_MS = 15 * 60 * 1000;
  * After enrichment, runs analysis for every portfolio automatically.
  * Secured by CRON_SECRET.
  */
-export async function POST(request: Request) {
+async function runNewsCron(request: Request) {
+  const startedAt = Date.now();
   const secret = process.env.CRON_SECRET;
   if (!secret) {
     return Response.json(
@@ -34,10 +38,12 @@ export async function POST(request: Request) {
   }
 
   const supabase = createServiceClient();
+  log.info("Cron run started");
 
   const { tickers, error: tickerError } = await resolveGlobalTickers(supabase);
 
   if (tickerError) {
+    log.error("Cron ticker resolution failed", { error: tickerError });
     return Response.json(
       { error: tickerError, tickers: [], totalInserted: 0, enriched: 0 },
       { status: 500 },
@@ -53,6 +59,10 @@ export async function POST(request: Request) {
   const ingestStage = formatIngestStage(workerResult);
 
   if (workerResult.error && workerResult.ingest_status === undefined) {
+    log.error("Cron worker failed before ingest status", {
+      durationMs: Date.now() - startedAt,
+      error: workerResult.error,
+    });
     return Response.json({
       tickers,
       lookbackHours,
@@ -86,15 +96,27 @@ export async function POST(request: Request) {
     combinedHoldings.push({ symbol: sym, company: row.company ?? null });
   }
 
-  let finnhubResult = { inserted: 0, updated: 0, skipped: 0, failed: 0, fetch_error: null as string | null, inserted_ids: [] as string[] };
+  let finnhubResult: RefreshSourceRow & { updated: number } = {
+    fetched: 0,
+    inserted: 0,
+    updated: 0,
+    skipped: 0,
+    failed: 0,
+    fetch_error: null,
+    inserted_ids: [],
+  };
   if (process.env.FINNHUB_API_KEY && combinedHoldings.length > 0) {
     try {
-      finnhubResult = await ingestFinnhubPortfolioNews(
+      const result = await ingestFinnhubPortfolioNews(
         supabase,
         combinedHoldings,
         lookbackHours,
         maxArticles,
       );
+      finnhubResult = {
+        ...result,
+        updated: 0,
+      };
     } catch (err) {
       log.warn("Finnhub ingest failed, continuing", { error: err instanceof Error ? err.message : String(err) });
     }
@@ -192,6 +214,24 @@ export async function POST(request: Request) {
   }));
   const analysisSkipped = analysisResults.filter((r) => r.skipped).length;
 
+  log.info("Cron run completed", {
+    durationMs: Date.now() - startedAt,
+    inserted: {
+      edgar: workerResult.edgar?.inserted ?? 0,
+      newsapi: workerResult.newsapi?.inserted ?? 0,
+      gnews: workerResult.gnews?.inserted ?? 0,
+      finnhub: finnhubResult.inserted,
+      total: totalInserted,
+    },
+    enriched,
+    analysis: {
+      processed: analysisProcessed,
+      skipped: analysisSkipped,
+      errors: analysisErrors.length,
+    },
+    pythonWorkerRuntime: "Requires verification on deployed Vercel functions because cron invokes runPythonWorker()",
+  });
+
   return Response.json({
     tickers,
     lookbackHours,
@@ -213,4 +253,12 @@ export async function POST(request: Request) {
       results: analysisResults,
     },
   });
+}
+
+export async function GET(request: Request) {
+  return runNewsCron(request);
+}
+
+export async function POST(request: Request) {
+  return runNewsCron(request);
 }

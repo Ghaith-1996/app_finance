@@ -18,6 +18,8 @@ import { getAIProvider } from "../ai";
 export async function ingestNewsToSupabase(
   supabase: SupabaseClient,
   options?: {
+    /** Only enrich these specific article IDs. */
+    articleIds?: string[];
     /** Only enrich articles from these source types. */
     sourceTypes?: string[];
     /** Max articles to enrich in one call (default 20). */
@@ -30,8 +32,13 @@ export async function ingestNewsToSupabase(
     .from("news_items")
     .select("id, headline, source, raw_content, full_content, stock_tags, source_type, category_hint")
     .is("global_summary", null)
-    .order("published_at", { ascending: false })
-    .limit(options?.limit ?? 20);
+    .order("published_at", { ascending: false });
+
+  if (options?.articleIds?.length) {
+    query = query.in("id", options.articleIds);
+  } else {
+    query = query.limit(options?.limit ?? 20);
+  }
 
   if (options?.sourceTypes?.length) {
     query = query.in("source_type", options.sourceTypes);

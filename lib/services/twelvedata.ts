@@ -291,6 +291,12 @@ function toNum(v: string | number | undefined | null): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+function toNumericInput(value: unknown): string | number | undefined | null {
+  if (value == null) return value;
+  if (typeof value === "string" || typeof value === "number") return value;
+  return undefined;
+}
+
 function emptyDetail(symbol: string): WatchlistDetailData {
   return {
     symbol,
@@ -479,19 +485,23 @@ export async function getWatchlistDetail(symbol: string): Promise<WatchlistDetai
   for (const row of incomeRaw ?? []) {
     if (!row.fiscal_date) continue;
     const entry = ensureEntry(row.fiscal_date, row.quarter ?? null);
-    entry.revenue = toNum(row.sales ?? row.revenue);
-    entry.netIncome = toNum(row.net_income);
+    entry.revenue = toNum(toNumericInput(row.sales ?? row.revenue));
+    entry.netIncome = toNum(toNumericInput(row.net_income));
   }
   for (const row of balanceRaw ?? []) {
     if (!row.fiscal_date) continue;
     const entry = ensureEntry(row.fiscal_date, row.quarter ?? null);
-    entry.totalDebt = toNum(row.total_debt ?? row.long_term_debt);
-    entry.totalCash = toNum(row.cash_and_short_term_investments ?? row.cash_and_cash_equivalents);
+    entry.totalDebt = toNum(toNumericInput(row.total_debt ?? row.long_term_debt));
+    entry.totalCash = toNum(
+      toNumericInput(
+        row.cash_and_short_term_investments ?? row.cash_and_cash_equivalents,
+      ),
+    );
   }
   for (const row of cashFlowRaw ?? []) {
     if (!row.fiscal_date) continue;
     const entry = ensureEntry(row.fiscal_date, row.quarter ?? null);
-    entry.freeCashFlow = toNum(row.free_cash_flow);
+    entry.freeCashFlow = toNum(toNumericInput(row.free_cash_flow));
   }
   result.financials = [...financialMap.values()].sort((a, b) => a.fiscalDate.localeCompare(b.fiscalDate));
 

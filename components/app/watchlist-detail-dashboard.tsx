@@ -67,6 +67,27 @@ function fmtPct(v: number | null): string {
   return `${(v * 100).toFixed(2)}%`;
 }
 
+function toTooltipNumber(value: unknown): number | null {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value === "string" && value !== "") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function formatPriceTooltip(value: unknown): [string, string] {
+  const numericValue = toTooltipNumber(value);
+  return [numericValue == null ? "â€”" : `$${numericValue.toFixed(2)}`, "Price"];
+}
+
+function formatFinancialTooltip(value: unknown): [string, undefined] {
+  const numericValue = toTooltipNumber(value);
+  return [numericValue == null ? "â€”" : `$${fmtBig(numericValue)}`, undefined];
+}
+
 // ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
@@ -285,7 +306,7 @@ function PriceChartSection({ chart, up }: { chart: ChartPoint[]; up: boolean }) 
           <Tooltip
             contentStyle={{ background: "#151c28", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, fontSize: 12 }}
             labelStyle={{ color: "#94a3b8" }}
-            formatter={(value: number) => [`$${value.toFixed(2)}`, "Price"]}
+            formatter={formatPriceTooltip}
           />
           <Area type="monotone" dataKey="close" stroke={color} strokeWidth={2} fill="url(#chartFill)" dot={false} activeDot={{ r: 4, fill: color }} />
         </AreaChart>
@@ -528,7 +549,7 @@ function RevenueIncomeChart({ financials }: { financials: FinancialDataPoint[] }
           <Tooltip
             contentStyle={{ background: "#151c28", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, fontSize: 11 }}
             labelStyle={{ color: "#94a3b8" }}
-            formatter={(value: number) => [`$${fmtBig(value)}`, undefined]}
+            formatter={formatFinancialTooltip}
           />
           <Bar dataKey="Revenue" fill="#3b82f6" radius={[3, 3, 0, 0]} barSize={16} />
           <Bar dataKey="Net Income" fill="#10b981" radius={[3, 3, 0, 0]} barSize={16} />
@@ -567,7 +588,7 @@ function DebtCashChart({ financials }: { financials: FinancialDataPoint[] }) {
           <Tooltip
             contentStyle={{ background: "#151c28", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, fontSize: 11 }}
             labelStyle={{ color: "#94a3b8" }}
-            formatter={(value: number) => [`$${fmtBig(value)}`, undefined]}
+            formatter={formatFinancialTooltip}
           />
           <Bar dataKey="Debt" fill="#ef4444" radius={[3, 3, 0, 0]} barSize={12} />
           <Bar dataKey="Cash" fill="#10b981" radius={[3, 3, 0, 0]} barSize={12} />

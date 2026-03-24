@@ -8,6 +8,9 @@ import { resolveGlobalTickers } from "@/lib/services/ticker-resolver";
 /**
  * POST /api/news/ingest
  *
+ * @deprecated Retained for admin/debug use only. Production ingestion now
+ * runs automatically via the 20-minute cron job (POST /api/news/cron).
+ *
  * Body (JSON, optional): { lookbackHours?, maxArticles? }
  *
  * Uses the global ticker universe plus global headline sources via the Python worker, then AI enrichment.

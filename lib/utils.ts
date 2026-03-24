@@ -82,6 +82,10 @@ export function matchReasonLabel(reason: MatchReasonCode): string {
       return "Company mention";
     case "sector_exposure_explicit":
       return "Sector exposure";
+    case "watchlist_ticker_tag":
+      return "Watchlist ticker";
+    case "watchlist_ticker_impact":
+      return "Watchlist impact";
     default:
       return reason;
   }

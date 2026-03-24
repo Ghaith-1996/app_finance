@@ -742,6 +742,16 @@ function DetailPanel({
                 In portfolio
               </Badge>
             )}
+            {isMarket && story.isWatchlistMatch && (
+              <Badge tone="neutral">
+                Watchlist
+              </Badge>
+            )}
+            {!isMarket && (story.matchSources ?? []).includes("watchlist") && (
+              <Badge tone="neutral">
+                {(story.matchSources ?? []).includes("portfolio") ? "Portfolio + Watchlist" : "Watchlist"}
+              </Badge>
+            )}
 
             <Badge tone="neutral">{story.source}</Badge>
             <Badge tone="warning">{story.publishedAt}</Badge>
@@ -830,13 +840,17 @@ function DetailPanel({
             </div>
           )}
 
-          {/* Portfolio matches — market only */}
+          {/* Portfolio / watchlist matches — market only */}
           {isMarket &&
-            story.isPortfolioMatch &&
+            (story.isPortfolioMatch || story.isWatchlistMatch) &&
             (story.matchedStockTags ?? []).length > 0 && (
               <div className="space-y-3">
                 <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
-                  Portfolio matches
+                  {story.isPortfolioMatch && story.isWatchlistMatch
+                    ? "Portfolio & watchlist matches"
+                    : story.isWatchlistMatch
+                      ? "Watchlist matches"
+                      : "Portfolio matches"}
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {(story.matchedStockTags ?? []).map((tag) => (
@@ -946,8 +960,8 @@ function FeedEmptyState({
           </h2>
           <p className="mx-auto max-w-xl text-sm leading-7 text-slate-400">
             {recent
-              ? "Nothing in the current 24-hour market pool qualified for your portfolio. Try refreshing later when new articles are available."
-              : <>Go to the Analysis page and press <strong>Refresh news &amp; analysis</strong> to fetch the latest articles and build your feed.</>}
+              ? "Nothing in the current 24-hour market pool qualified for your portfolio or watchlist. New articles are checked automatically every 20 minutes."
+              : "Your feed updates automatically every 20 minutes. If your feed is empty, check back soon or add more holdings and watchlist items."}
           </p>
           {failedOrPartial && ingest?.detail ? (
             <p className="mx-auto max-w-xl text-sm leading-7 text-amber-400">

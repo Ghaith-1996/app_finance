@@ -1,9 +1,17 @@
-import type { FeedMode, NewsItem } from "@/lib/types";
+import type { FeedMode, MatchSource, NewsItem } from "@/lib/types";
 
 import { cn, effectLabel, impactTone } from "@/lib/utils";
 
 import { Badge } from "@/components/ui/badge";
 import { isMarketHeadlineSource } from "@/lib/services/news/source-config";
+
+function matchSourceLabel(sources: MatchSource[]): string | null {
+  const has = (s: MatchSource) => sources.includes(s);
+  if (has("portfolio") && has("watchlist")) return "Portfolio + Watchlist";
+  if (has("watchlist")) return "Watchlist";
+  if (has("portfolio")) return "Portfolio";
+  return null;
+}
 
 function formatFeedTimeAgo(minutes: number): string {
   if (minutes < 60) return `${minutes}M AGO`;
@@ -82,6 +90,25 @@ export function NewsFeedCard({
               In portfolio
             </span>
           ) : null}
+          {isMarket && story.isWatchlistMatch && !story.isPortfolioMatch ? (
+            <span className="rounded-lg bg-violet-500/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-violet-400">
+              Watchlist
+            </span>
+          ) : null}
+          {isMarket && story.isPortfolioMatch && story.isWatchlistMatch ? (
+            <span className="rounded-lg bg-violet-500/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-violet-400">
+              + Watchlist
+            </span>
+          ) : null}
+          {!isMarket && (() => {
+            const label = matchSourceLabel(story.matchSources ?? []);
+            if (!label || label === "Portfolio") return null;
+            return (
+              <span className="rounded-lg bg-violet-500/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-violet-400">
+                {label}
+              </span>
+            );
+          })()}
         </div>
         <p className="text-right text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-600">
           {meta}

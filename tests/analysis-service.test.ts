@@ -86,6 +86,17 @@ function createSupabaseMock({
         };
       }
 
+      if (table === "watchlist_items") {
+        return {
+          select: () => ({
+            eq: async () => ({
+              data: [],
+              error: null,
+            }),
+          }),
+        };
+      }
+
       if (table === "news_items") {
         return {
           select: (_columns: string, opts?: { count?: string; head?: boolean }) => {

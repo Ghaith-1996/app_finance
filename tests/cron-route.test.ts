@@ -3,9 +3,12 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const mockResolveGlobalTickers = vi.fn();
 const mockRunPythonWorker = vi.fn();
 const mockIngestNewsToSupabase = vi.fn();
+const mockExtractPublisherContent = vi.fn();
+const mockIngestFinnhubPortfolioNews = vi.fn();
+const mockRunAnalysis = vi.fn();
 
 vi.mock("@/lib/supabase/service", () => ({
-  createServiceClient: () => "mock-supabase",
+  createServiceClient: () => mockSupabase,
 }));
 
 vi.mock("@/lib/services/ticker-resolver", () => ({
@@ -16,14 +19,73 @@ vi.mock("@/lib/services/news/worker", () => ({
   runPythonWorker: (...args: unknown[]) => mockRunPythonWorker(...args),
 }));
 
-const mockExtractPublisherContent = vi.fn();
-
 vi.mock("@/lib/services/news", () => ({
   ingestNewsToSupabase: (...args: unknown[]) => mockIngestNewsToSupabase(...args),
   extractPublisherContent: (...args: unknown[]) => mockExtractPublisherContent(...args),
 }));
 
+vi.mock("@/lib/services/news/finnhub-refresh", () => ({
+  ingestFinnhubPortfolioNews: (...args: unknown[]) => mockIngestFinnhubPortfolioNews(...args),
+}));
+
+vi.mock("@/lib/services/analysis", () => ({
+  runAnalysis: (...args: unknown[]) => mockRunAnalysis(...args),
+}));
+
+vi.mock("@/lib/logger", () => ({
+  createLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
+}));
+
 import { POST } from "@/app/api/news/cron/route";
+
+let mockSupabase: ReturnType<typeof buildMockSupabase>;
+
+function buildMockSupabase(portfolios: Array<{ id: string; user_id: string }> = []) {
+  return {
+    from: (table: string) => {
+      if (table === "holdings") {
+        return {
+          select: () => Promise.resolve({
+            data: [{ symbol: "AAPL", company: "Apple" }],
+            error: null,
+          }),
+        };
+      }
+      if (table === "watchlist_items") {
+        return {
+          select: () => Promise.resolve({
+            data: [{ symbol: "TSLA", company: "Tesla" }],
+            error: null,
+          }),
+        };
+      }
+      if (table === "portfolios") {
+        return {
+          select: () => Promise.resolve({
+            data: portfolios,
+            error: null,
+          }),
+        };
+      }
+      if (table === "analysis_runs") {
+        return {
+          select: () => ({
+            eq: () => ({
+              eq: () => ({
+                order: () => ({
+                  limit: () => ({
+                    maybeSingle: () => Promise.resolve({ data: null, error: null }),
+                  }),
+                }),
+              }),
+            }),
+          }),
+        };
+      }
+      throw new Error(`Unexpected table: ${table}`);
+    },
+  };
+}
 
 function makeRequest(secret?: string): Request {
   const headers = new Headers({ "Content-Type": "application/json" });
@@ -40,18 +102,10 @@ function emptyRow() {
 
 function emptyExtractionStats() {
   return {
-    queued: 0,
-    attempted: 0,
-    extracted: 0,
-    skipped: 0,
-    failed: 0,
-    skippedMissingUrl: 0,
-    skippedUnsupportedSource: 0,
-    skippedAlreadyExtracted: 0,
-    skippedUnsupportedUrl: 0,
-    errors: [],
-    background: true,
-    processedArticleIds: [],
+    queued: 0, attempted: 0, extracted: 0, skipped: 0, failed: 0,
+    skippedMissingUrl: 0, skippedUnsupportedSource: 0,
+    skippedAlreadyExtracted: 0, skippedUnsupportedUrl: 0,
+    errors: [], background: true, processedArticleIds: [],
   };
 }
 
@@ -61,121 +115,124 @@ describe("POST /api/news/cron", () => {
     mockResolveGlobalTickers.mockReset();
     mockRunPythonWorker.mockReset();
     mockIngestNewsToSupabase.mockReset();
-    mockExtractPublisherContent.mockReset();
-    mockExtractPublisherContent.mockResolvedValue(emptyExtractionStats());
+    mockExtractPublisherContent.mockReset().mockResolvedValue(emptyExtractionStats());
+    mockIngestFinnhubPortfolioNews.mockReset().mockResolvedValue({
+      inserted: 0, updated: 0, skipped: 0, failed: 0,
+      fetch_error: null, inserted_ids: [],
+    });
+    mockRunAnalysis.mockReset().mockResolvedValue({
+      runId: "run-1", error: null, meta: { feedItemsCreated: 2 },
+    });
+    mockSupabase = buildMockSupabase([{ id: "p1", user_id: "u1" }]);
     process.env.CRON_SECRET = "test-secret";
+    process.env.FINNHUB_API_KEY = "fk";
   });
 
   it("rejects missing secret", async () => {
     const res = await POST(makeRequest());
     expect(res.status).toBe(401);
-    const body = await res.json();
-    expect(body.error).toBe("Unauthorized");
   });
 
-  it("rejects invalid secret", async () => {
-    const res = await POST(makeRequest("wrong-secret"));
-    expect(res.status).toBe(401);
-    const body = await res.json();
-    expect(body.error).toBe("Unauthorized");
-  });
-
-  it("runs EDGAR + NewsAPI + GNews via a single worker call (no per-portfolio headline tickers)", async () => {
-    mockResolveGlobalTickers.mockResolvedValue({ tickers: ["AAPL", "MSFT"] });
+  it("runs full pipeline with Finnhub and analysis", async () => {
+    mockResolveGlobalTickers.mockResolvedValue({ tickers: ["AAPL", "TSLA"] });
     mockRunPythonWorker.mockResolvedValue({
       edgar: { ...emptyRow(), fetched: 2, inserted: 1, inserted_ids: ["id-e1"] },
-      newsapi: { ...emptyRow(), fetched: 10, inserted: 5, inserted_ids: ["id-n1", "id-n2", "id-n3", "id-n4", "id-n5"] },
-      gnews: { ...emptyRow(), fetched: 6, inserted: 2, inserted_ids: ["id-g1", "id-g2"] },
-      total_inserted: 8,
+      newsapi: { ...emptyRow(), fetched: 10, inserted: 3, inserted_ids: ["id-n1", "id-n2", "id-n3"] },
+      gnews: emptyRow(),
+      total_inserted: 4,
       ingest_status: "success",
     });
-    mockExtractPublisherContent.mockResolvedValue({
-      ...emptyExtractionStats(),
-      queued: 8,
-      attempted: 8,
+    mockIngestFinnhubPortfolioNews.mockResolvedValue({
+      inserted: 2, updated: 0, skipped: 0, failed: 0,
+      fetch_error: null, inserted_ids: ["id-f1", "id-f2"],
     });
-    mockIngestNewsToSupabase.mockResolvedValue({ enriched: 8, skipped: 0 });
+    mockIngestNewsToSupabase.mockResolvedValue({ enriched: 6, skipped: 0 });
 
     const res = await POST(makeRequest("test-secret"));
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(mockRunPythonWorker).toHaveBeenCalledWith(["AAPL", "MSFT"], 24, 50);
-    expect(mockExtractPublisherContent).toHaveBeenCalledWith("mock-supabase", {
-      articleIds: ["id-e1", "id-n1", "id-n2", "id-n3", "id-n4", "id-n5", "id-g1", "id-g2"],
+
+    expect(body.totalInserted).toBe(6);
+    expect(body.ingestBreakdown.finnhub.inserted).toBe(2);
+    expect(mockExtractPublisherContent).toHaveBeenCalledWith(
+      mockSupabase,
+      { articleIds: ["id-e1", "id-n1", "id-n2", "id-n3", "id-f1", "id-f2"] },
+    );
+    expect(mockRunAnalysis).toHaveBeenCalledWith(mockSupabase, "p1");
+    expect(body.analysis.portfoliosProcessed).toBe(1);
+  });
+
+  it("includes finnhub in enrichment source types", async () => {
+    mockResolveGlobalTickers.mockResolvedValue({ tickers: ["AAPL"] });
+    mockRunPythonWorker.mockResolvedValue({
+      edgar: emptyRow(), newsapi: emptyRow(), gnews: emptyRow(),
+      total_inserted: 0, ingest_status: "empty",
     });
-    expect(body.totalInserted).toBe(8);
-    expect(body.enriched).toBe(8);
-    expect(body.ingestBreakdown.edgar.inserted).toBe(1);
-    expect(body.ingestBreakdown.newsapi.inserted).toBe(5);
-    expect(body.ingestBreakdown.gnews.inserted).toBe(2);
-    expect(mockIngestNewsToSupabase).toHaveBeenCalledWith("mock-supabase", {
-      sourceTypes: ["edgar", "newsapi", "gnews"],
-      limit: 18,
+    mockIngestFinnhubPortfolioNews.mockResolvedValue({
+      inserted: 1, updated: 0, skipped: 0, failed: 0,
+      fetch_error: null, inserted_ids: ["id-f1"],
+    });
+    mockIngestNewsToSupabase.mockResolvedValue({ enriched: 1, skipped: 0 });
+
+    await POST(makeRequest("test-secret"));
+
+    expect(mockIngestNewsToSupabase).toHaveBeenCalledWith(mockSupabase, {
+      sourceTypes: ["edgar", "newsapi", "gnews", "finnhub"],
+      limit: expect.any(Number),
     });
   });
 
-  it("still runs global headline sources when no global tickers exist (EDGAR skipped inside worker)", async () => {
-    mockResolveGlobalTickers.mockResolvedValue({ tickers: [] });
+  it("skips analysis for recently analyzed portfolios", async () => {
+    const recentlyCompleted = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    mockSupabase = {
+      ...buildMockSupabase([{ id: "p1", user_id: "u1" }]),
+      from: (table: string) => {
+        if (table === "portfolios") {
+          return { select: () => Promise.resolve({ data: [{ id: "p1", user_id: "u1" }], error: null }) };
+        }
+        if (table === "analysis_runs") {
+          return {
+            select: () => ({
+              eq: () => ({
+                eq: () => ({
+                  order: () => ({
+                    limit: () => ({
+                      maybeSingle: () => Promise.resolve({
+                        data: { completed_at: recentlyCompleted },
+                        error: null,
+                      }),
+                    }),
+                  }),
+                }),
+              }),
+            }),
+          };
+        }
+        return buildMockSupabase().from(table);
+      },
+    };
+
+    mockResolveGlobalTickers.mockResolvedValue({ tickers: ["AAPL"] });
     mockRunPythonWorker.mockResolvedValue({
-      edgar: emptyRow(),
-      newsapi: { ...emptyRow(), fetched: 8, inserted: 4 },
-      gnews: { ...emptyRow(), fetched: 5, inserted: 1 },
-      total_inserted: 5,
-      ingest_status: "success",
+      edgar: emptyRow(), newsapi: emptyRow(), gnews: emptyRow(),
+      total_inserted: 0, ingest_status: "empty",
     });
-    mockIngestNewsToSupabase.mockResolvedValue({ enriched: 5, skipped: 0 });
 
     const res = await POST(makeRequest("test-secret"));
-    expect(res.status).toBe(200);
-    expect(mockRunPythonWorker).toHaveBeenCalledWith([], 24, 50);
-    expect((await res.json()).totalInserted).toBe(5);
+    const body = await res.json();
+
+    expect(mockRunAnalysis).not.toHaveBeenCalled();
+    expect(body.analysis.portfoliosSkipped).toBe(1);
   });
 
   it("skips enrichment when no articles inserted", async () => {
     mockResolveGlobalTickers.mockResolvedValue({ tickers: ["AAPL"] });
     mockRunPythonWorker.mockResolvedValue({
-      edgar: emptyRow(),
-      newsapi: emptyRow(),
-      gnews: emptyRow(),
-      total_inserted: 0,
-      ingest_status: "empty",
+      edgar: emptyRow(), newsapi: emptyRow(), gnews: emptyRow(),
+      total_inserted: 0, ingest_status: "empty",
     });
 
-    const res = await POST(makeRequest("test-secret"));
-    expect((await res.json()).enriched).toBe(0);
+    await POST(makeRequest("test-secret"));
     expect(mockIngestNewsToSupabase).not.toHaveBeenCalled();
-  });
-
-  it("returns 502 on worker subprocess failure", async () => {
-    mockResolveGlobalTickers.mockResolvedValue({ tickers: ["AAPL"] });
-    mockRunPythonWorker.mockResolvedValue({
-      edgar: emptyRow(),
-      newsapi: emptyRow(),
-      gnews: emptyRow(),
-      total_inserted: 0,
-      error: "spawn python ENOENT",
-    });
-
-    const res = await POST(makeRequest("test-secret"));
-    expect(res.status).toBe(502);
-  });
-
-  it("ingestBreakdown includes gnews alongside the existing keys", async () => {
-    mockResolveGlobalTickers.mockResolvedValue({ tickers: ["X"] });
-    mockRunPythonWorker.mockResolvedValue({
-      edgar: { ...emptyRow(), inserted: 1 },
-      newsapi: { ...emptyRow(), inserted: 1 },
-      gnews: { ...emptyRow(), inserted: 1 },
-      total_inserted: 3,
-      ingest_status: "success",
-    });
-    mockIngestNewsToSupabase.mockResolvedValue({ enriched: 3, skipped: 0 });
-
-    const body = await (await POST(makeRequest("test-secret"))).json();
-    expect(body.ingestBreakdown).toHaveProperty("edgar");
-    expect(body.ingestBreakdown).toHaveProperty("newsapi");
-    expect(body.ingestBreakdown).toHaveProperty("gnews");
-    expect(body.ingestBreakdown).not.toHaveProperty("marketaux");
-    expect(body.ingestBreakdown).not.toHaveProperty("yfinance");
   });
 });

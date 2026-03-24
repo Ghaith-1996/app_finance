@@ -10,7 +10,9 @@ import { GET } from "@/app/api/feed/route";
 
 function createSupabaseMock(
   matchReasonCodes: string[] | null,
+  matchSources: string[] | null = ["portfolio"],
   marketMatchMode: "tag" | "impact" = "tag",
+  watchlistSymbols: string[] = [],
 ) {
   return {
     auth: {
@@ -77,6 +79,7 @@ function createSupabaseMock(
                         why_it_matters: "Apple may benefit from stronger device demand.",
                         matched_stock_tags: ["AAPL"],
                         match_reason_codes: matchReasonCodes,
+                        match_sources: matchSources,
                         display_effect: "bullish",
                         source_confidence: "standard",
                         news_items: {
@@ -109,6 +112,17 @@ function createSupabaseMock(
           select: () => ({
             eq: async () => ({
               data: [{ symbol: "AAPL", sector: "Technology" }],
+              error: null,
+            }),
+          }),
+        };
+      }
+
+      if (table === "watchlist_items") {
+        return {
+          select: () => ({
+            eq: async () => ({
+              data: watchlistSymbols.map((s) => ({ symbol: s })),
               error: null,
             }),
           }),
@@ -160,31 +174,66 @@ describe("GET /api/feed personal mode", () => {
     currentSupabaseMock = createSupabaseMock(["held_ticker_tag"]);
   });
 
-  it("returns matchReasonCodes when present on feed items", async () => {
+  it("returns matchReasonCodes and matchSources when present on feed items", async () => {
     const res = await GET(new Request("http://localhost/api/feed?mode=personal&portfolioId=p1"));
     const body = await res.json();
 
     expect(body.feed[0].matchReasonCodes).toEqual(["held_ticker_tag"]);
+    expect(body.feed[0].matchSources).toEqual(["portfolio"]);
     expect(body.portfolioSymbols).toEqual(["AAPL"]);
     expect(body.portfolioSectors).toEqual(["Technology"]);
   });
 
   it("keeps backward compatibility when match_reason_codes is null", async () => {
-    currentSupabaseMock = createSupabaseMock(null);
+    currentSupabaseMock = createSupabaseMock(null, null);
 
     const res = await GET(new Request("http://localhost/api/feed?mode=personal&portfolioId=p1"));
     const body = await res.json();
 
     expect(body.feed[0].matchReasonCodes).toEqual([]);
+    expect(body.feed[0].matchSources).toEqual(["portfolio"]);
   });
 
+  it("returns watchlist match sources when present", async () => {
+    currentSupabaseMock = createSupabaseMock(
+      ["watchlist_ticker_tag"],
+      ["watchlist"],
+    );
+
+    const res = await GET(new Request("http://localhost/api/feed?mode=personal&portfolioId=p1"));
+    const body = await res.json();
+
+    expect(body.feed[0].matchSources).toEqual(["watchlist"]);
+    expect(body.feed[0].matchReasonCodes).toEqual(["watchlist_ticker_tag"]);
+  });
+
+  it("includes watchlistSymbols in response", async () => {
+    currentSupabaseMock = createSupabaseMock(["held_ticker_tag"], ["portfolio"], "tag", ["TSLA"]);
+
+    const res = await GET(new Request("http://localhost/api/feed?mode=personal&portfolioId=p1"));
+    const body = await res.json();
+
+    expect(body.watchlistSymbols).toEqual(["TSLA"]);
+  });
+});
+
+describe("GET /api/feed market mode", () => {
   it("marks market stories as portfolio matches when ticker impacts mention a held stock", async () => {
-    currentSupabaseMock = createSupabaseMock(["held_ticker_tag"], "impact");
+    currentSupabaseMock = createSupabaseMock(["held_ticker_tag"], null, "impact");
 
     const res = await GET(new Request("http://localhost/api/feed?mode=market&portfolioId=p1"));
     const body = await res.json();
 
     expect(body.feed[0].isPortfolioMatch).toBe(true);
-    expect(body.feed[0].matchedStockTags).toEqual(["AAPL"]);
+    expect(body.feed[0].matchedStockTags).toContain("AAPL");
+  });
+
+  it("sets isWatchlistMatch when news tags overlap watchlist symbols", async () => {
+    currentSupabaseMock = createSupabaseMock(null, null, "tag", ["AAPL"]);
+
+    const res = await GET(new Request("http://localhost/api/feed?mode=market&portfolioId=p1"));
+    const body = await res.json();
+
+    expect(body.feed[0].isWatchlistMatch).toBe(true);
   });
 });

@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
   MatchReasonCode,
+  MatchSource,
   StockEffect,
   TickerImpact,
 } from "@/lib/types";
@@ -294,6 +295,17 @@ export async function runAnalysis(
       thesis: r.thesis ?? "",
     }));
 
+    const { data: watchlistRows } = await supabase
+      .from("watchlist_items")
+      .select("symbol")
+      .eq("user_id", portfolio.user_id);
+
+    const watchlistSymbols = new Set(
+      (watchlistRows ?? [])
+        .map((r) => (r.symbol as string).toUpperCase())
+        .filter(Boolean),
+    );
+
     await updateRun("mapping_news", 35);
 
     const newsCutoff = newsWindowCutoffIso();
@@ -391,12 +403,11 @@ export async function runAnalysis(
       let displayEffect: StockEffect = (news.overall_effect as StockEffect) ?? "neutral";
       const articleTags: string[] = (news.stock_tags as string[]) ?? [];
       const holdingSymbols = new Set(holdings.map((h) => h.symbol.toUpperCase()));
-      const directMatch = resolveDirectStockMatch(
-        articleTags,
-        tickerImpacts,
-        holdingSymbols,
-      );
-      const hasDirectMatch = directMatch.matchedSymbols.length > 0;
+
+      const portfolioMatch = resolveDirectStockMatch(articleTags, tickerImpacts, holdingSymbols);
+      const watchlistMatch = resolveDirectStockMatch(articleTags, tickerImpacts, watchlistSymbols);
+      const hasPortfolioDirectMatch = portfolioMatch.matchedSymbols.length > 0;
+      const hasWatchlistDirectMatch = watchlistMatch.matchedSymbols.length > 0;
 
       let boostedRelevance = 0;
       let finalHoldings: string[] = [];
@@ -404,46 +415,65 @@ export async function runAnalysis(
       let finalWhyItMatters = "";
       let finalMatchedStockTags: string[] = [];
       let finalMatchReasonCodes: MatchReasonCode[] = [];
+      const finalMatchSources: MatchSource[] = [];
 
-      if (hasDirectMatch) {
-        boostedRelevance = Math.min(100, directMatchRelevance(directMatch) + sourceBoost);
-        finalHoldings = directMatch.matchedSymbols;
+      if (hasPortfolioDirectMatch) {
+        finalMatchSources.push("portfolio");
+        boostedRelevance = Math.min(100, directMatchRelevance(portfolioMatch) + sourceBoost);
+        finalHoldings = portfolioMatch.matchedSymbols;
         finalSectors = [...new Set(
           holdings
-            .filter((holding) => directMatch.matchedSymbols.includes(holding.symbol.toUpperCase()))
+            .filter((holding) => portfolioMatch.matchedSymbols.includes(holding.symbol.toUpperCase()))
             .map((holding) => holding.sector),
         )];
-        finalWhyItMatters = directWhyItMatters(directMatch, holdings, tickerImpacts);
-        finalMatchedStockTags = directMatch.matchedTags;
-        finalMatchReasonCodes = directMatch.matchReasonCodes;
+        finalWhyItMatters = directWhyItMatters(portfolioMatch, holdings, tickerImpacts);
+        finalMatchedStockTags = portfolioMatch.matchedTags;
+        finalMatchReasonCodes = [...portfolioMatch.matchReasonCodes];
+
+        if (hasWatchlistDirectMatch) {
+          finalMatchSources.push("watchlist");
+          const wlCodes: MatchReasonCode[] = [];
+          if (watchlistMatch.matchedTags.length > 0) wlCodes.push("watchlist_ticker_tag");
+          if (watchlistMatch.matchedImpacts.length > 0) wlCodes.push("watchlist_ticker_impact");
+          finalMatchReasonCodes.push(...wlCodes);
+          for (const tag of watchlistMatch.matchedTags) {
+            if (!finalMatchedStockTags.includes(tag)) finalMatchedStockTags.push(tag);
+          }
+        }
+      } else if (hasWatchlistDirectMatch) {
+        finalMatchSources.push("watchlist");
+        boostedRelevance = Math.min(100, 75 + sourceBoost);
+        finalMatchedStockTags = watchlistMatch.matchedTags;
+        const wlCodes: MatchReasonCode[] = [];
+        if (watchlistMatch.matchedTags.length > 0) wlCodes.push("watchlist_ticker_tag");
+        if (watchlistMatch.matchedImpacts.length > 0) wlCodes.push("watchlist_ticker_impact");
+        finalMatchReasonCodes = wlCodes;
+        finalWhyItMatters = `This article directly mentions watchlist symbol${watchlistMatch.matchedSymbols.length > 1 ? "s" : ""} ${watchlistMatch.matchedSymbols.join(", ")}.`;
       } else {
+        if (holdings.length === 0) {
+          step++;
+          await updateRun("generating_insights", 50 + Math.floor((step / total) * 45));
+          continue;
+        }
+
         const assessment = await ai.assessPortfolioMatch(article, holdings);
         boostedRelevance = Math.min(100, assessment.relevanceScore + sourceBoost);
 
         if (boostedRelevance < ANALYSIS_RELEVANCE_MIN) {
           step++;
-          await updateRun(
-            "generating_insights",
-            50 + Math.floor((step / total) * 45),
-          );
+          await updateRun("generating_insights", 50 + Math.floor((step / total) * 45));
           continue;
         }
 
-        const validatedIndirect = validateIndirectPortfolioMatch(
-          article,
-          holdings,
-          assessment,
-        );
+        const validatedIndirect = validateIndirectPortfolioMatch(article, holdings, assessment);
 
         if (validatedIndirect.matchReasonCodes.length === 0) {
           step++;
-          await updateRun(
-            "generating_insights",
-            50 + Math.floor((step / total) * 45),
-          );
+          await updateRun("generating_insights", 50 + Math.floor((step / total) * 45));
           continue;
         }
 
+        finalMatchSources.push("portfolio");
         finalHoldings = validatedIndirect.matchedHoldings;
         finalSectors = validatedIndirect.matchedSectors;
         finalWhyItMatters = validatedIndirect.whyItMatters;
@@ -481,6 +511,7 @@ export async function runAnalysis(
         why_it_matters: finalWhyItMatters,
         matched_stock_tags: finalMatchedStockTags,
         match_reason_codes: finalMatchReasonCodes,
+        match_sources: finalMatchSources,
         display_effect: displayEffect,
         source_confidence: sourceConfidence,
       });

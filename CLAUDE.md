@@ -56,6 +56,12 @@ These decisions were made in the current thread and are reflected in code/doc ch
 - article chat no longer falls back to the canned stub reply in production; provider failures now surface a 503 with a user-facing temporary-unavailable message
 - article chat output budget was raised from `350` to `2000` tokens across Azure, OpenAI, OpenRouter, and Anthropic via `lib/services/ai/constants.ts`
 - added regression test `tests/article-chat-token-budget.test.ts` to assert the 2000-token budget for all four providers
+- first-time OAuth users are now gated through `/complete-profile` until `user_profiles.first_name`, `last_name`, and `handle` are all present
+- `/settings` now includes editable profile fields (first name, last name, username) backed by `lib/actions/profile.ts`
+- `components/app/user-menu.tsx` is now an avatar dropdown with `Settings` and `Sign out`, and it refreshes after profile saves via a client-side `profile-updated` event
+- profile domain helpers/types now live in `lib/profile/utils.ts`; `lib/actions/profile.ts` is intentionally async-only because `"use server"` files cannot export sync helpers like `isProfileComplete`
+- added migration `supabase/migrations/012_user_profile_names.sql` for `user_profiles.first_name` and `user_profiles.last_name`
+- added regression coverage for the profile flow in `tests/profile-utils.test.ts`, `tests/auth-callback-route.test.ts`, and `tests/user-menu.test.tsx`
 
 Important runtime note:
 
@@ -159,6 +165,16 @@ Important conceptual split:
 
 That split is central to the product and the code.
 
+Ingestion model:
+
+- all ingestion into `news_items` happens via a 20-minute cron job (`POST /api/news/cron`)
+- the cron job builds its global ticker universe from all user holdings + all user watchlist symbols
+- it runs Python worker (EDGAR + NewsAPI + GNews) + Finnhub targeted news
+- after enrichment, it runs analysis for all portfolios automatically
+- user-triggered refresh (`/api/news/refresh`) is deprecated and no longer called by the UI
+- personal feed selection considers both portfolio holdings and watchlist symbols
+- `feed_items.match_sources` tracks whether each story matched via `"portfolio"`, `"watchlist"`, or both
+
 ## Authentication And Session Model
 
 Supabase auth is used throughout.
@@ -183,7 +199,9 @@ Login flow:
 
 - login page offers Google and GitHub OAuth
 - callback route exchanges auth code for session
-- after success, user is redirected to the requested route or `/portfolio`
+- after success, users with incomplete profile rows are redirected to `/complete-profile?redirectTo=...`
+- profile completion requires first name, last name, and username (`user_profiles.handle`)
+- users with complete profiles are redirected to the requested route or `/portfolio`
 
 Supabase clients:
 
@@ -389,17 +407,55 @@ Current state:
 - rows are clickable to select a symbol for the detail dashboard
 - links into `/feed?symbol=...` per row
 
+### `/complete-profile`
+
+Files:
+
+- `app/complete-profile/page.tsx`
+- `components/app/profile-form.tsx`
+- `lib/actions/profile.ts`
+- `lib/profile/utils.ts`
+
+Purpose:
+
+- dedicated first-login gate after OAuth
+
+Current behavior:
+
+- requires an authenticated user
+- preloads any existing/derived profile values from `user_profiles` and OAuth metadata
+- redirects completed users to the requested destination immediately
+- otherwise requires first name, last name, and username before entering the app
+
+### `/settings`
+
+Files:
+
+- `app/settings/page.tsx`
+- `components/app/profile-form.tsx`
+- `lib/actions/profile.ts`
+
+Purpose:
+
+- authenticated profile settings surface
+
+Current behavior:
+
+- allows editing first name, last name, and username
+- updates `user_profiles.display_name` from `first_name + last_name`
+- reuses the same validation and save path as first-login completion
+
 ## API Routes
 
-### `POST /api/news/refresh`
+### `POST /api/news/refresh` (deprecated)
 
 File:
 
 - `app/api/news/refresh/route.ts`
 
-This is the main authenticated full pipeline route.
+**Deprecated**: retained for admin/debug use only. No user-facing UI calls this route anymore. Production ingestion and analysis now run via the 20-minute cron job.
 
-Behavior:
+Behavior (unchanged, but no longer user-triggered):
 
 - authenticates user
 - resolves selected portfolio or latest one
@@ -410,11 +466,6 @@ Behavior:
 - enriches newly inserted articles with AI
 - runs portfolio analysis
 - returns per-stage details plus pool snapshot and analysis metadata
-
-Important conceptual behavior:
-
-- ingest is global
-- analysis is portfolio-specific
 
 ### `POST /api/analysis/run`
 
@@ -466,8 +517,11 @@ Important behavior:
 
 - feed age is capped to 24 hours for both modes
 - personal mode joins `feed_items` to `news_items`
+- personal mode returns `matchSources` per story (`"portfolio"`, `"watchlist"`, or both)
+- watchlist-only fallback: if user has no portfolio but has watchlist items, personal mode performs lightweight on-the-fly matching against `news_items` using watchlist symbols
 - market mode reads `news_items` directly
-- market mode marks stories as portfolio matches based on direct tag/impact overlap
+- market mode marks stories as portfolio matches and/or watchlist matches (`isPortfolioMatch`, `isWatchlistMatch`)
+- response includes `watchlistSymbols` array alongside existing `portfolioSymbols` and `portfolioSectors`
 
 ### `GET /api/article-chat`
 
@@ -510,13 +564,15 @@ Behavior:
 - calls `ai.answerPortfolioQuestion(...)`
 - returns `{ answer }`
 
-### `POST /api/news/ingest`
+### `POST /api/news/ingest` (deprecated)
 
 File:
 
 - `app/api/news/ingest/route.ts`
 
-Behavior:
+**Deprecated**: retained for admin/debug use only. Production ingestion now runs via the 20-minute cron job.
+
+Behavior (unchanged):
 
 - authenticated
 - resolves global ticker universe
@@ -533,11 +589,21 @@ File:
 Behavior:
 
 - secured by `CRON_SECRET`
-- unattended global ingest
-- resolves global tickers
-- runs Python worker
-- enriches inserted articles
-- does not run analysis
+- **primary ingestion path** — runs on a 20-minute schedule
+- resolves global ticker universe from **all holdings + all watchlist symbols** across all users
+- runs Python worker (EDGAR + NewsAPI + GNews)
+- runs Finnhub targeted company news for the combined ticker universe
+- extracts publisher content for newly inserted articles
+- enriches newly inserted articles with AI
+- **runs analysis for ALL portfolios** automatically
+- skips recently analyzed portfolios (15-minute cooldown)
+- returns per-portfolio analysis results with processed/skipped/error counts
+
+Important:
+
+- this is the single source of truth for fresh `news_items`
+- user-triggered refresh (`/api/news/refresh`) is deprecated
+- personal feed updates depend on this cron completing
 
 ### `GET /api/news/health`
 
@@ -589,6 +655,21 @@ Key watchlist actions:
 - `addWatchlistItem(candidate)` — upserts symbol to `watchlist_items`
 - `deleteWatchlistItem(id)` — removes from DB
 - `getWatchlistItemDetails(symbol)` — fetches Twelve Data detail for dashboard
+
+Profile actions file:
+
+- `lib/actions/profile.ts`
+
+Key profile actions:
+
+- `getCurrentUserProfile` — loads stored profile fields and derives fallbacks from OAuth metadata
+- `saveCurrentUserProfile` — validates and upserts first name, last name, display name, handle, avatar
+- `completeProfileAction` — save + redirect wrapper for `/complete-profile`
+
+Important boundary:
+
+- `lib/actions/profile.ts` is a `"use server"` module and must remain async-only
+- sync profile helpers/types such as `UserProfileFormData` and `isProfileComplete` live in `lib/profile/utils.ts`
 
 Important save semantics:
 
@@ -800,9 +881,10 @@ Main file:
 Behavior:
 
 - reads all holdings across all portfolios
-- returns sorted unique uppercased symbols
+- reads all `watchlist_items` across all users
+- combines, deduplicates, and sorts into one global ticker universe
 
-This is used for EDGAR/global ingest, not just one portfolio.
+This is used for EDGAR/global ingest and Finnhub targeted news in the cron job.
 
 ## News Pipeline
 
@@ -842,6 +924,13 @@ Current ingest sources:
 - `edgar`
 - `newsapi`
 - `gnews`
+
+Enrichable source types (eligible for AI enrichment):
+
+- `edgar`
+- `newsapi`
+- `gnews`
+- `finnhub` (added when Finnhub was included in the cron pipeline)
 
 Current headline-style source types:
 
@@ -958,31 +1047,33 @@ Core behavior:
 
 - creates/updates `analysis_runs`
 - reads holdings for the selected portfolio
+- reads the user's `watchlist_items` (resolved via `portfolio.user_id`)
 - reads newest 100 `news_items` from the last 24 hours
-- determines direct portfolio overlap first
-- otherwise uses AI portfolio match assessment
+- performs dual matching: checks articles against both portfolio holdings and watchlist symbols
 - persists `feed_items` only when relevance is high enough
 - writes `portfolio_insights`
+- persists `match_sources` (array of `"portfolio"`, `"watchlist"`, or both) on each `feed_item`
 
 Important match behavior:
 
-- direct held-ticker matches can bypass AI portfolio-match assessment
-- direct match reason codes include:
-  - `held_ticker_tag`
-  - `held_ticker_impact`
-- indirect validation currently uses:
-  - `held_company_mention`
-  - `sector_exposure_explicit`
+- portfolio direct match: `held_ticker_tag`, `held_ticker_impact`
+- watchlist direct match: `watchlist_ticker_tag`, `watchlist_ticker_impact`
+- if both portfolio and watchlist match, reason codes and match sources are merged
+- watchlist-only matches get a fixed relevance of 75 (no AI assessment)
+- portfolio-only indirect matches still use AI portfolio match assessment
+- `match_sources` column tracks which asset set triggered each feed item
 
 Important guardrails:
 
 - generic "why it matters" text is sanitized away
 - sector-only matches require stronger evidence
 - no generic fallback feed exists anymore
+- when the user has no holdings but has watchlist items, AI assessment is skipped and only direct watchlist matching runs
 
 Implication:
 
-- personal feed can legitimately be empty even when the global news pool is not
+- personal feed can include stories matched through watchlist only, portfolio only, or both
+- personal feed can still be empty even when the global news pool is not
 
 ## AI Layer
 
@@ -1146,6 +1237,7 @@ Source of truth:
 - `supabase/migrations/009_watchlist_items.sql`
 - `supabase/migrations/010_article_extractions.sql`
 - `supabase/migrations/011_community.sql`
+- `supabase/migrations/013_feed_match_sources.sql`
 
 ### Core enums from initial schema
 
@@ -1260,6 +1352,7 @@ Later fields:
 - `display_effect`
 - `source_confidence`
 - `match_reason_codes`
+- `match_sources` (added by migration 013: array of `"portfolio"`, `"watchlist"`, or both)
 
 ### `portfolio_insights`
 
@@ -1322,6 +1415,27 @@ Constraints:
 - reuses `set_updated_at()` trigger
 
 Migration: `009_watchlist_items.sql`
+
+### `user_profiles`
+
+Purpose:
+
+- optional but now actively used identity/profile metadata for authenticated users
+
+Key fields:
+
+- `user_id`
+- `first_name`
+- `last_name`
+- `display_name`
+- `avatar_url`
+- `handle`
+
+Notes:
+
+- `handle` remains the unique username field
+- `display_name` is now written as `first_name + last_name`
+- `first_name` and `last_name` were added in `012_user_profile_names.sql`
 
 ## RLS Model
 
@@ -1454,14 +1568,18 @@ Current files:
 - `logger.test.ts`
 - `portfolio-match-parser.test.ts`
 - `refresh-route.test.ts`
+- `profile-utils.test.ts`
+- `auth-callback-route.test.ts`
+- `user-menu.test.tsx`
 
 Coverage themes:
 
 - prompt shape
 - analysis constants and gating behavior
-- analysis trigger UI state
-- feed route and feed view behavior
-- refresh/cron route orchestration
+- analysis trigger UI state (status-only, no refresh button)
+- feed route: personal mode with matchSources/matchReasonCodes, market mode with isWatchlistMatch, watchlist-only fallback
+- cron route: full pipeline with Finnhub, analysis-for-all, cooldown skipping
+- refresh route orchestration (deprecated but tested)
 - Finnhub targeted ingest
 - Finnhub provider error classification (missing key, 401/403, 429, timeout, bad payload, no match, valid search)
 - GNews query building
@@ -1470,6 +1588,7 @@ Coverage themes:
 - server-side cache (TTL expiry, fetch-through, hit/miss)
 - structured logger (info/warn/error, scoped, data serialization)
 - env validation (require/missing, hasKey)
+- profile validation/completeness helpers, callback redirect gating, and avatar dropdown behavior
 
 Known testing limitation:
 
@@ -1520,9 +1639,14 @@ Completed workstreams:
 - the public OpenAI provider is still hardcoded to `gpt-4o-mini`
 - article chat output budget is now 2000 tokens, so longer answers are possible but provider-side truncation is still possible on very long prompts
 - local verification of `tests/article-chat-token-budget.test.ts` is currently blocked in this environment by a Vitest startup `spawn EPERM` error after working around PowerShell `npm.ps1` policy restrictions
+- local Vitest execution for the new profile tests is blocked by the same `spawn EPERM` startup issue
 - personal feed emptiness is valid and expected if nothing scores above threshold
+- personal feed can now include watchlist-only matches (relevance 75, no AI assessment)
+- newly added watchlist symbols affect the feed on the next cron cycle, not immediately
+- the `/api/news/refresh` and `/api/news/ingest` routes are deprecated but still functional for admin use
+- the "Refresh news & analysis" button has been removed from the analysis page UI
 - generated Python `__pycache__` files are present and should usually be ignored
-- some pre-existing tests (`feed-view`, `gnews-targeting`, `analysis-service`) may fail until mocks match current routes; `refresh-route` / `cron-route` mock `extractPublisherContent`
+- some pre-existing tests (`feed-view`, `gnews-targeting`, `analysis-service`) may fail until mocks match current routes
 
 ## Community Social Home (`/home`)
 

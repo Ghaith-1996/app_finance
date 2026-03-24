@@ -42,8 +42,8 @@ export default async function AnalysisPage({
   return (
     <AppShell
       eyebrow="Analysis"
-      title="Your AI brief is being prepared"
-      description="This step gives the product time to map holdings, connect market coverage, and write explanations before the user lands in the daily brief."
+      title="Your AI brief updates automatically"
+      description="Every 20 minutes, the system ingests new articles and matches them against your portfolio holdings and watchlist symbols."
       activePath="/analysis"
       actions={
         <>
@@ -84,8 +84,8 @@ export default async function AnalysisPage({
                   Create a portfolio first
                 </h2>
                 <p className="max-w-2xl text-sm leading-7 text-slate-400">
-                  Go to onboarding to add a portfolio, then return here to run
-                  the AI analysis.
+                  Go to onboarding to add a portfolio. Once created, your feed
+                  will update automatically every 20 minutes.
                 </p>
                 <Link href="/onboarding" className={buttonStyles({ size: "lg" })}>
                   Go to onboarding
@@ -155,7 +155,7 @@ export default async function AnalysisPage({
                 ))
               ) : (
                 <p className="text-sm text-slate-500">
-                  Run analysis to generate insights.
+                  Insights will appear after the next automatic analysis run.
                 </p>
               )}
             </div>

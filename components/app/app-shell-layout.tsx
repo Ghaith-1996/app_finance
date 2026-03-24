@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Activity,
   ArrowLeft,
@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 
 import { UserMenu } from "@/components/app/user-menu";
+import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
 const STORAGE_KEY = "portfolio-signal-sidebar-collapsed";
@@ -67,6 +68,8 @@ export function AppShellLayout({
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [overviewOpen, setOverviewOpen] = useState(true);
+  const [showOnboarding, setShowOnboarding] = useState(true);
+  const supabase = useMemo(() => createClient(), []);
 
   useEffect(() => {
     try {
@@ -81,6 +84,35 @@ export function AppShellLayout({
     if (isOverviewSection(pathname)) setOverviewOpen(true);
   }, [pathname]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadPortfolioVisibility() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        if (!cancelled) setShowOnboarding(true);
+        return;
+      }
+
+      const { data, error } = await supabase.from("portfolios").select("id").limit(1);
+      if (cancelled) return;
+      if (error) {
+        setShowOnboarding(true);
+        return;
+      }
+      setShowOnboarding((data?.length ?? 0) === 0);
+    }
+
+    void loadPortfolioVisibility();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [supabase]);
+
   const persistCollapsed = useCallback((next: boolean) => {
     setCollapsed(next);
     try {
@@ -91,6 +123,9 @@ export function AppShellLayout({
   }, []);
 
   const OverviewIcon = LayoutDashboard;
+  const visibleMainNav = showOnboarding
+    ? mainNav
+    : mainNav.filter((item) => item.href !== "/onboarding");
 
   return (
     <div className="flex min-h-screen bg-background text-foreground">
@@ -143,7 +178,7 @@ export function AppShellLayout({
               Navigation
             </p>
 
-            {mainNav.map((item) => {
+            {visibleMainNav.map((item) => {
               const Icon = item.icon;
               const isActive = pathname === item.href;
               return (
@@ -259,7 +294,7 @@ export function AppShellLayout({
             <span className="text-sm font-semibold text-slate-200">PortfolioSignal</span>
           </Link>
           <nav className="flex max-w-[65%] items-center gap-1 overflow-x-auto">
-            {mainNav.map((item) => {
+            {visibleMainNav.map((item) => {
               const Icon = item.icon;
               return (
                 <Link

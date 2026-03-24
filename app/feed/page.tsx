@@ -74,12 +74,6 @@ export default async function FeedPage({
       activePath="/feed"
       actions={
         <>
-          <Link
-            href={portfolioId ? `/analysis?portfolioId=${portfolioId}` : "/analysis"}
-            className={buttonStyles({ variant: "ghost", className: "text-slate-500" })}
-          >
-            Refresh analysis
-          </Link>
           <Link href="/portfolio" className={buttonStyles({ size: "lg" })}>
             View portfolio
             <ArrowRight className="ml-2 h-4 w-4" />
@@ -141,7 +135,7 @@ export default async function FeedPage({
             <p className="text-3xl font-semibold tracking-tight text-white">
               {portfolioOverview.lastAnalyzedAt}
             </p>
-            <p className="text-sm text-slate-500">Compound analysis refreshed</p>
+            <p className="text-sm text-slate-500">Auto-updated every 20 min</p>
             <div className="pt-2">
               <div className="h-2 overflow-hidden rounded-full bg-white/5">
                 <div

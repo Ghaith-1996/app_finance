@@ -12,6 +12,10 @@ import { getNewsPoolSnapshot24h } from "@/lib/services/news/pool-snapshot";
 /**
  * POST /api/news/refresh
  *
+ * @deprecated Retained for admin/debug use only. Production ingestion and
+ * analysis now run automatically via the 20-minute cron job (POST /api/news/cron).
+ * No user-facing UI calls this route anymore.
+ *
  * Full pipeline: ingest global 24h pool → enrich → analyze portfolio.
  *
  * - EDGAR: global ticker universe (all holdings in DB), not the selected portfolio.
@@ -238,7 +242,7 @@ export async function POST(request: Request) {
     }
 
     const enrichResult = await ingestNewsToSupabase(supabase, {
-      sourceTypes: [...ENRICHABLE_SOURCE_TYPES, "finnhub"],
+      sourceTypes: [...ENRICHABLE_SOURCE_TYPES],
       limit: totalInserted + 5,
     });
 

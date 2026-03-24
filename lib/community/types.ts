@@ -51,13 +51,32 @@ export interface ActiveDiscussion {
 }
 
 const TICKER_REGEX = /\$([A-Z]{1,10})/g;
+const TICKER_HASHTAG_REGEX = /#([A-Z]{1,10})\b/g;
+const HASHTAG_REGEX = /#([A-Za-z][A-Za-z0-9_]{1,24})\b/g;
 const MAX_TICKERS_PER_POST = 5;
 const MAX_POST_LENGTH = 2000;
 const MAX_COMMENT_LENGTH = 1000;
 
 export function extractTickers(body: string): string[] {
-  const matches = [...body.matchAll(TICKER_REGEX)].map((m) => m[1]);
+  const matches = [
+    ...[...body.matchAll(TICKER_REGEX)].map((m) => m[1]),
+  ];
   return [...new Set(matches)].slice(0, MAX_TICKERS_PER_POST);
+}
+
+export function extractTickerHashtags(body: string): string[] {
+  const matches = [...body.matchAll(TICKER_HASHTAG_REGEX)].map((m) => m[1].toUpperCase());
+  return [...new Set(matches)].slice(0, MAX_TICKERS_PER_POST);
+}
+
+export function extractHashtags(body: string): string[] {
+  const tickers = new Set(extractTickers(body));
+  const matches = [...body.matchAll(HASHTAG_REGEX)]
+    .map((m) => m[1])
+    .filter((tag) => !tickers.has(tag.toUpperCase()))
+    .map((tag) => tag.toLowerCase());
+
+  return [...new Set(matches)];
 }
 
 export function validatePostBody(body: string): string | null {

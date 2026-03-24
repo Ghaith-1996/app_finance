@@ -17,7 +17,11 @@ export type MatchReasonCode =
   | "held_ticker_tag"
   | "held_ticker_impact"
   | "held_company_mention"
-  | "sector_exposure_explicit";
+  | "sector_exposure_explicit"
+  | "watchlist_ticker_tag"
+  | "watchlist_ticker_impact";
+
+export type MatchSource = "portfolio" | "watchlist";
 export type ProviderStatus = "Roadmap" | "Preview" | "Demo";
 export type AnalysisStage =
   | "queued"
@@ -195,9 +199,11 @@ export interface NewsItem {
   whyItMatters?: string;
   matchedStockTags?: string[];
   matchReasonCodes?: MatchReasonCode[];
+  matchSources?: MatchSource[];
 
   /* Market mode fields */
   isPortfolioMatch?: boolean;
+  isWatchlistMatch?: boolean;
 }
 
 export interface Testimonial {

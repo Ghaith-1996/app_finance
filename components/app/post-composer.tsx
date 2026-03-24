@@ -4,7 +4,12 @@ import { useState, useTransition } from "react";
 import { Send } from "lucide-react";
 
 import { createPost } from "@/lib/actions/community";
-import { extractTickers, validatePostBody } from "@/lib/community/types";
+import {
+  extractHashtags,
+  extractTickerHashtags,
+  extractTickers,
+  validatePostBody,
+} from "@/lib/community/types";
 import type { CommunityPost } from "@/lib/community/types";
 import { cn } from "@/lib/utils";
 
@@ -17,7 +22,8 @@ export function PostComposer({ onPostCreated }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  const tickers = extractTickers(body);
+  const tickers = [...new Set([...extractTickers(body), ...extractTickerHashtags(body)])];
+  const hashtags = extractHashtags(body);
   const charCount = body.trim().length;
   const validationError = validatePostBody(body);
   const canSubmit = !isPending && charCount > 0 && !validationError;
@@ -41,13 +47,13 @@ export function PostComposer({ onPostCreated }: Props) {
       <textarea
         value={body}
         onChange={(e) => setBody(e.target.value)}
-        placeholder="What's on your mind? Use $TICKER to tag stocks..."
+        placeholder="What's on your mind? Use $TICKER or #AAPL for stocks, or #crypto / #stocks for markets..."
         rows={3}
         maxLength={2000}
         className="w-full resize-none bg-transparent text-sm text-slate-200 placeholder:text-slate-600 focus:outline-none"
       />
 
-      {tickers.length > 0 && (
+      {(tickers.length > 0 || hashtags.length > 0) && (
         <div className="mt-2 flex flex-wrap gap-1.5">
           {tickers.map((t) => (
             <span
@@ -55,6 +61,14 @@ export function PostComposer({ onPostCreated }: Props) {
               className="rounded-md bg-brand/10 px-2 py-0.5 text-[11px] font-bold text-brand"
             >
               ${t}
+            </span>
+          ))}
+          {hashtags.map((tag) => (
+            <span
+              key={tag}
+              className="rounded-md bg-sky-500/10 px-2 py-0.5 text-[11px] font-bold text-sky-300"
+            >
+              #{tag}
             </span>
           ))}
         </div>
@@ -78,7 +92,7 @@ export function PostComposer({ onPostCreated }: Props) {
             )}
           >
             <Send className="h-3.5 w-3.5" />
-            {isPending ? "Posting…" : "Post"}
+            {isPending ? "Posting..." : "Post"}
           </button>
         </div>
       </div>

@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 
 import { AddPositionForm } from "@/components/app/add-position-form";
+import { PortfolioCsvImportFlow } from "@/components/app/portfolio-csv-import-flow";
 import { PortfolioCopilotPanel } from "@/components/app/portfolio-copilot-panel";
 import { PortfolioHoldingsTable } from "@/components/app/portfolio-holdings-table";
 import { PortfolioPerformanceChart } from "@/components/app/portfolio-performance-chart";
@@ -405,6 +406,17 @@ export default async function FullPortfolioPage() {
               </div>
 
               <AddPositionForm portfolioId={portfolioId} />
+              <div className="mt-4">
+                <PortfolioCsvImportFlow
+                  portfolioId={portfolioId}
+                  saveBehavior="refresh"
+                  title="Bulk import holdings"
+                  description="Upload a broker CSV, review the parsed holdings, then choose whether to merge into this portfolio or replace it."
+                  showEntryButton
+                  entryLabel="Import CSV"
+                  defaultOpen={false}
+                />
+              </div>
 
               {holdings.length > 0 ? (
                 <PortfolioHoldingsTable holdings={holdings} portfolioId={portfolioId} />

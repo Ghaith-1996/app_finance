@@ -4,7 +4,6 @@ import Link from "next/link";
 import { MessageCircle } from "lucide-react";
 
 import type { CommunityPost } from "@/lib/community/types";
-import { cn } from "@/lib/utils";
 
 interface Props {
   post: CommunityPost;
@@ -23,9 +22,9 @@ function timeAgo(iso: string): string {
 }
 
 function renderBodyWithTickers(body: string) {
-  const parts = body.split(/(\$[A-Z]{1,10})/g);
+  const parts = body.split(/(\$[A-Z]{1,10}|#[A-Za-z][A-Za-z0-9_]{1,24})/g);
   return parts.map((part, i) => {
-    if (/^\$[A-Z]{1,10}$/.test(part)) {
+    if (/^(\$|#)[A-Z]{1,10}$/.test(part)) {
       const ticker = part.slice(1);
       return (
         <Link
@@ -35,6 +34,13 @@ function renderBodyWithTickers(body: string) {
         >
           {part}
         </Link>
+      );
+    }
+    if (/^#[A-Za-z][A-Za-z0-9_]{1,24}$/.test(part)) {
+      return (
+        <span key={i} className="font-medium text-sky-300">
+          {part.toLowerCase()}
+        </span>
       );
     }
     return <span key={i}>{part}</span>;

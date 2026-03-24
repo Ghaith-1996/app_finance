@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import type { FeedMode, MatchReasonCode, TickerImpact } from "@/lib/types";
+import type { FeedMode, MatchReasonCode, MatchSource, TickerImpact } from "@/lib/types";
 import { resolveDirectStockMatch } from "@/lib/services/news/direct-match";
 
 /** Hard cap: only articles from the last 24 hours appear in either feed mode. */
@@ -64,34 +64,47 @@ export async function GET(request: Request) {
     portfolioId = portfolios?.[0]?.id ?? null;
   }
 
-  if (!portfolioId) {
-    return json({ feed: [], portfolioId: null, mode });
+  // --- Load holdings symbols ---
+  let portfolioSymbols: string[] = [];
+  let portfolioSectors: string[] = [];
+  if (portfolioId) {
+    const { data: portfolio } = await supabase
+      .from("portfolios")
+      .select("id")
+      .eq("id", portfolioId)
+      .eq("user_id", user.id)
+      .single();
+
+    if (!portfolio) {
+      return json({ error: "Portfolio not found" }, 404);
+    }
+
+    const { data: holdingRows } = await supabase
+      .from("holdings")
+      .select("symbol, sector")
+      .eq("portfolio_id", portfolioId);
+
+    portfolioSymbols = [...new Set(
+      (holdingRows ?? [])
+        .map((holding) => String(holding.symbol ?? "").toUpperCase())
+        .filter(Boolean),
+    )];
+    portfolioSectors = [...new Set(
+      (holdingRows ?? [])
+        .map((holding) => String(holding.sector ?? ""))
+        .filter(Boolean),
+    )];
   }
 
-  const { data: portfolio } = await supabase
-    .from("portfolios")
-    .select("id")
-    .eq("id", portfolioId)
-    .eq("user_id", user.id)
-    .single();
+  // --- Load watchlist symbols ---
+  const { data: watchlistRows } = await supabase
+    .from("watchlist_items")
+    .select("symbol")
+    .eq("user_id", user.id);
 
-  if (!portfolio) {
-    return json({ error: "Portfolio not found" }, 404);
-  }
-
-  const { data: holdingRows } = await supabase
-    .from("holdings")
-    .select("symbol, sector")
-    .eq("portfolio_id", portfolioId);
-
-  const portfolioSymbols = [...new Set(
-    (holdingRows ?? [])
-      .map((holding) => String(holding.symbol ?? "").toUpperCase())
-      .filter(Boolean),
-  )];
-  const portfolioSectors = [...new Set(
-    (holdingRows ?? [])
-      .map((holding) => String(holding.sector ?? ""))
+  const watchlistSymbols = [...new Set(
+    (watchlistRows ?? [])
+      .map((row) => String(row.symbol ?? "").toUpperCase())
       .filter(Boolean),
   )];
 
@@ -100,21 +113,37 @@ export async function GET(request: Request) {
       portfolioId,
       portfolioSymbols,
       portfolioSectors,
+      watchlistSymbols,
       category,
       maxMinutes,
       sourceType: searchParams.get("sourceType"),
     });
   }
 
-  return handlePersonalMode(supabase, {
-    portfolioId,
-    portfolioSymbols,
-    portfolioSectors,
-    holding: searchParams.get("holding"),
-    sector: searchParams.get("sector"),
-    category,
-    maxMinutes,
-  });
+  // Personal mode: prefer feed_items from analysis, fall back to watchlist-only matching
+  if (portfolioId) {
+    return handlePersonalMode(supabase, {
+      portfolioId,
+      portfolioSymbols,
+      portfolioSectors,
+      watchlistSymbols,
+      holding: searchParams.get("holding"),
+      sector: searchParams.get("sector"),
+      category,
+      maxMinutes,
+    });
+  }
+
+  // No portfolio — if user has watchlist items, do lightweight on-the-fly matching
+  if (watchlistSymbols.length > 0) {
+    return handleWatchlistOnlyMode(supabase, {
+      watchlistSymbols,
+      category,
+      maxMinutes,
+    });
+  }
+
+  return json({ feed: [], portfolioId: null, mode });
 }
 
 // ---------------------------------------------------------------------------
@@ -127,6 +156,7 @@ async function handlePersonalMode(
     portfolioId: string;
     portfolioSymbols: string[];
     portfolioSectors: string[];
+    watchlistSymbols: string[];
     holding: string | null;
     sector: string | null;
     category: string | null;
@@ -149,6 +179,7 @@ async function handlePersonalMode(
       mode: "personal" as const,
       portfolioSymbols: opts.portfolioSymbols,
       portfolioSectors: opts.portfolioSectors,
+      watchlistSymbols: opts.watchlistSymbols,
     });
   }
 
@@ -166,6 +197,7 @@ async function handlePersonalMode(
       why_it_matters,
       matched_stock_tags,
       match_reason_codes,
+      match_sources,
       display_effect,
       source_confidence,
       news_items!inner (
@@ -213,6 +245,7 @@ async function handlePersonalMode(
     why_it_matters: string | null;
     matched_stock_tags: string[];
     match_reason_codes: MatchReasonCode[] | null;
+    match_sources: MatchSource[] | null;
     display_effect: string;
     source_confidence: string;
     news_items: {
@@ -256,6 +289,7 @@ async function handlePersonalMode(
       stockTags: news?.stock_tags ?? [],
       matchedStockTags: row.matched_stock_tags ?? [],
       matchReasonCodes: row.match_reason_codes ?? [],
+      matchSources: row.match_sources ?? ["portfolio"],
       globalSummary: news?.global_summary ?? "",
       displayEffect: row.display_effect ?? "neutral",
       tickerImpacts: news?.ticker_impacts ?? [],
@@ -277,25 +311,135 @@ async function handlePersonalMode(
     mode: "personal" as const,
     portfolioSymbols: opts.portfolioSymbols,
     portfolioSectors: opts.portfolioSectors,
+    watchlistSymbols: opts.watchlistSymbols,
   });
 }
 
 // ---------------------------------------------------------------------------
-// Market mode — reads from news_items directly, highlights portfolio matches
+// Watchlist-only mode — no portfolio, direct matching against news_items
+// ---------------------------------------------------------------------------
+
+async function handleWatchlistOnlyMode(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  opts: {
+    watchlistSymbols: string[];
+    category: string | null;
+    maxMinutes: string | null;
+  },
+) {
+  const wlSet = new Set(opts.watchlistSymbols.map((s) => s.toUpperCase()));
+
+  const publishedSince = new Date(
+    Date.now() - FEED_MAX_AGE_MINUTES * 60 * 1000,
+  ).toISOString();
+
+  let query = supabase
+    .from("news_items")
+    .select(
+      "id, headline, source, url, published_at, angle, category, stock_tags, " +
+      "global_summary, overall_effect, ticker_impacts, source_type, metadata, raw_content",
+    )
+    .gte("published_at", publishedSince)
+    .order("published_at", { ascending: false })
+    .limit(100);
+
+  if (opts.category) {
+    query = query.eq("category", opts.category);
+  }
+
+  const { data: rows, error } = await query;
+  if (error) {
+    return json({ error: error.message }, 500);
+  }
+
+  type NewsRow = {
+    id: string;
+    headline: string;
+    source: string;
+    url: string | null;
+    published_at: string;
+    angle: string | null;
+    category: string;
+    stock_tags: string[];
+    global_summary: string | null;
+    overall_effect: string;
+    ticker_impacts: TickerImpact[] | null;
+    source_type: string;
+    metadata: Record<string, unknown> | null;
+  };
+
+  const rawRows = (rows ?? []) as unknown as NewsRow[];
+  let feed = rawRows
+    .map((row) => {
+      const publishedAt = row.published_at ?? new Date().toISOString();
+      const directMatch = resolveDirectStockMatch(
+        row.stock_tags ?? [],
+        row.ticker_impacts ?? [],
+        wlSet,
+      );
+      if (directMatch.matchedSymbols.length === 0) return null;
+
+      return {
+        id: row.id,
+        newsItemId: row.id,
+        headline: row.headline,
+        source: row.source,
+        url: row.url ?? undefined,
+        publishedAt: formatPublishedAt(publishedAt),
+        publishedMinutesAgo: minutesAgo(publishedAt),
+        relevanceScore: 75,
+        angle: row.angle ?? "",
+        category: row.category ?? "other",
+        stockTags: row.stock_tags ?? [],
+        globalSummary: row.global_summary ?? "",
+        displayEffect: row.overall_effect ?? "neutral",
+        tickerImpacts: row.ticker_impacts ?? [],
+        sourceType: row.source_type ?? "other",
+        sourceConfidence:
+          row.source_type === "edgar" ? "high" : ("standard" as const),
+        metadata: row.metadata ?? {},
+        matchedStockTags: directMatch.matchedSymbols,
+        matchSources: ["watchlist"] as MatchSource[],
+        matchReasonCodes: (directMatch.matchedTags.length > 0
+          ? ["watchlist_ticker_tag"]
+          : ["watchlist_ticker_impact"]) as MatchReasonCode[],
+        isWatchlistMatch: true,
+        whyItMatters: `Matches watchlist symbol${directMatch.matchedSymbols.length > 1 ? "s" : ""} ${directMatch.matchedSymbols.join(", ")}.`,
+      };
+    })
+    .filter(Boolean) as NonNullable<typeof feed[number]>[];
+
+  const cap = effectiveRecencyCap(opts.maxMinutes);
+  feed = feed.filter((item) => item.publishedMinutesAgo <= cap);
+
+  return json({
+    feed,
+    portfolioId: null,
+    mode: "personal" as const,
+    portfolioSymbols: [],
+    portfolioSectors: [],
+    watchlistSymbols: opts.watchlistSymbols,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Market mode — reads from news_items directly, highlights portfolio + watchlist matches
 // ---------------------------------------------------------------------------
 
 async function handleMarketMode(
   supabase: Awaited<ReturnType<typeof createClient>>,
   opts: {
-    portfolioId: string;
+    portfolioId: string | null;
     portfolioSymbols: string[];
     portfolioSectors: string[];
+    watchlistSymbols: string[];
     category: string | null;
     maxMinutes: string | null;
     sourceType: string | null;
   },
 ) {
   const holdingSymbols = new Set(opts.portfolioSymbols.map((symbol) => symbol.toUpperCase()));
+  const wlSymbols = new Set(opts.watchlistSymbols.map((symbol) => symbol.toUpperCase()));
 
   const publishedSince = new Date(
     Date.now() - FEED_MAX_AGE_MINUTES * 60 * 1000,
@@ -344,12 +488,18 @@ async function handleMarketMode(
   const rawRows = (rows ?? []) as unknown as NewsRow[];
   let feed = rawRows.map((row) => {
     const publishedAt = row.published_at ?? new Date().toISOString();
-    const directMatch = resolveDirectStockMatch(
+    const portfolioDirectMatch = resolveDirectStockMatch(
       row.stock_tags ?? [],
       row.ticker_impacts ?? [],
       holdingSymbols,
     );
-    const isPortfolioMatch = directMatch.matchedSymbols.length > 0;
+    const watchlistDirectMatch = resolveDirectStockMatch(
+      row.stock_tags ?? [],
+      row.ticker_impacts ?? [],
+      wlSymbols,
+    );
+    const isPortfolioMatch = portfolioDirectMatch.matchedSymbols.length > 0;
+    const isWatchlistMatch = watchlistDirectMatch.matchedSymbols.length > 0;
 
     return {
       id: row.id,
@@ -370,7 +520,13 @@ async function handleMarketMode(
         row.source_type === "edgar" ? "high" : ("standard" as const),
       metadata: row.metadata ?? {},
       isPortfolioMatch,
-      matchedStockTags: directMatch.matchedSymbols,
+      isWatchlistMatch,
+      matchedStockTags: [
+        ...new Set([
+          ...portfolioDirectMatch.matchedSymbols,
+          ...watchlistDirectMatch.matchedSymbols,
+        ]),
+      ],
     };
   });
 
@@ -383,5 +539,6 @@ async function handleMarketMode(
     mode: "market" as const,
     portfolioSymbols: opts.portfolioSymbols,
     portfolioSectors: opts.portfolioSectors,
+    watchlistSymbols: opts.watchlistSymbols,
   });
 }

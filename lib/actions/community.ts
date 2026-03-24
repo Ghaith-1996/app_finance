@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { FinnhubError, searchSymbols } from "@/lib/services/finnhub";
 import type {
   CommunityPost,
   CommunityComment,
@@ -9,10 +10,17 @@ import type {
   CreateCommentResult,
   ActiveDiscussion,
 } from "@/lib/community/types";
-import { extractTickers, validatePostBody, validateCommentBody } from "@/lib/community/types";
+import {
+  extractTickerHashtags,
+  extractTickers,
+  validatePostBody,
+  validateCommentBody,
+} from "@/lib/community/types";
 
 function authorFromRow(row: {
   user_id: string;
+  first_name?: string | null;
+  last_name?: string | null;
   display_name?: string | null;
   avatar_url?: string | null;
   handle?: string | null;
@@ -20,10 +28,13 @@ function authorFromRow(row: {
   raw_user_meta_data?: Record<string, unknown> | null;
 }): CommunityAuthor {
   const meta = row.raw_user_meta_data;
+  const derivedDisplayName =
+    [row.first_name?.trim(), row.last_name?.trim()].filter(Boolean).join(" ") || null;
   return {
     userId: row.user_id,
     displayName:
       row.display_name ||
+      derivedDisplayName ||
       (meta?.full_name as string) ||
       (meta?.name as string) ||
       (row.email ? row.email.split("@")[0] : "User"),
@@ -33,6 +44,40 @@ function authorFromRow(row: {
 }
 
 const FEED_PAGE_SIZE = 20;
+
+async function validateTickerHashtags(tickers: string[]): Promise<string | null> {
+  if (tickers.length === 0) return null;
+
+  for (const ticker of tickers) {
+    try {
+      const results = await searchSymbols(ticker);
+      const exactMatch = results.some((result) => result.symbol.toUpperCase() === ticker);
+      if (!exactMatch) {
+        return `#${ticker} is not a recognized stock symbol. Use a market hashtag like #crypto, or a valid stock tag like #AAPL.`;
+      }
+    } catch (error) {
+      if (error instanceof FinnhubError) {
+        return "Could not verify stock hashtags right now. Try again in a moment.";
+      }
+      return "Could not verify stock hashtags right now. Try again in a moment.";
+    }
+  }
+
+  return null;
+}
+
+async function getProfileForUser(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+) {
+  const { data } = await supabase
+    .from("user_profiles")
+    .select("user_id, first_name, last_name, display_name, avatar_url, handle")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  return (data as Record<string, unknown> | null) ?? null;
+}
 
 export async function getHomeFeed(cursor?: string): Promise<{
   posts: CommunityPost[];
@@ -65,7 +110,7 @@ export async function getHomeFeed(cursor?: string): Promise<{
   if (userIds.length > 0) {
     const { data: profiles } = await supabase
       .from("user_profiles")
-      .select("user_id, display_name, avatar_url, handle")
+      .select("user_id, first_name, last_name, display_name, avatar_url, handle")
       .in("user_id", userIds);
     for (const p of profiles ?? []) {
       profileMap.set(p.user_id as string, p as Record<string, unknown>);
@@ -108,7 +153,11 @@ export async function createPost(body: string): Promise<CreatePostResult> {
   if (!user) return { ok: false, error: "Unauthorized" };
 
   const trimmed = body.trim();
-  const tickers = extractTickers(trimmed);
+  const cashtagTickers = extractTickers(trimmed);
+  const hashtagTickers = extractTickerHashtags(trimmed);
+  const hashtagValidationError = await validateTickerHashtags(hashtagTickers);
+  if (hashtagValidationError) return { ok: false, error: hashtagValidationError };
+  const tickers = [...new Set([...cashtagTickers, ...hashtagTickers])];
 
   const { data: inserted, error: insertError } = await supabase
     .from("community_posts")
@@ -126,15 +175,16 @@ export async function createPost(body: string): Promise<CreatePostResult> {
       .insert(tickers.map((ticker) => ({ post_id: inserted.id, ticker })));
   }
 
+  const profile = await getProfileForUser(supabase, user.id);
   const meta = user.user_metadata ?? {};
   const post: CommunityPost = {
     id: inserted.id as string,
-    author: {
-      userId: user.id,
-      displayName: (meta.full_name as string) || (meta.name as string) || user.email?.split("@")[0] || "User",
-      avatarUrl: (meta.avatar_url as string) || null,
-      handle: null,
-    },
+    author: authorFromRow({
+      user_id: user.id,
+      ...(profile ?? {}),
+      raw_user_meta_data: meta as Record<string, unknown>,
+      email: user.email ?? null,
+    }),
     body: trimmed,
     tickers,
     commentCount: 0,
@@ -163,7 +213,7 @@ export async function getPostComments(postId: string): Promise<CommunityComment[
   if (userIds.length > 0) {
     const { data: profiles } = await supabase
       .from("user_profiles")
-      .select("user_id, display_name, avatar_url, handle")
+      .select("user_id, first_name, last_name, display_name, avatar_url, handle")
       .in("user_id", userIds);
     for (const p of profiles ?? []) {
       profileMap.set(p.user_id as string, p as Record<string, unknown>);
@@ -202,16 +252,17 @@ export async function createComment(postId: string, body: string): Promise<Creat
     return { ok: false, error: insertError?.message ?? "Failed to create comment." };
   }
 
+  const profile = await getProfileForUser(supabase, user.id);
   const meta = user.user_metadata ?? {};
   const comment: CommunityComment = {
     id: inserted.id as string,
     postId: inserted.post_id as string,
-    author: {
-      userId: user.id,
-      displayName: (meta.full_name as string) || (meta.name as string) || user.email?.split("@")[0] || "User",
-      avatarUrl: (meta.avatar_url as string) || null,
-      handle: null,
-    },
+    author: authorFromRow({
+      user_id: user.id,
+      ...(profile ?? {}),
+      raw_user_meta_data: meta as Record<string, unknown>,
+      email: user.email ?? null,
+    }),
     body: trimmed,
     createdAt: inserted.created_at as string,
   };
@@ -283,7 +334,7 @@ export async function getActiveDiscussions(): Promise<ActiveDiscussion[]> {
   if (userIds.length > 0) {
     const { data: profiles } = await supabase
       .from("user_profiles")
-      .select("user_id, display_name, avatar_url, handle")
+      .select("user_id, first_name, last_name, display_name, avatar_url, handle")
       .in("user_id", userIds);
     for (const p of profiles ?? []) {
       profileMap.set(p.user_id as string, p as Record<string, unknown>);
@@ -295,7 +346,7 @@ export async function getActiveDiscussions(): Promise<ActiveDiscussion[]> {
     const author = authorFromRow({ user_id: row.user_id, ...profile });
     return {
       postId: row.id,
-      bodyPreview: row.body.slice(0, 80) + (row.body.length > 80 ? "…" : ""),
+      bodyPreview: row.body.slice(0, 80) + (row.body.length > 80 ? "..." : ""),
       commentCount: row.commentCount,
       authorName: author.displayName,
     };

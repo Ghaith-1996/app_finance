@@ -98,7 +98,7 @@ export async function POST(request: Request) {
     );
   }
 
-  type StageStatus = "success" | "failed" | "skipped" | "partial" | "empty";
+  type StageStatus = "success" | "failed" | "skipped" | "partial" | "empty" | "queued";
   const stages: Record<string, { status: StageStatus; detail: string }> = {};
 
   const workerResult = await runPythonWorker(globalTickers, lookbackHours, maxArticles);
@@ -162,24 +162,79 @@ export async function POST(request: Request) {
   }
 
   let enriched = 0;
-  let extractionStats: { extracted: number; attempted: number; failed: number } | null = null;
   const totalInserted = workerResult.total_inserted + finnhubResult.inserted;
-  if (totalInserted > 0) {
+
+  const insertedArticleIds: string[] = [];
+  for (const key of ["edgar", "newsapi", "gnews"] as const) {
+    const ids = workerResult[key]?.inserted_ids;
+    if (Array.isArray(ids)) insertedArticleIds.push(...ids);
+  }
+  if (Array.isArray(finnhubResult.inserted_ids)) {
+    insertedArticleIds.push(...finnhubResult.inserted_ids);
+  }
+
+  let extractionStats: {
+    queued: number;
+    attempted: number;
+    extracted: number;
+    failed: number;
+    skippedMissingUrl: number;
+    skippedUnsupportedSource: number;
+    skippedAlreadyExtracted: number;
+    skippedUnsupportedUrl: number;
+    background: boolean;
+  } | null = null;
+
+  if (insertedArticleIds.length > 0) {
     const extractResult = await extractPublisherContent(supabase, {
-      limit: totalInserted + 5,
+      articleIds: insertedArticleIds,
     });
     extractionStats = {
-      extracted: extractResult.extracted,
+      queued: extractResult.queued,
       attempted: extractResult.attempted,
+      extracted: extractResult.extracted,
       failed: extractResult.failed,
+      skippedMissingUrl: extractResult.skippedMissingUrl,
+      skippedUnsupportedSource: extractResult.skippedUnsupportedSource,
+      skippedAlreadyExtracted: extractResult.skippedAlreadyExtracted,
+      skippedUnsupportedUrl: extractResult.skippedUnsupportedUrl,
+      background: extractResult.background,
     };
-    if (extractResult.extracted > 0 || extractResult.failed > 0) {
+
+    if (extractResult.queued > 0) {
+      const skipParts: string[] = [];
+      if (extractResult.skippedMissingUrl > 0)
+        skipParts.push(`${extractResult.skippedMissingUrl} missing URLs`);
+      if (extractResult.skippedUnsupportedSource > 0)
+        skipParts.push(`${extractResult.skippedUnsupportedSource} unsupported sources`);
+      if (extractResult.skippedAlreadyExtracted > 0)
+        skipParts.push(`${extractResult.skippedAlreadyExtracted} already extracted`);
+      if (extractResult.skippedUnsupportedUrl > 0)
+        skipParts.push(`${extractResult.skippedUnsupportedUrl} unsupported URLs`);
+      const skipSuffix = skipParts.length > 0 ? ` (skipped: ${skipParts.join(", ")})` : "";
       stages.extraction = {
-        status: extractResult.failed > 0 && extractResult.extracted === 0 ? "failed" : extractResult.failed > 0 ? "partial" : "success",
-        detail: `${extractResult.extracted}/${extractResult.attempted} articles extracted`,
+        status: "queued",
+        detail: `${extractResult.queued}/${insertedArticleIds.length} article(s) queued for background extraction${skipSuffix}. Enrichment uses headlines/snippets until text arrives.`,
+      };
+    } else if (extractResult.failed > 0 && extractResult.errors.length > 0) {
+      stages.extraction = {
+        status: "partial",
+        detail: extractResult.errors.slice(0, 2).join("; "),
       };
     } else {
-      stages.extraction = { status: "skipped", detail: "No extractable articles" };
+      const reasons: string[] = [];
+      if (extractResult.skippedMissingUrl > 0)
+        reasons.push(`${extractResult.skippedMissingUrl} missing URLs`);
+      if (extractResult.skippedUnsupportedSource > 0)
+        reasons.push(`${extractResult.skippedUnsupportedSource} unsupported sources`);
+      if (extractResult.skippedAlreadyExtracted > 0)
+        reasons.push(`${extractResult.skippedAlreadyExtracted} already extracted`);
+      if (extractResult.skippedUnsupportedUrl > 0)
+        reasons.push(`${extractResult.skippedUnsupportedUrl} unsupported URLs`);
+      const detail = reasons.length > 0
+        ? `0 extracted: ${reasons.join(", ")}`
+        : "No extractable articles in this batch";
+      stages.extraction = { status: "skipped", detail };
     }
 
     const enrichResult = await ingestNewsToSupabase(supabase, {

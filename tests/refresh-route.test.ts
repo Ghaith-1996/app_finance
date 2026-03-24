@@ -19,8 +19,11 @@ vi.mock("@/lib/services/news/worker", () => ({
   runPythonWorker: (...args: unknown[]) => mockRunPythonWorker(...args),
 }));
 
+const mockExtractPublisherContent = vi.fn();
+
 vi.mock("@/lib/services/news", () => ({
   ingestNewsToSupabase: (...args: unknown[]) => mockIngestNewsToSupabase(...args),
+  extractPublisherContent: (...args: unknown[]) => mockExtractPublisherContent(...args),
 }));
 
 vi.mock("@/lib/services/news/finnhub-refresh", () => ({
@@ -101,6 +104,23 @@ function emptyRow() {
   return { fetched: 0, inserted: 0, skipped: 0, failed: 0, inserted_ids: [] };
 }
 
+function emptyExtractionStats() {
+  return {
+    queued: 0,
+    attempted: 0,
+    extracted: 0,
+    skipped: 0,
+    failed: 0,
+    skippedMissingUrl: 0,
+    skippedUnsupportedSource: 0,
+    skippedAlreadyExtracted: 0,
+    skippedUnsupportedUrl: 0,
+    errors: [],
+    background: true,
+    processedArticleIds: [],
+  };
+}
+
 describe("POST /api/news/refresh", () => {
   beforeEach(() => {
     mockResolveGlobalTickers.mockReset();
@@ -109,14 +129,15 @@ describe("POST /api/news/refresh", () => {
     mockRunAnalysis.mockReset();
     mockGetNewsPoolSnapshot24h.mockReset();
     mockIngestFinnhubPortfolioNews.mockReset();
+    mockExtractPublisherContent.mockReset();
     mockGetNewsPoolSnapshot24h.mockResolvedValue({
       snapshot: { poolCount24h: 0, latestPublishedAt24h: null },
     });
     mockResolveGlobalTickers.mockResolvedValue({ tickers: ["MSFT", "AAPL"] });
     mockRunPythonWorker.mockResolvedValue({
-      edgar: { ...emptyRow(), inserted: 1, fetched: 1 },
-      newsapi: { ...emptyRow(), inserted: 2, fetched: 2 },
-      gnews: { ...emptyRow(), inserted: 1, fetched: 1 },
+      edgar: { ...emptyRow(), inserted: 1, fetched: 1, inserted_ids: ["id-e1"] },
+      newsapi: { ...emptyRow(), inserted: 2, fetched: 2, inserted_ids: ["id-n1", "id-n2"] },
+      gnews: { ...emptyRow(), inserted: 1, fetched: 1, inserted_ids: ["id-g1"] },
       total_inserted: 4,
       ingest_status: "success",
     });
@@ -124,7 +145,14 @@ describe("POST /api/news/refresh", () => {
       ...emptyRow(),
       inserted: 2,
       fetched: 3,
+      inserted_ids: ["id-f1", "id-f2"],
       fetch_outcome: "ok",
+    });
+    mockExtractPublisherContent.mockResolvedValue({
+      ...emptyExtractionStats(),
+      queued: 6,
+      attempted: 6,
+      processedArticleIds: ["id-e1", "id-n1", "id-n2", "id-g1", "id-f1", "id-f2"],
     });
     mockIngestNewsToSupabase.mockResolvedValue({ enriched: 4, skipped: 0 });
     mockRunAnalysis.mockResolvedValue({
@@ -164,6 +192,10 @@ describe("POST /api/news/refresh", () => {
       24,
       20,
     );
+    expect(mockExtractPublisherContent).toHaveBeenCalledWith(
+      supabaseMock,
+      { articleIds: ["id-e1", "id-n1", "id-n2", "id-g1", "id-f1", "id-f2"] },
+    );
     expect(mockIngestNewsToSupabase).toHaveBeenCalledWith(
       supabaseMock,
       { sourceTypes: ["edgar", "newsapi", "gnews", "finnhub"], limit: 11 },
@@ -178,6 +210,60 @@ describe("POST /api/news/refresh", () => {
     expect(body.poolSnapshot).toEqual({ poolCount24h: 0, latestPublishedAt24h: null });
     expect(body.totalInserted).toBe(6);
     expect(body.analysisMeta?.feedItemsCreated).toBe(0);
+    expect(body.stages.extraction.status).toBe("queued");
+    expect(body.extractionStats.queued).toBe(6);
+  });
+
+  it("reports skip reasons when extraction skips all articles", async () => {
+    mockExtractPublisherContent.mockResolvedValue({
+      ...emptyExtractionStats(),
+      skipped: 4,
+      skippedMissingUrl: 2,
+      skippedUnsupportedSource: 2,
+    });
+    const res = await POST(
+      new Request("http://localhost/api/news/refresh", {
+        method: "POST",
+        body: JSON.stringify({ portfolioId: "p1" }),
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    const body = await res.json();
+    expect(body.stages.extraction.status).toBe("skipped");
+    expect(body.stages.extraction.detail).toContain("2 missing URLs");
+    expect(body.stages.extraction.detail).toContain("2 unsupported sources");
+    expect(body.extractionStats.skippedMissingUrl).toBe(2);
+    expect(body.extractionStats.skippedUnsupportedSource).toBe(2);
+  });
+
+  it("does not call extraction when no articles were inserted", async () => {
+    mockRunPythonWorker.mockResolvedValue({
+      edgar: emptyRow(),
+      newsapi: emptyRow(),
+      gnews: emptyRow(),
+      total_inserted: 0,
+      ingest_status: "empty",
+      ingest_detail: "No articles in window",
+    });
+    mockIngestFinnhubPortfolioNews.mockResolvedValue({
+      ...emptyRow(),
+      fetch_outcome: "empty_window",
+    });
+    mockGetNewsPoolSnapshot24h.mockResolvedValue({
+      snapshot: { poolCount24h: 5, latestPublishedAt24h: "2025-03-20T12:00:00.000Z" },
+    });
+
+    const res = await POST(
+      new Request("http://localhost/api/news/refresh", {
+        method: "POST",
+        body: JSON.stringify({ portfolioId: "p1" }),
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    const body = await res.json();
+    expect(mockExtractPublisherContent).not.toHaveBeenCalled();
+    expect(body.stages.extraction.status).toBe("skipped");
+    expect(body.stages.extraction.detail).toBe("No new articles to extract");
   });
 
   it("when ingest is empty but the stored 24h pool has rows, poolSnapshot is non-zero and ingest is normalized", async () => {

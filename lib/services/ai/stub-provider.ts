@@ -8,6 +8,7 @@ import type {
   PortfolioCopilotContext,
   Sentiment,
 } from "./provider";
+import { AIChatError } from "./ai-chat-errors";
 
 /**
  * Stub AI provider that returns deterministic defaults without calling any API.
@@ -78,6 +79,12 @@ export const stubAIProvider: IAIProvider = {
   },
 
   async answerArticleQuestion(context: ArticleChatContext) {
+    if (process.env.NODE_ENV === "production") {
+      throw new AIChatError(
+        "provider_unavailable",
+        "Article chat requires a configured AI provider.",
+      );
+    }
     const matched = context.article.matchedHoldings?.join(", ") || "your holdings";
     return `From this article, the main takeaway is that it could matter for ${matched}. ${context.article.globalSummary ?? context.article.headline}`;
   },

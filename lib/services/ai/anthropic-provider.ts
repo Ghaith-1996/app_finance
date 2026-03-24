@@ -8,6 +8,8 @@ import type {
   PortfolioCopilotContext,
   Sentiment,
 } from "./provider";
+import { assertNonEmptyArticleChatReply } from "./ai-chat-errors";
+import { ARTICLE_CHAT_MAX_TOKENS } from "./constants";
 import { stubAIProvider } from "./stub-provider";
 import {
   parseNumericRelevance,
@@ -25,7 +27,7 @@ import {
   insightsPrompt,
 } from "./prompts";
 
-type AnthropicResponse = { content?: Array<{ text?: string }> };
+type AnthropicResponse = { content?: Array<{ text?: string }>; error?: { message?: string } };
 
 async function ask(
   key: string,
@@ -46,6 +48,10 @@ async function ask(
     }),
   });
   const data = (await res.json()) as AnthropicResponse;
+  if (!res.ok) {
+    const detail = data.error?.message ?? res.statusText;
+    throw new Error(`Anthropic HTTP ${res.status}: ${detail}`);
+  }
   return data.content?.[0]?.text?.trim() ?? null;
 }
 
@@ -143,13 +149,13 @@ export function createAnthropicProvider(): IAIProvider {
     },
 
     async answerArticleQuestion(context: ArticleChatContext) {
-      try {
-        const p = articleChatPrompt(context);
-        const text = await ask(key, `${p.system}\n\n${p.user}`, 350);
-        return text ?? (await stubAIProvider.answerArticleQuestion(context));
-      } catch {
-        return stubAIProvider.answerArticleQuestion(context);
-      }
+      const p = articleChatPrompt(context);
+      const text = await ask(
+        key,
+        `${p.system}\n\n${p.user}`,
+        ARTICLE_CHAT_MAX_TOKENS,
+      );
+      return assertNonEmptyArticleChatReply(text);
     },
 
     async answerPortfolioQuestion(context: PortfolioCopilotContext) {

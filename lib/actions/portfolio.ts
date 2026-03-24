@@ -8,7 +8,7 @@ import {
   detectColumnMapping,
   normalizeRows,
 } from "@/lib/services/csv-parser";
-import { getQuotes, searchSymbol } from "@/lib/services/yahoo-finance";
+import { getQuote, getQuotes, searchSymbol } from "@/lib/services/yahoo-finance";
 import type { HoldingDraft, PortfolioFeedHighlight, SaveMode } from "@/lib/types";
 
 const sourceTypeMap = {
@@ -112,6 +112,7 @@ function mapHoldingFromDb(row: any) {
 
 function revalidateAll() {
   revalidatePath("/portfolio");
+  revalidatePath("/portfolio/full");
   revalidatePath("/onboarding");
   revalidatePath("/feed");
   revalidatePath("/analysis");
@@ -577,6 +578,7 @@ export async function updateHolding(holdingId: string, data: HoldingInput) {
   const { error } = await supabase.from("holdings").update(update).eq("id", holdingId);
   if (error) return { error: error.message };
   revalidatePath("/portfolio");
+  revalidatePath("/portfolio/full");
   revalidatePath("/onboarding");
   return { error: null };
 }
@@ -592,7 +594,238 @@ export async function deleteHolding(holdingId: string) {
   const { error } = await supabase.from("holdings").delete().eq("id", holdingId);
   if (error) return { error: error.message };
   revalidatePath("/portfolio");
+  revalidatePath("/portfolio/full");
   revalidatePath("/onboarding");
+  return { error: null };
+}
+
+/**
+ * Add a single new position to an existing portfolio (full portfolio & similar flows).
+ * Resolves the ticker via Yahoo search/quote, then refreshes live prices.
+ */
+export async function addPortfolioPosition(
+  portfolioId: string,
+  input: {
+    symbol: string;
+    quantity: number;
+    averageCost: number;
+  },
+) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+  if (userError || !user) {
+    return { error: "Unauthorized" as string };
+  }
+
+  const rawSymbol = input.symbol.trim();
+  if (!rawSymbol) {
+    return { error: "Enter a ticker symbol." };
+  }
+
+  const quantity = Number(input.quantity);
+  const averageCost = Number(input.averageCost);
+  if (!Number.isFinite(quantity) || quantity <= 0) {
+    return { error: "Quantity must be greater than zero." };
+  }
+  if (!Number.isFinite(averageCost) || averageCost < 0) {
+    return { error: "Average cost must be zero or positive." };
+  }
+
+  const { data: portfolio } = await supabase
+    .from("portfolios")
+    .select("id")
+    .eq("id", portfolioId)
+    .eq("user_id", user.id)
+    .single();
+  if (!portfolio) {
+    return { error: "Portfolio not found or unauthorized." };
+  }
+
+  const upper = rawSymbol.toUpperCase();
+  const candidates = await searchSymbol(rawSymbol);
+  const resolved =
+    candidates.find((c) => c.symbol.toUpperCase() === upper) ?? candidates[0];
+
+  let symbol = upper;
+  let company = upper;
+  let market = "US";
+
+  if (resolved) {
+    symbol = resolved.symbol.toUpperCase();
+    company = resolved.name?.trim() || symbol;
+    market = resolved.exchange?.trim() || "US";
+  } else {
+    const quote = await getQuote(upper);
+    if (!quote) {
+      return {
+        error:
+          "Could not resolve that symbol. Try a valid ticker (e.g. AAPL, MSFT).",
+      };
+    }
+    symbol = quote.symbol.toUpperCase();
+    company = quote.name;
+    market = quote.exchange || "US";
+  }
+
+  const { data: existing } = await supabase
+    .from("holdings")
+    .select("id")
+    .eq("portfolio_id", portfolioId)
+    .eq("symbol", symbol)
+    .maybeSingle();
+
+  if (existing) {
+    return {
+      error: `You already hold ${symbol}. Edit that row or remove it before adding again.`,
+    };
+  }
+
+  const { error: insertError } = await supabase.from("holdings").insert({
+    portfolio_id: portfolioId,
+    symbol,
+    company,
+    sector: "Other",
+    market,
+    source: "Manual",
+    quantity,
+    average_cost: averageCost,
+    thesis: null,
+    import_source: "manual",
+  });
+
+  if (insertError) {
+    return { error: insertError.message };
+  }
+
+  await refreshHoldingPrices(portfolioId);
+  return { error: null };
+}
+
+/**
+ * Record a sale: reduce share count. If all shares are sold, the holding is removed.
+ */
+export async function recordHoldingSale(
+  portfolioId: string,
+  holdingId: string,
+  sharesSold: number,
+) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+  if (userError || !user) return { error: "Unauthorized" };
+
+  const { data: portfolio } = await supabase
+    .from("portfolios")
+    .select("id")
+    .eq("id", portfolioId)
+    .eq("user_id", user.id)
+    .single();
+  if (!portfolio) return { error: "Portfolio not found or unauthorized." };
+
+  const { data: row, error: rowError } = await supabase
+    .from("holdings")
+    .select("id, quantity, average_cost")
+    .eq("id", holdingId)
+    .eq("portfolio_id", portfolioId)
+    .single();
+
+  if (rowError || !row) return { error: "Holding not found." };
+
+  const qty = Number(row.quantity);
+  const sold = Number(sharesSold);
+  if (!Number.isFinite(sold) || sold <= 0) {
+    return { error: "Enter a positive number of shares sold." };
+  }
+  if (sold > qty + 1e-9) {
+    return { error: "You can't sell more shares than you currently hold." };
+  }
+
+  const newQty = qty - sold;
+  const EPS = 1e-8;
+
+  if (newQty <= EPS) {
+    const { error: delErr } = await supabase
+      .from("holdings")
+      .delete()
+      .eq("id", holdingId);
+    if (delErr) return { error: delErr.message };
+  } else {
+    const { error: upErr } = await supabase
+      .from("holdings")
+      .update({ quantity: newQty })
+      .eq("id", holdingId);
+    if (upErr) return { error: upErr.message };
+  }
+
+  await refreshHoldingPrices(portfolioId);
+  return { error: null };
+}
+
+/**
+ * Record additional shares: weighted average cost for the position.
+ */
+export async function recordHoldingAdd(
+  portfolioId: string,
+  holdingId: string,
+  sharesAdded: number,
+  pricePerShare: number,
+) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+  if (userError || !user) return { error: "Unauthorized" };
+
+  const { data: portfolio } = await supabase
+    .from("portfolios")
+    .select("id")
+    .eq("id", portfolioId)
+    .eq("user_id", user.id)
+    .single();
+  if (!portfolio) return { error: "Portfolio not found or unauthorized." };
+
+  const { data: row, error: rowError } = await supabase
+    .from("holdings")
+    .select("id, quantity, average_cost")
+    .eq("id", holdingId)
+    .eq("portfolio_id", portfolioId)
+    .single();
+
+  if (rowError || !row) return { error: "Holding not found." };
+
+  const qty = Number(row.quantity);
+  const avg = Number(row.average_cost);
+  const addQty = Number(sharesAdded);
+  const price = Number(pricePerShare);
+
+  if (!Number.isFinite(addQty) || addQty <= 0) {
+    return { error: "Added shares must be greater than zero." };
+  }
+  if (!Number.isFinite(price) || price < 0) {
+    return { error: "Price per share must be zero or positive." };
+  }
+
+  const newQty = qty + addQty;
+  const newAvg = (qty * avg + addQty * price) / newQty;
+  const roundedAvg = Math.round(newAvg * 10000) / 10000;
+
+  const { error: upErr } = await supabase
+    .from("holdings")
+    .update({
+      quantity: newQty,
+      average_cost: roundedAvg,
+    })
+    .eq("id", holdingId);
+
+  if (upErr) return { error: upErr.message };
+
+  await refreshHoldingPrices(portfolioId);
   return { error: null };
 }
 
@@ -733,13 +966,48 @@ export async function getPortfolioFeedHighlights(portfolioId: string) {
   return { data: highlights, error: null };
 }
 
+type SyncHoldingPricesResult = {
+  updated: number;
+  error: string | null;
+  /** When true, safe to call revalidatePath (not during RSC render). */
+  shouldRevalidate: boolean;
+};
+
+/**
+ * Update holding prices in the database from live quotes. Does not call revalidatePath —
+ * safe to await from Server Components (e.g. /portfolio/full on each visit).
+ */
+export async function syncHoldingPrices(portfolioId: string): Promise<{
+  updated: number;
+  error: string | null;
+}> {
+  const r = await syncHoldingPricesInternal(portfolioId);
+  return { updated: r.updated, error: r.error };
+}
+
+/**
+ * Same DB work as syncHoldingPrices, then invalidates cached routes. Only call from
+ * Server Actions, route handlers, or client-triggered flows — not during RSC render.
+ */
 export async function refreshHoldingPrices(portfolioId: string) {
+  const r = await syncHoldingPricesInternal(portfolioId);
+  if (r.shouldRevalidate) {
+    revalidateAll();
+  }
+  return { updated: r.updated, error: r.error };
+}
+
+async function syncHoldingPricesInternal(
+  portfolioId: string,
+): Promise<SyncHoldingPricesResult> {
   const supabase = await createClient();
   const {
     data: { user },
     error: userError,
   } = await supabase.auth.getUser();
-  if (userError || !user) return { updated: 0, error: "Unauthorized" };
+  if (userError || !user) {
+    return { updated: 0, error: "Unauthorized", shouldRevalidate: false };
+  }
 
   const { data: portfolio } = await supabase
     .from("portfolios")
@@ -747,7 +1015,9 @@ export async function refreshHoldingPrices(portfolioId: string) {
     .eq("id", portfolioId)
     .eq("user_id", user.id)
     .single();
-  if (!portfolio) return { updated: 0, error: "Portfolio not found" };
+  if (!portfolio) {
+    return { updated: 0, error: "Portfolio not found", shouldRevalidate: false };
+  }
 
   const { data: holdings } = await supabase
     .from("holdings")
@@ -755,56 +1025,58 @@ export async function refreshHoldingPrices(portfolioId: string) {
     .eq("portfolio_id", portfolioId);
 
   if (!holdings || holdings.length === 0) {
-    return { updated: 0, error: null };
+    return { updated: 0, error: null, shouldRevalidate: false };
   }
 
   const symbols = holdings.map((h) => h.symbol as string);
-  const quotes = await getQuotes(symbols);
-  let updated = 0;
+  let quotes: Map<string, { price: number; dailyChange: number; currency?: string }>;
+  try {
+    quotes = await getQuotes(symbols);
+  } catch {
+    return { updated: 0, error: null, shouldRevalidate: false };
+  }
+
+  if (quotes.size === 0) {
+    return { updated: 0, error: null, shouldRevalidate: false };
+  }
+
+  const now = new Date().toISOString();
   let totalValue = 0;
 
-  for (const holding of holdings) {
-    const quote = quotes.get((holding.symbol as string).toUpperCase());
-    if (!quote) continue;
+  const matched = holdings
+    .map((h) => {
+      const quote = quotes.get((h.symbol as string).toUpperCase());
+      if (!quote) return null;
+      const posValue = Number(h.quantity) * quote.price;
+      totalValue += posValue;
+      return { id: h.id as string, quote, posValue };
+    })
+    .filter((m): m is NonNullable<typeof m> => m !== null);
 
-    const { error } = await supabase
-      .from("holdings")
-      .update({
-        price: quote.price,
-        current_price: quote.price,
-        daily_change: quote.dailyChange,
-        quote_currency: quote.currency,
-        quote_as_of: new Date().toISOString(),
-      })
-      .eq("id", holding.id);
-
-    if (!error) {
-      updated++;
-      totalValue += Number(holding.quantity) * quote.price;
-    }
-  }
-
-  // Recompute allocation from value weights
-  if (totalValue > 0) {
-    for (const holding of holdings) {
-      const quote = quotes.get((holding.symbol as string).toUpperCase());
-      const posValue = Number(holding.quantity) * (quote?.price ?? 0);
-      const allocation = (posValue / totalValue) * 100;
-      await supabase
+  const results = await Promise.all(
+    matched.map((m) =>
+      supabase
         .from("holdings")
-        .update({ allocation: Math.round(allocation * 100) / 100 })
-        .eq("id", holding.id);
-    }
-  }
+        .update({
+          price: m.quote.price,
+          current_price: m.quote.price,
+          daily_change: m.quote.dailyChange,
+          quote_currency: m.quote.currency,
+          quote_as_of: now,
+          ...(totalValue > 0
+            ? { allocation: Math.round((m.posValue / totalValue) * 10000) / 100 }
+            : {}),
+        })
+        .eq("id", m.id),
+    ),
+  );
+
+  const updated = results.filter((r) => !r.error).length;
 
   await supabase
     .from("portfolios")
-    .update({
-      last_synced_at: new Date().toISOString(),
-      sync_status: "active",
-    })
+    .update({ last_synced_at: now, sync_status: "active" })
     .eq("id", portfolioId);
 
-  revalidateAll();
-  return { updated, error: null };
+  return { updated, error: null, shouldRevalidate: true };
 }

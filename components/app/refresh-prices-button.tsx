@@ -5,8 +5,15 @@ import { RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { refreshHoldingPrices } from "@/lib/actions/portfolio";
 import { buttonStyles } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
-export function RefreshPricesButton({ portfolioId }: { portfolioId: string }) {
+export function RefreshPricesButton({
+  portfolioId,
+  className,
+}: {
+  portfolioId: string;
+  className?: string;
+}) {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
@@ -22,10 +29,13 @@ export function RefreshPricesButton({ portfolioId }: { portfolioId: string }) {
       type="button"
       onClick={handleRefresh}
       disabled={loading}
-      className={buttonStyles({
-        variant: "secondary",
-        className: "disabled:opacity-70",
-      })}
+      className={cn(
+        buttonStyles({
+          variant: "secondary",
+          className: "disabled:opacity-70",
+        }),
+        className,
+      )}
     >
       <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
       {loading ? "Refreshing…" : "Refresh prices"}

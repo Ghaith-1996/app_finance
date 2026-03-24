@@ -28,7 +28,7 @@ except ImportError:
     pass
 
 from .bootstrap import configure_worker_environment, prepare_worker_runtime
-from .extract_full_text import backfill_full_text, extract_full_text_for_ids
+from .extract_full_text import backfill_full_text, spawn_extraction_worker
 from .fetchers.edgar_fetcher import fetch_edgar_news
 from .fetchers.gnews_fetcher import fetch_gnews_news
 from .fetchers.newsapi_fetcher import fetch_newsapi_news
@@ -397,15 +397,20 @@ def run(
 
     extraction_stats = None
     if all_inserted_ids:
-        logger.info("Extracting full text for %d newly inserted articles...", len(all_inserted_ids))
-        extraction_result = extract_full_text_for_ids(all_inserted_ids)
-        extraction_stats = extraction_result.to_dict()
         logger.info(
-            "Full-text extraction: extracted=%d failed=%d skipped=%d",
-            extraction_result.extracted,
-            extraction_result.failed,
-            extraction_result.skipped,
+            "Queueing background full-text extraction for %d newly inserted articles (newspaper4k)...",
+            len(all_inserted_ids),
         )
+        spawn_extraction_worker(all_inserted_ids)
+        extraction_stats = {
+            "queued": len(all_inserted_ids),
+            "background": True,
+            "attempted": 0,
+            "extracted": 0,
+            "failed": 0,
+            "skipped": 0,
+            "cache_hits": 0,
+        }
 
     ingest_status, ingest_detail = _summarize_ingest(
         bundles,

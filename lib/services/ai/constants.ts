@@ -1,0 +1,1 @@
+export const ARTICLE_CHAT_MAX_TOKENS = 2000;

@@ -27,6 +27,7 @@ export function ArticleChatPanel({
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
 
   const disabled = !portfolioId;
@@ -83,6 +84,7 @@ export function ArticleChatPanel({
 
     setSending(true);
     setError(null);
+    setErrorCode(null);
     try {
       const res = await fetch("/api/article-chat", {
         method: "POST",
@@ -93,8 +95,13 @@ export function ArticleChatPanel({
           message: trimmed,
         }),
       });
-      const data = await res.json().catch(() => ({}));
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        code?: string;
+        messages?: ArticleChatMessage[];
+      };
       if (!res.ok) {
+        setErrorCode(data.code ?? null);
         throw new Error(data.error ?? "Failed to send message");
       }
       setMessages((data.messages ?? []) as ArticleChatMessage[]);
@@ -186,7 +193,20 @@ export function ArticleChatPanel({
               className="w-full rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-slate-200 outline-none transition focus:border-brand/40"
             />
             <div className="flex items-center justify-between gap-3">
-              {error ? <p className="text-sm text-red-400">{error}</p> : <span />}
+              {error ? (
+                <div className="min-w-0 flex-1 space-y-1">
+                  <p className="text-sm text-red-400">{error}</p>
+                  {errorCode === "provider_auth" && (
+                    <p className="text-xs text-slate-500">Check that AZURE_OPENAI_API_KEY and AZURE_OPENAI_MODEL are set correctly in .env.</p>
+                  )}
+                  {errorCode === "provider_timeout" && (
+                    <p className="text-xs text-slate-500">The AI service may be overloaded. Wait a moment and try again.</p>
+                  )}
+                  {errorCode === "provider_bad_response" && (
+                    <p className="text-xs text-slate-500">Try rephrasing your question or try again shortly.</p>
+                  )}
+                </div>
+              ) : <span />}
               <Button
                 type="button"
                 onClick={() => void sendMessage(draft)}

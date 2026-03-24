@@ -8,11 +8,12 @@ import {
   Zap,
 } from "lucide-react";
 
+import { AddPositionForm } from "@/components/app/add-position-form";
 import { PortfolioCopilotPanel } from "@/components/app/portfolio-copilot-panel";
 import { PortfolioHoldingsTable } from "@/components/app/portfolio-holdings-table";
 import { PortfolioPerformanceChart } from "@/components/app/portfolio-performance-chart";
-import { AppShell } from "@/components/app/app-shell";
 import { RefreshPricesButton } from "@/components/app/refresh-prices-button";
+import { AppShell } from "@/components/app/app-shell";
 import { buttonStyles } from "@/components/ui/button";
 import {
   getPortfolio,
@@ -326,7 +327,6 @@ export default async function FullPortfolioPage() {
       description="Advanced position oversight for your diversified Signal Emerald custody account."
       activePath="/portfolio"
       backHref="/portfolio"
-      actions={<RefreshPricesButton portfolioId={portfolioId} />}
     >
       <div className="-mx-4 rounded-[2.5rem] bg-[#0a0f15] p-6 shadow-inner sm:mx-0 lg:p-10">
         {/* Performance chart hero */}
@@ -393,13 +393,21 @@ export default async function FullPortfolioPage() {
                     Synced {portfolioOverview.lastSyncedAt}
                   </p>
                 </div>
-                <p className="text-[12px] font-bold uppercase tracking-widest text-brand">
-                  {holdings.length} positions
-                </p>
+                <div className="flex shrink-0 items-center gap-3">
+                  <p className="text-[12px] font-bold uppercase tracking-widest text-brand">
+                    {holdings.length} positions
+                  </p>
+                  <RefreshPricesButton
+                    portfolioId={portfolioId}
+                    className="h-9 gap-1.5 px-3 text-[11px] font-bold uppercase tracking-wider"
+                  />
+                </div>
               </div>
 
+              <AddPositionForm portfolioId={portfolioId} />
+
               {holdings.length > 0 ? (
-                <PortfolioHoldingsTable holdings={holdings} />
+                <PortfolioHoldingsTable holdings={holdings} portfolioId={portfolioId} />
               ) : (
                 <div className="rounded-[1.5rem] border border-white/[0.06] bg-surface-raised px-6 py-8 text-center text-sm text-slate-500 shadow-sm">
                   No holdings available yet.

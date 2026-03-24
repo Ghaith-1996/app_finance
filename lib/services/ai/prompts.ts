@@ -199,10 +199,22 @@ export function articleChatPrompt(
     ? article.matchedHoldings.join(", ")
     : "None";
 
-  const articleBody = (article.extractedContent ?? "").slice(0, 6000)
-    || (article.rawContent ?? "").slice(0, 4000)
-    || "None";
-  const contentSource = article.extractedContent ? "full article" : "provider snippet";
+  const articleBody =
+    (article.primaryBody ??
+      article.extractedContent ??
+      article.fullContent ??
+      article.rawContent ??
+      "")
+      .slice(0, 6000) || "None";
+  const contentSource = article.extractedContent
+    ? "full article (extracted)"
+    : article.fullContent
+      ? "full article (legacy)"
+      : "provider snippet";
+  const pendingNote =
+    article.extractionPending
+      ? " Note: Full publisher text is still being extracted; this answer may rely on the headline/summary until extraction completes."
+      : "";
 
   return {
     system:
@@ -219,7 +231,7 @@ export function articleChatPrompt(
       `Category: ${article.category}\n` +
       `Source type: ${article.sourceType ?? "other"}\n` +
       `Summary: ${article.globalSummary ?? "None"}\n` +
-      `Article text (${contentSource}): ${articleBody}\n` +
+      `Article text (${contentSource}): ${articleBody}${pendingNote}\n` +
       `Stock tags: ${article.stockTags.join(", ") || "None"}\n` +
       `Ticker impacts: ${tickerImpacts}\n` +
       `Portfolio why-it-matters: ${article.whyItMatters ?? "None"}\n` +

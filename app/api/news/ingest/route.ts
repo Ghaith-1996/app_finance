@@ -91,10 +91,18 @@ export async function POST(request: Request) {
     }, { status: 502 });
   }
 
-  if (workerResult.total_inserted > 0) {
-    await extractPublisherContent(supabase, {
-      limit: workerResult.total_inserted + 5,
+  const insertedArticleIds: string[] = [];
+  for (const key of ["edgar", "newsapi", "gnews"] as const) {
+    const ids = workerResult[key]?.inserted_ids;
+    if (Array.isArray(ids)) insertedArticleIds.push(...ids);
+  }
+
+  let extractionQueued = 0;
+  if (insertedArticleIds.length > 0) {
+    const ex = await extractPublisherContent(supabase, {
+      articleIds: insertedArticleIds,
     });
+    extractionQueued = ex.queued;
   }
 
   const enrichmentResult = workerResult.total_inserted > 0
@@ -122,5 +130,6 @@ export async function POST(request: Request) {
     workerError: workerResult.error ?? null,
     workerChecks: workerResult.checks ?? null,
     enrichmentError: enrichmentResult.error ?? null,
+    extractionQueued,
   }, { status: httpStatus });
 }

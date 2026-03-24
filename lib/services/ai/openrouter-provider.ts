@@ -8,6 +8,8 @@ import type {
   PortfolioCopilotContext,
   Sentiment,
 } from "./provider";
+import { assertNonEmptyArticleChatReply } from "./ai-chat-errors";
+import { ARTICLE_CHAT_MAX_TOKENS } from "./constants";
 import { stubAIProvider } from "./stub-provider";
 import {
   parseNumericRelevance,
@@ -69,7 +71,11 @@ async function chatComplete(
       reasoning: { exclude: true },
     }),
   });
-  const data = (await res.json()) as ChatResponse;
+  const data = (await res.json()) as ChatResponse & { error?: { message?: string } };
+  if (!res.ok) {
+    const detail = data.error?.message ?? res.statusText;
+    throw new Error(`OpenRouter HTTP ${res.status}: ${detail}`);
+  }
   return extractOpenRouterAssistantText(data.choices?.[0]?.message);
 }
 
@@ -182,12 +188,14 @@ export function createOpenRouterProvider(): IAIProvider {
     },
 
     async answerArticleQuestion(context: ArticleChatContext) {
-      try {
-        const text = await chatComplete(key, model, msgs(articleChatPrompt(context)), 350, extraHeaders);
-        return text ?? (await stubAIProvider.answerArticleQuestion(context));
-      } catch {
-        return stubAIProvider.answerArticleQuestion(context);
-      }
+      const text = await chatComplete(
+        key,
+        model,
+        msgs(articleChatPrompt(context)),
+        ARTICLE_CHAT_MAX_TOKENS,
+        extraHeaders,
+      );
+      return assertNonEmptyArticleChatReply(text);
     },
 
     async answerPortfolioQuestion(context: PortfolioCopilotContext) {

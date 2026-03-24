@@ -8,7 +8,13 @@ import type {
   PortfolioCopilotContext,
   Sentiment,
 } from "./provider";
+import { AIChatError, assertNonEmptyArticleChatReply } from "./ai-chat-errors";
 import { stubAIProvider } from "./stub-provider";
+import { ARTICLE_CHAT_MAX_TOKENS } from "./constants";
+import { validateAzureConfig } from "@/lib/env";
+import { createLogger } from "@/lib/logger";
+
+const azureLog = createLogger("azure-openai");
 import {
   parseNumericRelevance,
   parsePortfolioMatchAssessment,
@@ -99,25 +105,49 @@ async function respond(
     body: JSON.stringify(body),
   });
 
-  const data = (await res.json()) as AzureOpenAIResponse;
+  const data = (await res.json()) as AzureOpenAIResponse & {
+    error?: { message?: string; code?: string };
+  };
+  if (!res.ok) {
+    const detail = data.error?.message ?? res.statusText;
+    const azCode = data.error?.code ?? "";
+    throw new Error(
+      `Azure OpenAI HTTP ${res.status} [${azCode || "unknown"}]: ${detail}`,
+    );
+  }
   return extractOutputText(data);
 }
 
 export function createAzureOpenAIProvider(): IAIProvider {
-  const key = process.env.AZURE_OPENAI_API_KEY?.trim() || "";
-  const baseUrl = normalizeBaseUrl(
-    process.env.AZURE_OPENAI_BASE_URL?.trim() ||
-      process.env.AZURE_OPENAI_ENDPOINT?.trim() ||
-      "",
-  );
-  const model =
-    process.env.AZURE_OPENAI_MODEL?.trim() ||
-    process.env.AZURE_OPENAI_DEPLOYMENT?.trim() ||
-    DEFAULT_MODEL;
+  const validation = validateAzureConfig();
+
+  if (!validation.ok) {
+    const summary = validation.issues.map((i) => `${i.field}: ${i.reason}`).join("; ");
+    azureLog.error("Azure OpenAI config invalid — falling back to stub for non-chat methods", {
+      issues: validation.issues,
+    });
+
+    const chatError = new AIChatError(
+      "provider_auth",
+      `Azure OpenAI is misconfigured: ${summary}. Check .env and the Azure portal.`,
+    );
+
+    return {
+      ...stubAIProvider,
+      async answerArticleQuestion() {
+        throw chatError;
+      },
+      async answerPortfolioQuestion() {
+        throw chatError;
+      },
+    };
+  }
+
+  const key = validation.key;
+  const baseUrl = normalizeBaseUrl(validation.baseUrl);
+  const model = validation.model || DEFAULT_MODEL;
   const rawEffort = process.env.AZURE_OPENAI_REASONING_EFFORT?.trim().toLowerCase() || "";
   const reasoningEffort = REASONING_EFFORTS.has(rawEffort) ? rawEffort : undefined;
-
-  if (!key || !baseUrl || !model) return stubAIProvider;
 
   function msgs(
     p: { system: string; user: string },
@@ -234,22 +264,18 @@ export function createAzureOpenAIProvider(): IAIProvider {
     },
 
     async answerArticleQuestion(context: ArticleChatContext) {
-      try {
-        const p = articleChatPrompt(context);
-        const request = msgs(p, context.history);
-        const text = await respond(
-          key,
-          baseUrl,
-          model,
-          request.system,
-          request.input,
-          350,
-          reasoningEffort,
-        );
-        return text ?? (await stubAIProvider.answerArticleQuestion(context));
-      } catch {
-        return stubAIProvider.answerArticleQuestion(context);
-      }
+      const p = articleChatPrompt(context);
+      const request = msgs(p, context.history);
+      const text = await respond(
+        key,
+        baseUrl,
+        model,
+        request.system,
+        request.input,
+        ARTICLE_CHAT_MAX_TOKENS,
+        reasoningEffort,
+      );
+      return assertNonEmptyArticleChatReply(text);
     },
 
     async answerPortfolioQuestion(context: PortfolioCopilotContext) {

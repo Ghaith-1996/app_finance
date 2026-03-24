@@ -16,8 +16,11 @@ vi.mock("@/lib/services/news/worker", () => ({
   runPythonWorker: (...args: unknown[]) => mockRunPythonWorker(...args),
 }));
 
+const mockExtractPublisherContent = vi.fn();
+
 vi.mock("@/lib/services/news", () => ({
   ingestNewsToSupabase: (...args: unknown[]) => mockIngestNewsToSupabase(...args),
+  extractPublisherContent: (...args: unknown[]) => mockExtractPublisherContent(...args),
 }));
 
 import { POST } from "@/app/api/news/cron/route";
@@ -35,12 +38,31 @@ function emptyRow() {
   return { fetched: 0, inserted: 0, skipped: 0, failed: 0, inserted_ids: [] };
 }
 
+function emptyExtractionStats() {
+  return {
+    queued: 0,
+    attempted: 0,
+    extracted: 0,
+    skipped: 0,
+    failed: 0,
+    skippedMissingUrl: 0,
+    skippedUnsupportedSource: 0,
+    skippedAlreadyExtracted: 0,
+    skippedUnsupportedUrl: 0,
+    errors: [],
+    background: true,
+    processedArticleIds: [],
+  };
+}
+
 describe("POST /api/news/cron", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     mockResolveGlobalTickers.mockReset();
     mockRunPythonWorker.mockReset();
     mockIngestNewsToSupabase.mockReset();
+    mockExtractPublisherContent.mockReset();
+    mockExtractPublisherContent.mockResolvedValue(emptyExtractionStats());
     process.env.CRON_SECRET = "test-secret";
   });
 
@@ -61,11 +83,16 @@ describe("POST /api/news/cron", () => {
   it("runs EDGAR + NewsAPI + GNews via a single worker call (no per-portfolio headline tickers)", async () => {
     mockResolveGlobalTickers.mockResolvedValue({ tickers: ["AAPL", "MSFT"] });
     mockRunPythonWorker.mockResolvedValue({
-      edgar: { ...emptyRow(), fetched: 2, inserted: 1 },
-      newsapi: { ...emptyRow(), fetched: 10, inserted: 5 },
-      gnews: { ...emptyRow(), fetched: 6, inserted: 2 },
+      edgar: { ...emptyRow(), fetched: 2, inserted: 1, inserted_ids: ["id-e1"] },
+      newsapi: { ...emptyRow(), fetched: 10, inserted: 5, inserted_ids: ["id-n1", "id-n2", "id-n3", "id-n4", "id-n5"] },
+      gnews: { ...emptyRow(), fetched: 6, inserted: 2, inserted_ids: ["id-g1", "id-g2"] },
       total_inserted: 8,
       ingest_status: "success",
+    });
+    mockExtractPublisherContent.mockResolvedValue({
+      ...emptyExtractionStats(),
+      queued: 8,
+      attempted: 8,
     });
     mockIngestNewsToSupabase.mockResolvedValue({ enriched: 8, skipped: 0 });
 
@@ -73,6 +100,9 @@ describe("POST /api/news/cron", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(mockRunPythonWorker).toHaveBeenCalledWith(["AAPL", "MSFT"], 24, 50);
+    expect(mockExtractPublisherContent).toHaveBeenCalledWith("mock-supabase", {
+      articleIds: ["id-e1", "id-n1", "id-n2", "id-n3", "id-n4", "id-n5", "id-g1", "id-g2"],
+    });
     expect(body.totalInserted).toBe(8);
     expect(body.enriched).toBe(8);
     expect(body.ingestBreakdown.edgar.inserted).toBe(1);

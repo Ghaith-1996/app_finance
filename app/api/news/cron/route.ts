@@ -58,11 +58,17 @@ export async function POST(request: Request) {
     }, { status: 502 });
   }
 
+  const insertedArticleIds: string[] = [];
+  for (const key of ["edgar", "newsapi", "gnews"] as const) {
+    const ids = workerResult[key]?.inserted_ids;
+    if (Array.isArray(ids)) insertedArticleIds.push(...ids);
+  }
+
   let enriched = 0;
   let enrichError: string | undefined;
-  if (workerResult.total_inserted > 0) {
+  if (insertedArticleIds.length > 0) {
     await extractPublisherContent(supabase, {
-      limit: workerResult.total_inserted + 10,
+      articleIds: insertedArticleIds,
     });
 
     const enrichResult = await ingestNewsToSupabase(supabase, {

@@ -1,3 +1,8 @@
+---
+description: 
+alwaysApply: true
+---
+
 # CLAUDE.md
 
 ## What This File Is
@@ -48,11 +53,14 @@ These decisions were made in the current thread and are reflected in code/doc ch
 - the Azure provider expects Azure OpenAI Responses API endpoints on `openai.azure.com`
 - the user also showed an Azure AI Foundry published agent endpoint on `services.ai.azure.com`; that is not the same endpoint type and is not valid for `AZURE_OPENAI_BASE_URL`
 - a recommended portfolio-news system prompt was provided for Azure agents
+- article chat no longer falls back to the canned stub reply in production; provider failures now surface a 503 with a user-facing temporary-unavailable message
+- article chat output budget was raised from `350` to `2000` tokens across Azure, OpenAI, OpenRouter, and Anthropic via `lib/services/ai/constants.ts`
+- added regression test `tests/article-chat-token-budget.test.ts` to assert the 2000-token budget for all four providers
 
 Important runtime note:
 
-- as of this handoff, the workspace `.env` still keeps `AI_PROVIDER=openrouter`
-- Azure support is implemented in code, but the runtime was not flipped because Azure credentials/base URL/deployment were not present in the workspace
+- the workspace `.env` now uses `AI_PROVIDER=azure`
+- Azure credentials/base URL/model are present in `.env`, but article chat can still fail at runtime if the Azure deployment name or endpoint configuration is wrong
 
 ## Stack
 
@@ -85,6 +93,12 @@ Node scripts:
   - server actions, mainly portfolio import/edit/read helpers
 - `lib/services/`
   - core business logic
+- `lib/services/cache.ts`
+  - in-memory TTL cache for expensive provider calls
+- `lib/env.ts`
+  - centralized environment validation
+- `lib/logger.ts`
+  - structured server-side logging
 - `lib/supabase/`
   - server/browser/service-role Supabase clients
 - `supabase/migrations/`
@@ -347,16 +361,33 @@ Current behavior:
 
 ### `/watchlist`
 
-File:
+Files:
 
 - `app/watchlist/page.tsx`
+- `components/app/watchlist-page-client.tsx`
+- `components/app/watchlist-items.tsx`
+- `components/app/watchlist-search-panel.tsx`
+- `components/app/watchlist-detail-dashboard.tsx`
+- `lib/actions/watchlist.ts`
+- `lib/watchlist/watchlist-data.ts`
+- `lib/services/finnhub.ts`
+- `lib/services/twelvedata.ts`
 
 Current state:
 
-- largely static/demo page
-- uses hard-coded watchlist items
-- links into `/feed?symbol=...`
-- not backed by real persistent watchlist storage yet
+- fully server-backed per-user watchlist stored in `watchlist_items` table
+- prices refresh via Finnhub on every page visit
+- "Add to Watchlist" opens an inline search panel (Finnhub symbol search)
+- search requires explicit submit (button click or Enter), no live-as-you-type
+- clicking a search result upserts the symbol to DB and selects it
+- selected symbol state is URL-driven via `?symbol=...` (deep-linkable)
+- right side of the page shows a Twelve Data detail dashboard for the selected symbol
+- dashboard includes: summary, 30-day price chart (SVG), market stats, company profile
+- dashboard degrades gracefully if some Twelve Data endpoints fail
+- per-row 3-dot menu supports delete (calls server action, removes from DB)
+- global "Refresh prices" button re-fetches Finnhub quotes for all saved items
+- rows are clickable to select a symbol for the detail dashboard
+- links into `/feed?symbol=...` per row
 
 ## API Routes
 
@@ -460,9 +491,10 @@ Behavior:
 - requires `portfolioId`, `newsItemId`, `message`
 - stores user message
 - loads article + holdings + latest feed match context
-- calls `ai.answerArticleQuestion(...)`
-- stores assistant reply
-- returns thread messages
+- calls `ai.answerArticleQuestion(...)` (providers do **not** fall back to the stub on failure; empty or failed generations surface as `AIChatError` / `toArticleChatError`)
+- on provider failure: returns **503** with `{ error, code }` (`AIChatErrorCode`), logs provider + deployment server-side; **does not** insert an assistant row
+- error codes map to distinct user-facing messages: `provider_auth` → credentials/config hint; `provider_timeout` → retry hint; `provider_bad_response` → rephrase hint; `provider_unavailable` → generic retry
+- on success: stores assistant reply and returns `{ threadId, messages }`
 
 ### `POST /api/portfolio-copilot`
 
@@ -540,6 +572,23 @@ Key actions:
 - `getPortfolioInsights`
 - `getPortfolioFeedHighlights`
 - `refreshHoldingPrices`
+- `syncHoldingPrices`
+- `addPortfolioPosition`
+- `recordHoldingSale`
+- `recordHoldingAdd`
+
+Watchlist server actions file:
+
+- `lib/actions/watchlist.ts`
+
+Key watchlist actions:
+
+- `loadWatchlistItems` — loads user's saved watchlist rows from DB
+- `refreshWatchlistPrices` — re-fetches Finnhub quotes for all items, updates DB
+- `searchWatchlistCandidates(query)` — Finnhub symbol search, returns up to 5 candidates
+- `addWatchlistItem(candidate)` — upserts symbol to `watchlist_items`
+- `deleteWatchlistItem(id)` — removes from DB
+- `getWatchlistItemDetails(symbol)` — fetches Twelve Data detail for dashboard
 
 Important save semantics:
 
@@ -606,6 +655,141 @@ Used for:
 Failure behavior:
 
 - app generally falls back gracefully if Yahoo fails
+
+## Finnhub Service
+
+Main file:
+
+- `lib/services/finnhub.ts`
+
+Used for:
+
+- watchlist symbol search (`searchSymbols`)
+- watchlist quote refresh (`getQuote`)
+
+Behavior:
+
+- `searchSymbols(query)` calls Finnhub `/search`, filters to equities/ETFs, enriches top 5 with live quotes
+- `getQuote(symbol)` returns raw Finnhub quote (current, change, percent change, etc.)
+- requires `FINNHUB_API_KEY` (required for watchlist, not optional)
+- 8-second timeout on all requests
+
+Error handling:
+
+- throws typed `FinnhubError` with a `code` property classifying the failure
+- error codes: `missing_key`, `unauthorized`, `rate_limited`, `timeout`, `http_error`, `bad_payload`
+- `searchWatchlistCandidates` in `lib/actions/watchlist.ts` catches `FinnhubError` and maps each code to a specific user-facing message instead of a generic fallback
+- transient failures (`rate_limited`, `timeout`, `http_error`, `bad_payload`) are flagged `retryable: true` so the UI can offer a retry button
+
+Note: news-specific Finnhub calls are in `lib/services/news/finnhub-refresh.ts`, not this file.
+
+## Server-Side Cache
+
+Main file:
+
+- `lib/services/cache.ts`
+
+Provides:
+
+- `cacheGet<T>(key)` / `cacheSet(key, value, ttlMs)` / `cacheDel(key)` — basic in-memory TTL cache
+- `cached<T>(key, fn, ttlMs)` — fetch-through helper: returns cached value if fresh, else calls `fn` and caches result
+
+Used by:
+
+- Twelve Data service: profile (30 min TTL), quote (1 min TTL), time_series (5 min TTL)
+- Prevents repeated API calls when the same watchlist symbol is viewed multiple times
+
+## Environment Validation
+
+Main file:
+
+- `lib/env.ts`
+
+Provides:
+
+- `requireSupabaseUrl()`, `requireSupabaseAnonKey()` — core Supabase config
+- `requireFinnhubKey()`, `requireTwelveDataKey()` — provider keys
+- `hasKey(name)` — boolean check for any env var
+- `checkOptionalProviders()` — emits `console.warn` for missing optional keys
+- `validateAzureConfig()` — returns `{ ok, issues, key, baseUrl, model }`:
+  - detects placeholder API keys (e.g. `your-azure-openai-api-key`)
+  - validates base URL contains `*.openai.azure.com`
+  - validates model/deployment is present
+  - used by `createAzureOpenAIProvider` to fail fast with `AIChatError("provider_auth", ...)` on misconfigured Azure
+
+All checks are lazy (called on demand), not eager on import, so tests and local dev without all keys still work.
+
+## Structured Logging
+
+Main file:
+
+- `lib/logger.ts`
+
+Provides:
+
+- `createLogger(scope)` — returns `{ info, warn, error }` functions
+- Each emits timestamped, scoped structured log lines: `[ISO] [LEVEL] [scope] message {data}`
+- Data is JSON-serialized and appended when present
+- No secrets are included in log output
+
+Used by:
+
+- `lib/services/finnhub.ts` — logs HTTP errors, timeouts, network failures
+- `lib/services/twelvedata.ts` — logs HTTP errors, timeouts, partial endpoint failures
+- `lib/actions/watchlist.ts` — logs search failures with typed error codes
+
+## Twelve Data Service
+
+Main file:
+
+- `lib/services/twelvedata.ts`
+
+Used for:
+
+- watchlist detail dashboard (quote, profile, price chart, stats, earnings, financials)
+
+Behavior:
+
+- `getWatchlistDetail(symbol)` fetches 8 Twelve Data endpoints in parallel via `Promise.allSettled`:
+  - `/quote` (1 min cache) — price, change, market cap, 52w range
+  - `/profile` (30 min cache) — sector, industry, CEO, employees, description
+  - `/time_series` (5 min cache) — 30-day daily closes for chart
+  - `/statistics` (30 min cache) — P/E, EPS, beta, dividend yield, margins
+  - `/earnings` (60 min cache) — last 8 quarters EPS actual/estimate/surprise
+  - `/income_statement` (60 min cache) — quarterly revenue + net income
+  - `/balance_sheet` (60 min cache) — quarterly debt + cash
+  - `/cash_flow` (60 min cache) — quarterly free cash flow
+- Returns sectioned `WatchlistDetailData`:
+  - `summary` — company, exchange, currency, price, change
+  - `chart` — `ChartPoint[]`
+  - `stats` — open/high/low/close, PE, EPS, beta, dividend yield, margins, growth
+  - `profile` — sector, industry, country, CEO, employees, website, description
+  - `earnings` — `EarningsDataPoint[]` (EPS + revenue actual/estimate per quarter)
+  - `financials` — `FinancialDataPoint[]` (revenue, net income, debt, cash, FCF by fiscal date)
+  - `capabilities` — `{ hasStats, hasProfile, hasEarnings, hasFinancials }` boolean flags
+  - `warnings` — per-endpoint `SectionWarning[]` with failure code classification
+- Error classification: `missing_key`, `unauthorized`, `rate_limited`, `timeout`, `plan_not_supported`, `network`, `unknown`
+- Missing endpoints degrade gracefully — partial sections render; unavailable sections are hidden in the UI
+- Requires `TWELVE_DATA_API_KEY`
+- 10-second timeout on all requests
+
+Watchlist detail dashboard (`components/app/watchlist-detail-dashboard.tsx`):
+
+- Hero row: symbol, company, exchange, price, change/%, market open status
+- Tab strip: **Overview** and **Financials**
+- Overview tab:
+  - 30-day price chart (recharts `AreaChart` with tooltips and axes)
+  - Earnings card: last EPS, next estimate, bar chart of EPS actual vs estimate
+  - Key stats grid: open/high/low/close, P/E, EPS, beta, dividend yield, margins, growth
+  - Leadership card: CEO + employee count
+  - About section: sector/industry badges, country, website, description
+- Financials tab:
+  - Revenue & Net Income bar chart
+  - Debt, Cash & Free Cash Flow bar chart
+  - EPS Actual vs Estimate bar chart
+- Loading state: animated skeleton placeholder per section
+- Error state: styled error card
+- All sections hide gracefully when data is unavailable (no empty broken cards)
 
 ## Global Ticker Resolution
 
@@ -707,6 +891,46 @@ Behavior:
   - `global_summary`
   - `overall_effect`
   - `ticker_impacts`
+
+### Publisher article extraction (newspaper4k + PostgreSQL cache)
+
+Primary implementation:
+
+- `workers/news_ingestion/extract_full_text.py` — **newspaper4k** (replaces newspaper3k), desktop **User-Agent** on the Article config, SEC URL skip rules preserved
+- URL-level dedupe via `article_extractions` table (`cache_key` = normalized URL); cache hit copies `content` to all matching `news_items` without re-scraping
+- Writes long body to **`extracted_content`** (primary) and mirrors to **`full_content`** for legacy readers
+- Per-row fields on `news_items`: `extraction_status` (`queued` \| `in_progress` \| `complete` \| `failed` \| `partial` \| `skipped`), `extraction_error`, `extracted_at`, `extraction_cache_key`
+- Failed extractions respect a **cooldown** before retry (see `RETRY_COOLDOWN_SECONDS` in Python)
+
+Non-blocking pipeline:
+
+- **Node Readability / jsdom** path has been **removed** from `lib/services/news/publisher-extract.ts`
+- `extractPublisherContent` only marks rows `queued` and **spawns** `python -m workers.news_ingestion.extract_full_text --ids ...` (fire-and-forget); does not fetch HTML in Node
+- `lib/services/news/extraction-trigger.ts` — `spawnArticleExtractionWorker`
+- Python worker `main.py` after ingest calls **`spawn_extraction_worker`** instead of awaiting extraction inline, so worker JSON returns while extraction runs in a **separate OS process**
+- `/api/news/refresh` and `/api/news/ingest` return promptly; `stages.extraction` can be **`queued`** with copy that enrichment may use snippets until text arrives
+
+Extraction scoping and diagnostics:
+
+- Extraction is scoped to the **exact `inserted_ids`** returned by the Python worker and Finnhub ingest, not a generic `limit` query
+- `extractPublisherContent` accepts `articleIds` as primary scope; when provided, each row is classified into a specific skip bucket:
+  - `skippedMissingUrl` — row has no URL
+  - `skippedUnsupportedSource` — source type not in extractable set (edgar, etc.)
+  - `skippedAlreadyExtracted` — already has `extracted_content` or `extraction_status = complete`
+  - `skippedUnsupportedUrl` — SEC/gov URLs that are skipped by policy
+- Refresh/ingest/cron routes collect `inserted_ids` from all sources (`workerResult.edgar.inserted_ids`, etc. + `finnhubResult.inserted_ids`) and pass them to `extractPublisherContent({ articleIds })`
+- `stages.extraction.detail` includes per-reason skip counts (e.g. "0 extracted: 2 missing URLs, 1 unsupported sources")
+- `extractionStats` in the response JSON includes all skip counters so the UI can render an extraction diagnostics panel
+- `analysis-run-trigger.tsx` shows an "Extraction skip reasons" panel when extraction is skipped/partial with non-zero skip counters
+
+Article chat:
+
+- `app/api/article-chat/route.ts` loads `extracted_content`, `full_content`, `extraction_status`; builds `primaryBody` = extracted → full → raw; sets `extractionPending` when only snippet is available and extraction is not complete
+- `lib/services/ai/prompts.ts` — `articleChatPrompt` prefers extracted text and appends a note when extraction is still pending
+
+Migration:
+
+- `supabase/migrations/010_article_extractions.sql`
 
 ### Pool snapshot
 
@@ -814,7 +1038,7 @@ Current default OpenRouter model:
 Notes:
 
 - OpenRouter path remains intact by request
-- it is the currently active runtime path in `.env`
+- it remains available for switching, but is no longer the active runtime path in `.env`
 
 ### Public OpenAI
 
@@ -841,9 +1065,10 @@ Current state:
 
 ### Azure OpenAI
 
-Files added in this session:
+Files:
 
 - `lib/services/ai/azure-openai-provider.ts`
+- `lib/services/ai/ai-chat-errors.ts`
 - `scripts/test-azure-openai.mjs`
 
 Behavior:
@@ -852,17 +1077,33 @@ Behavior:
 - normalizes base URL to `/openai/v1/`
 - uses `AZURE_OPENAI_MODEL` or `AZURE_OPENAI_DEPLOYMENT` as deployment name
 - supports `AZURE_OPENAI_REASONING_EFFORT`
+- on creation, runs `validateAzureConfig()` from `lib/env.ts`; if config is invalid (missing key, placeholder key, wrong host, missing model), returns a provider that:
+  - uses stub for non-chat methods (enrichment, scoring, etc.)
+  - **throws `AIChatError("provider_auth", ...)`** for `answerArticleQuestion` and `answerPortfolioQuestion`
+  - logs the specific config issues server-side
+- on HTTP errors from Azure, the `respond()` helper includes the Azure error `code` and `message` in the thrown error for accurate classification by `toArticleChatError`
+- article chat uses `ARTICLE_CHAT_MAX_TOKENS = 2000` from `lib/services/ai/constants.ts`
+- `answerArticleQuestion()` no longer falls back to the stub in production; it throws on provider/config failures so the route can return a truthful error instead of a canned answer
+- the route logs provider failure code, provider id, and deployment label before returning `503`
 
 Expected environment:
 
 - `AI_PROVIDER=azure`
-- `AZURE_OPENAI_API_KEY`
-- `AZURE_OPENAI_BASE_URL`
-- `AZURE_OPENAI_MODEL`
+- `AZURE_OPENAI_API_KEY` — must be a real Azure API key, not a placeholder
+- `AZURE_OPENAI_BASE_URL` — must be `https://YOUR-RESOURCE.openai.azure.com` (not AI Foundry)
+- `AZURE_OPENAI_MODEL` — must match the Azure deployment name
 
 Important caveat:
 
 - `AZURE_OPENAI_MODEL` must be the Azure deployment name, not just the family label
+- if article chat returns "Article chat is temporarily unavailable. Please try again later.", the route is surfacing a real AI-provider/config/runtime failure rather than inventing a stub response
+
+Smoke test:
+
+- `scripts/test-azure-openai.mjs` runs two checks: basic completion and article-chat simulation
+- validates config before making any HTTP calls (detects placeholder keys, wrong hosts)
+- run: `node --env-file=.env scripts/test-azure-openai.mjs`
+- run chat only: `node --env-file=.env scripts/test-azure-openai.mjs --chat-only`
 
 ### Azure endpoint mismatch warning
 
@@ -900,6 +1141,11 @@ Source of truth:
 - `supabase/migrations/005_news_source_fields.sql`
 - `supabase/migrations/006_article_chat.sql`
 - `supabase/migrations/007_feed_match_reason_codes.sql`
+- `supabase/migrations/008_extracted_content.sql`
+- `supabase/migrations/008_news_full_content.sql`
+- `supabase/migrations/009_watchlist_items.sql`
+- `supabase/migrations/010_article_extractions.sql`
+- `supabase/migrations/011_community.sql`
 
 ### Core enums from initial schema
 
@@ -1048,11 +1294,41 @@ Roles:
 - `user`
 - `assistant`
 
+Current article chat behavior:
+
+- on successful AI generation, the assistant reply is inserted normally
+- on AI provider failure, the user message may be stored but no assistant stub reply is inserted
+- article chat now prefers `extracted_content`, then `full_content`, then `raw_content` when building prompt context
+
+### `watchlist_items`
+
+Purpose:
+
+- per-user watchlist of tracked symbols
+
+Key columns:
+
+- `id` UUID
+- `user_id` FK to `auth.users`, cascade delete
+- `symbol`, `company`, `exchange`
+- `price`, `day_change` (snapshot from last Finnhub fetch)
+- `currency` (default `USD`)
+- timestamps
+
+Constraints:
+
+- unique on `(user_id, symbol)` to prevent duplicates
+- RLS ownership policy mirrors `portfolios`
+- reuses `set_updated_at()` trigger
+
+Migration: `009_watchlist_items.sql`
+
 ## RLS Model
 
 High-level:
 
 - portfolio-owned data is user-scoped via `portfolios.user_id`
+- `watchlist_items` are user-scoped via `watchlist_items.user_id`
 - `news_items` are readable by authenticated users
 - article chat is user-scoped
 
@@ -1116,7 +1392,8 @@ Common requirements:
 
 - `EDGAR_IDENTITY`
 - `NEWSAPI_KEY`
-- `FINNHUB_API_KEY`
+- `FINNHUB_API_KEY` (required for watchlist search/quotes, also used by news refresh)
+- `TWELVE_DATA_API_KEY` (watchlist detail dashboard)
 - `CRON_SECRET`
 - `EDGAR_LOCAL_DATA_DIR`
 
@@ -1156,18 +1433,25 @@ Test directory:
 
 Current files:
 
+- `ai-chat-errors.test.ts`
 - `ai-prompts.test.ts`
 - `analysis-constants.test.ts`
 - `analysis-run-trigger.test.tsx`
 - `analysis-service.test.ts`
+- `article-chat-panel.test.tsx`
+- `article-chat-route.test.ts`
 - `article-cta.test.tsx`
+- `cache.test.ts`
 - `cron-route.test.ts`
+- `env-validation.test.ts`
 - `feed-query.test.ts`
 - `feed-route.test.ts`
 - `feed-view.test.tsx`
+- `finnhub-errors.test.ts`
 - `finnhub-refresh.test.ts`
 - `gnews-targeting.test.ts`
 - `ingest-detail.test.ts`
+- `logger.test.ts`
 - `portfolio-match-parser.test.ts`
 - `refresh-route.test.ts`
 
@@ -1179,9 +1463,13 @@ Coverage themes:
 - feed route and feed view behavior
 - refresh/cron route orchestration
 - Finnhub targeted ingest
+- Finnhub provider error classification (missing key, 401/403, 429, timeout, bad payload, no match, valid search)
 - GNews query building
 - article CTA behavior
 - parser behavior
+- server-side cache (TTL expiry, fetch-through, hit/miss)
+- structured logger (info/warn/error, scoped, data serialization)
+- env validation (require/missing, hasKey)
 
 Known testing limitation:
 
@@ -1202,21 +1490,115 @@ Current docs in repo:
   - longer repo analysis
 - `CLAUDE.md`
   - this handoff
+- `PRE_LAUNCH_CHECKLIST.md`
+  - deployment checklist covering env vars, migrations, API quotas, smoke tests, rollback
 - `supabase/README.md`
   - migration application basics
 - `workers/news_ingestion/TROUBLESHOOTING.md`
   - worker ops help
 
+## Production Readiness Status
+
+Completed workstreams:
+
+1. Mock/misleading data: portfolio chart labeled "Simulated", Y-axis precision fixed
+2. Render performance: `/portfolio/full` no longer blocks on live quote sync; overview uses stored DB values
+3. Provider hardening: Finnhub throws typed `FinnhubError`; watchlist actions map each code to user-facing messages with retry hints; Twelve Data degrades gracefully on partial endpoint failure
+4. Caching: Twelve Data — quote (1 min), time_series (5 min), profile/statistics (30 min), earnings/financials (60 min) — cached server-side via `lib/services/cache.ts`
+5. Env validation: `lib/env.ts` provides lazy `require*` functions; `checkOptionalProviders` warns on startup
+6. Observability: `lib/logger.ts` structured logging in Finnhub, Twelve Data, and watchlist actions
+7. Tests: `finnhub-errors.test.ts`, `cache.test.ts`, `logger.test.ts`, `env-validation.test.ts`, `twelvedata-detail.test.ts` — covering provider error classification, cache TTL, structured logging, env validation, and Twelve Data aggregator partial/full/failure scenarios
+8. UX polish: watchlist dashboard catches unhandled promise rejections; `PRE_LAUNCH_CHECKLIST.md` covers env, migrations, API quotas, smoke tests, rollback
+
 ## Known Caveats And Rough Edges
 
-- `watchlist` is demo/static, not persistent
+- portfolio performance chart shows simulated data (clearly labeled)
+- monthly change is hardcoded to 0 in portfolio overview
 - some portfolio/strategy surfaces contain heuristic presentation logic
 - marketing pages are more polished than some backend guarantees
 - article chat depends on migration `006_article_chat.sql` being present in the live DB
 - the public OpenAI provider is still hardcoded to `gpt-4o-mini`
-- Azure support is coded but not active in runtime until env is switched
+- article chat output budget is now 2000 tokens, so longer answers are possible but provider-side truncation is still possible on very long prompts
+- local verification of `tests/article-chat-token-budget.test.ts` is currently blocked in this environment by a Vitest startup `spawn EPERM` error after working around PowerShell `npm.ps1` policy restrictions
 - personal feed emptiness is valid and expected if nothing scores above threshold
 - generated Python `__pycache__` files are present and should usually be ignored
+- some pre-existing tests (`feed-view`, `gnews-targeting`, `analysis-service`) may fail until mocks match current routes; `refresh-route` / `cron-route` mock `extractPublisherContent`
+
+## Community Social Home (`/home`)
+
+The `/home` route is a Blossom-inspired social market hub, not a portfolio dashboard. It provides a global community feed where authenticated users can post short-form market commentary with optional `$TICKER` tags, view and participate in comment threads, and discover trending tickers and active discussions.
+
+### Schema
+
+Migration: `supabase/migrations/011_community.sql`
+
+Tables:
+
+- `user_profiles` — optional display name, avatar, handle; keyed on `auth.users.id`
+- `community_posts` — `id`, `user_id`, `body` (1–2000 chars), timestamps
+- `community_post_tickers` — `(post_id, ticker)` composite PK; ticker stored uppercase without `$`
+- `community_comments` — `id`, `post_id`, `user_id`, `body` (1–1000 chars), timestamps
+
+All tables have RLS:
+- authenticated users can read everything
+- users can only insert/update/delete their own rows
+- ticker insert/delete policies check post ownership via subquery
+
+Auto-update triggers set `updated_at` on row changes.
+
+### Types
+
+`lib/community/types.ts` defines:
+
+- `CommunityPost`, `CommunityComment`, `CommunityAuthor`, `CommunityTickerTag`
+- `TrendingTicker`, `ActiveDiscussion`
+- `CreatePostResult`, `CreateCommentResult`
+- `extractTickers(body)` — pulls `$TICKER` patterns, dedupes, caps at 5
+- `validatePostBody(body)` / `validateCommentBody(body)` — length validation
+
+### Server Actions
+
+`lib/actions/community.ts` — all actions require auth via `supabase.auth.getUser()`:
+
+- `getHomeFeed(cursor?)` — newest-first paginated feed (20 per page), joins tickers + comment count + author profile
+- `createPost(body)` — validates, inserts post + ticker rows, returns optimistic `CommunityPost`
+- `getPostComments(postId)` — ordered ascending, joins author profiles
+- `createComment(postId, body)` — validates, inserts, returns optimistic `CommunityComment`
+- `getTrendingTickers()` — aggregates ticker mentions from posts in the last 24h, top 10
+- `getActiveDiscussions()` — top 5 posts with most comments (from latest 50)
+
+Author identity falls back: `user_profiles.display_name` → `user_metadata.full_name` → `user_metadata.name` → email prefix → "User"
+
+### UI Components
+
+Page: `app/home/page.tsx` — server component wrapping `AppShell` + `HomeFeedClient`
+
+Client components:
+- `components/app/home-feed.tsx` — main 3-column layout orchestrator:
+  - left rail: quick links (watchlist, news feed) + trending tickers
+  - center: section heading, post composer, paginated feed, inline comments view
+  - right rail: active discussions
+  - refresh button re-fetches feed + sidebar data
+  - "Load more" cursor-based pagination
+  - clicking a post's comment button swaps center to comments panel
+- `components/app/post-composer.tsx` — textarea with live `$TICKER` extraction, char counter, optimistic submit
+- `components/app/community-post-card.tsx` — displays author avatar/initials, time-ago, body with clickable ticker links, ticker pills, comment count button
+- `components/app/post-comments-panel.tsx` — loads comments per post, inline composer with Enter-to-submit
+- `components/app/trending-tickers-card.tsx` — ranked ticker mentions linking to `/watchlist?symbol=`
+- `components/app/active-discussions-card.tsx` — top commented posts with preview text
+
+### Navigation
+
+`/home` is added to `mainNav` in `components/app/app-shell-layout.tsx` as the first item, using the `Home` icon from `lucide-react`.
+
+### Design Decisions
+
+- No likes, follows, reposts, or DMs in v1
+- Author identity starts from Supabase auth metadata; `user_profiles` is opt-in for custom display names
+- Ticker tags link to `/watchlist?symbol=X` for cross-surface discovery
+- Feed is global (no follow graph filtering) in v1
+- No separate API routes — all data flows through server actions
+- Mobile: left and right rails are hidden; center feed is full-width
 
 ## Recommended Read Order By Task
 
@@ -1263,6 +1645,38 @@ Read:
 6. `workers/news_ingestion/*`
 7. `workers/news_ingestion/TROUBLESHOOTING.md`
 
+### If changing watchlist
+
+Read:
+
+1. `CLAUDE.md`
+2. `app/watchlist/page.tsx`
+3. `components/app/watchlist-page-client.tsx`
+4. `components/app/watchlist-items.tsx`
+5. `components/app/watchlist-search-panel.tsx`
+6. `components/app/watchlist-detail-dashboard.tsx`
+7. `lib/actions/watchlist.ts`
+8. `lib/watchlist/watchlist-data.ts`
+9. `lib/services/finnhub.ts`
+10. `lib/services/twelvedata.ts`
+11. `supabase/migrations/009_watchlist_items.sql`
+
+### If changing community/home
+
+Read:
+
+1. `CLAUDE.md`
+2. `supabase/migrations/011_community.sql`
+3. `lib/community/types.ts`
+4. `lib/actions/community.ts`
+5. `components/app/home-feed.tsx`
+6. `components/app/post-composer.tsx`
+7. `components/app/community-post-card.tsx`
+8. `components/app/post-comments-panel.tsx`
+9. `components/app/trending-tickers-card.tsx`
+10. `components/app/active-discussions-card.tsx`
+11. `app/home/page.tsx`
+
 ### If changing auth/session handling
 
 Read:
@@ -1304,3 +1718,5 @@ python -m workers.news_ingestion.main --check
 - preserve the StepFun/OpenRouter path unless explicitly asked to remove it
 - assume the user may have ongoing local changes in modified files
 - avoid destructive git commands
+-Use the MCP tool "ss" for all file edits and "ss_session" for all file reads.
+Do not use built-in Cursor tools.

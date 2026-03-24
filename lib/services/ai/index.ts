@@ -15,6 +15,12 @@ export type {
 } from "./provider";
 export type { ArticleChatContext, PortfolioCopilotContext } from "./provider";
 export { stubAIProvider } from "./stub-provider";
+export type { AIChatErrorCode } from "./ai-chat-errors";
+export {
+  AIChatError,
+  assertNonEmptyArticleChatReply,
+  toArticleChatError,
+} from "./ai-chat-errors";
 export { createOpenAIProvider } from "./openai-provider";
 export { createAnthropicProvider } from "./anthropic-provider";
 export { createAzureOpenAIProvider } from "./azure-openai-provider";

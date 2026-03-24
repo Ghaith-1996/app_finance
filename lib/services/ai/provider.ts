@@ -48,8 +48,16 @@ export interface ArticleChatContext {
     publishedAt: string;
     category: NewsCategory;
     globalSummary?: string;
+    /** Provider headline/snippet / short body. */
     rawContent?: string;
+    /** Primary long text from newspaper4k extraction (preferred). */
     extractedContent?: string;
+    /** Legacy full-text backfill; prefer extractedContent in new code. */
+    fullContent?: string;
+    /** Best available body for the model: extracted → full → raw. */
+    primaryBody?: string;
+    extractionPending?: boolean;
+    extractionStatus?: string | null;
     stockTags: string[];
     tickerImpacts: TickerImpact[];
     sourceType?: string;

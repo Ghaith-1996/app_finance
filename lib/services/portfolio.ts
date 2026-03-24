@@ -1,5 +1,4 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getQuotes } from "@/lib/services/yahoo-finance";
 
 export interface PortfolioOverviewResult {
   totalValue: number;
@@ -21,29 +20,18 @@ export async function computePortfolioOverview(
     .eq("portfolio_id", portfolioId);
 
   const rows = holdings ?? [];
-  const symbols = rows.map((h) => h.symbol as string);
-
-  let quotes = new Map<string, { price: number; dailyChange: number }>();
-  if (symbols.length > 0) {
-    try {
-      quotes = await getQuotes(symbols);
-    } catch {
-      // Yahoo Finance unavailable; fall through to DB prices
-    }
-  }
 
   const enriched = rows.map((h) => {
-    const live = quotes.get((h.symbol as string).toUpperCase());
     const qty = Number(h.quantity ?? 0);
-    const livePrice = live?.price ?? Number(h.current_price ?? h.price ?? 0);
-    const dailyChange = live?.dailyChange ?? Number(h.daily_change ?? 0);
+    const price = Number(h.current_price ?? h.price ?? 0);
+    const dailyChange = Number(h.daily_change ?? 0);
 
     return {
-      price: livePrice,
+      price,
       dailyChange,
       quantity: qty,
       allocation: Number(h.allocation ?? 0),
-      value: qty > 0 ? qty * livePrice : livePrice * (Number(h.allocation ?? 0) / 100) * 1000,
+      value: qty > 0 ? qty * price : price * (Number(h.allocation ?? 0) / 100) * 1000,
     };
   });
 
@@ -82,9 +70,7 @@ export async function computePortfolioOverview(
     : "Never";
   const lastSyncedAt = portfolioRow?.last_synced_at
     ? formatTimeAgo(portfolioRow.last_synced_at)
-    : quotes.size > 0
-      ? "Just now"
-      : "—";
+    : "—";
 
   return {
     totalValue: Math.round(totalValue),

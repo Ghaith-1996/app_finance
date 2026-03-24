@@ -62,7 +62,7 @@ interface RunState {
 }
 
 interface PipelineStage {
-  status: "success" | "failed" | "skipped" | "partial" | "empty";
+  status: "success" | "failed" | "skipped" | "partial" | "empty" | "queued";
   detail: string;
 }
 
@@ -97,6 +97,18 @@ interface AnalysisMetaPayload {
   latestPublishedAt24h: string | null;
   candidatesScored: number;
   feedItemsCreated: number;
+}
+
+interface ExtractionStatsPayload {
+  queued?: number;
+  attempted?: number;
+  extracted?: number;
+  failed?: number;
+  skippedMissingUrl?: number;
+  skippedUnsupportedSource?: number;
+  skippedAlreadyExtracted?: number;
+  skippedUnsupportedUrl?: number;
+  background?: boolean;
 }
 
 interface RefreshOutcomePayload {
@@ -180,6 +192,7 @@ export function AnalysisRunTrigger({
   const [pipelineStages, setPipelineStages] = useState<Record<string, PipelineStage> | null>(null);
   const [ingestBreakdown, setIngestBreakdown] = useState<IngestBreakdownPayload | null>(null);
   const [refreshOutcome, setRefreshOutcome] = useState<RefreshOutcomePayload | null>(null);
+  const [extractionStats, setExtractionStats] = useState<ExtractionStatsPayload | null>(null);
   const [healthIssues, setHealthIssues] = useState<Array<{ name: string; error: string }> | null>(null);
   const fetchingRef = useRef(false);
   const supabase = useMemo(() => createClient(), []);
@@ -244,6 +257,7 @@ export function AnalysisRunTrigger({
     setPipelineStages(null);
     setIngestBreakdown(null);
     setRefreshOutcome(null);
+    setExtractionStats(null);
     setHealthIssues(null);
     setLoading(true);
 
@@ -275,6 +289,10 @@ export function AnalysisRunTrigger({
           })),
         );
       }
+    }
+
+    if (data.extractionStats) {
+      setExtractionStats(data.extractionStats as ExtractionStatsPayload);
     }
 
     if (data.stages) {
@@ -334,6 +352,15 @@ export function AnalysisRunTrigger({
   const ingestNeedsDiagnostics =
     pipelineStages?.ingest?.status === "empty" ||
     pipelineStages?.ingest?.status === "partial";
+
+  const extractionNeedsDiagnostics =
+    extractionStats != null &&
+    (pipelineStages?.extraction?.status === "skipped" ||
+      pipelineStages?.extraction?.status === "partial") &&
+    ((extractionStats.skippedMissingUrl ?? 0) > 0 ||
+      (extractionStats.skippedUnsupportedSource ?? 0) > 0 ||
+      (extractionStats.skippedAlreadyExtracted ?? 0) > 0 ||
+      (extractionStats.skippedUnsupportedUrl ?? 0) > 0);
 
   const completeHero =
     run?.status === "complete" ? heroForCompleteRun(refreshOutcome) : null;
@@ -416,9 +443,11 @@ export function AnalysisRunTrigger({
                   ? "border-rose-500/30 bg-rose-500/10"
                   : stage.status === "skipped"
                     ? "border-white/10 bg-white/4"
-                    : stage.status === "partial" || stage.status === "empty"
-                      ? "border-amber-500/25 bg-amber-500/10"
-                      : "border-brand/24 bg-brand/8",
+                    : stage.status === "queued"
+                      ? "border-sky-500/25 bg-sky-500/10"
+                      : stage.status === "partial" || stage.status === "empty"
+                        ? "border-amber-500/25 bg-amber-500/10"
+                        : "border-brand/24 bg-brand/8",
               )}
             >
               <div className="space-y-1">
@@ -431,9 +460,11 @@ export function AnalysisRunTrigger({
                     ? "danger"
                     : stage.status === "skipped"
                       ? "neutral"
-                      : stage.status === "partial" || stage.status === "empty"
-                        ? "warning"
-                        : "success"
+                      : stage.status === "queued"
+                        ? "brand"
+                        : stage.status === "partial" || stage.status === "empty"
+                          ? "warning"
+                          : "success"
                 }
               >
                 {stage.status}
@@ -484,6 +515,31 @@ export function AnalysisRunTrigger({
               <li key={line}>{line}</li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {extractionNeedsDiagnostics && extractionStats && (
+        <div
+          data-testid="extraction-diagnostics"
+          className="rounded-2xl border border-amber-500/25 bg-amber-500/10 p-4 space-y-3"
+        >
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-amber-200">
+            Extraction skip reasons
+          </p>
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-200">
+            {(extractionStats.skippedMissingUrl ?? 0) > 0 && (
+              <span>Missing URL: {extractionStats.skippedMissingUrl}</span>
+            )}
+            {(extractionStats.skippedUnsupportedSource ?? 0) > 0 && (
+              <span>Unsupported source: {extractionStats.skippedUnsupportedSource}</span>
+            )}
+            {(extractionStats.skippedAlreadyExtracted ?? 0) > 0 && (
+              <span>Already extracted: {extractionStats.skippedAlreadyExtracted}</span>
+            )}
+            {(extractionStats.skippedUnsupportedUrl ?? 0) > 0 && (
+              <span>Unsupported URL: {extractionStats.skippedUnsupportedUrl}</span>
+            )}
+          </div>
         </div>
       )}
 

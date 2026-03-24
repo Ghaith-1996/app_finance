@@ -4,6 +4,6 @@
 edgartools>=2.7.0       # SEC EDGAR filing access
 newsapi-python>=0.2.7   # NewsAPI global headlines
 gnews>=0.4.2            # Google News RSS wrapper (no API key)
-newspaper3k>=0.2.8      # Full article text extraction from URLs
+newspaper4k>=0.9.0      # Full article text extraction from URLs (replaces newspaper3k)
 supabase>=2.10.0        # Supabase Python client
 python-dotenv>=1.0.0    # Load .env for local development

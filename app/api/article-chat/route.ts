@@ -1,6 +1,42 @@
 import { createClient } from "@/lib/supabase/server";
-import { getAIProvider } from "@/lib/services/ai";
+import {
+  AIChatError,
+  getAIProvider,
+  toArticleChatError,
+} from "@/lib/services/ai";
+import type { AIChatErrorCode } from "@/lib/services/ai";
+import { createLogger } from "@/lib/logger";
 import type { ArticleChatMessage, NewsCategory, TickerImpact } from "@/lib/types";
+
+const log = createLogger("article-chat");
+
+function deploymentLabelForLogs(): string {
+  const id = (process.env.AI_PROVIDER ?? "openrouter").toLowerCase();
+  if (id === "azure") {
+    return (
+      process.env.AZURE_OPENAI_MODEL?.trim() ||
+      process.env.AZURE_OPENAI_DEPLOYMENT?.trim() ||
+      "azure"
+    );
+  }
+  if (id === "openai") return "gpt-4o-mini";
+  if (id === "anthropic") return "claude-3-5-haiku-20241022";
+  return process.env.OPENROUTER_MODEL?.trim() || "openrouter-default";
+}
+
+function userFacingMessage(code: AIChatErrorCode): string {
+  switch (code) {
+    case "provider_auth":
+      return "AI provider credentials are invalid or missing. An admin needs to check the API key and deployment configuration.";
+    case "provider_timeout":
+      return "The AI provider took too long to respond. Please try again in a moment.";
+    case "provider_bad_response":
+      return "The AI provider returned an unusable response. Please try again or rephrase your question.";
+    case "provider_unavailable":
+    default:
+      return "Article chat is temporarily unavailable. Please try again later.";
+  }
+}
 
 type ThreadRow = {
   id: string;
@@ -118,7 +154,7 @@ async function loadPromptContext(
       supabase
         .from("news_items")
         .select(
-          "headline, source, published_at, category, global_summary, raw_content, full_content, stock_tags, ticker_impacts, source_type",
+          "headline, source, published_at, category, global_summary, raw_content, full_content, extracted_content, extraction_status, stock_tags, ticker_impacts, source_type",
         )
         .eq("id", newsItemId)
         .single(),
@@ -165,6 +201,18 @@ async function loadPromptContext(
     latestFeedItem = feedItem;
   }
 
+  const extracted = (article.extracted_content as string | null)?.trim() || "";
+  const fullLegacy = (article.full_content as string | null)?.trim() || "";
+  const raw = (article.raw_content as string | null)?.trim() || "";
+  const extStatus = (article.extraction_status as string | null) ?? null;
+  const primaryBody = extracted || fullLegacy || raw || undefined;
+  const extractionPending =
+    !extracted &&
+    !!raw &&
+    (extStatus === "queued" ||
+      extStatus === "in_progress" ||
+      (extStatus !== "complete" && extStatus !== "failed" && extStatus !== "skipped"));
+
   return {
     article: {
       headline: article.headline as string,
@@ -172,13 +220,18 @@ async function loadPromptContext(
       publishedAt: article.published_at as string,
       category: (article.category ?? "other") as NewsCategory,
       globalSummary: (article.global_summary as string | null) ?? undefined,
-      rawContent: (article.full_content as string | null) || (article.raw_content as string | null) || undefined,
+      rawContent: raw || undefined,
+      extractedContent: extracted || undefined,
+      fullContent: fullLegacy || undefined,
+      extractionPending,
+      extractionStatus: extStatus,
       stockTags: ((article.stock_tags as string[] | null) ?? []).map((tag) => tag.toUpperCase()),
       tickerImpacts: (article.ticker_impacts as TickerImpact[] | null) ?? [],
       sourceType: (article.source_type as string | null) ?? undefined,
       whyItMatters: latestFeedItem?.why_it_matters ?? undefined,
       matchedHoldings: latestFeedItem?.holdings ?? undefined,
       relevanceScore: latestFeedItem?.relevance_score ?? null,
+      primaryBody,
     },
     holdings: (holdings ?? []).map((row) => ({
       symbol: row.symbol as string,
@@ -261,11 +314,29 @@ export async function POST(request: Request) {
     const promptContext = await loadPromptContext(supabase, portfolioId, newsItemId);
 
     const ai = getAIProvider();
-    const answer = await ai.answerArticleQuestion({
-      ...promptContext,
-      history,
-      question: message,
-    });
+    let answer: string;
+    try {
+      answer = await ai.answerArticleQuestion({
+        ...promptContext,
+        history,
+        question: message,
+      });
+    } catch (err) {
+      const aiErr = err instanceof AIChatError ? err : toArticleChatError(err);
+      log.error("Article chat generation failed", {
+        code: aiErr.code,
+        provider: process.env.AI_PROVIDER ?? "openrouter",
+        deployment: deploymentLabelForLogs(),
+        message: aiErr.message,
+      });
+      return json(
+        {
+          error: userFacingMessage(aiErr.code),
+          code: aiErr.code,
+        },
+        503,
+      );
+    }
 
     const { error: insertAssistantError } = await supabase
       .from("article_chat_messages")

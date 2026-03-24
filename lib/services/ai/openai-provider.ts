@@ -8,6 +8,8 @@ import type {
   PortfolioCopilotContext,
   Sentiment,
 } from "./provider";
+import { assertNonEmptyArticleChatReply } from "./ai-chat-errors";
+import { ARTICLE_CHAT_MAX_TOKENS } from "./constants";
 import { stubAIProvider } from "./stub-provider";
 import {
   parseNumericRelevance,
@@ -44,7 +46,11 @@ async function chat(
       max_tokens: maxTokens,
     }),
   });
-  const data = (await res.json()) as ChatResponse;
+  const data = (await res.json()) as ChatResponse & { error?: { message?: string } };
+  if (!res.ok) {
+    const detail = data.error?.message ?? res.statusText;
+    throw new Error(`OpenAI HTTP ${res.status}: ${detail}`);
+  }
   return data.choices?.[0]?.message?.content?.trim() ?? null;
 }
 
@@ -146,13 +152,13 @@ export function createOpenAIProvider(): IAIProvider {
     },
 
     async answerArticleQuestion(context: ArticleChatContext) {
-      try {
-        const p = articleChatPrompt(context);
-        const text = await chat(key, [{ role: "system", content: p.system }, { role: "user", content: p.user }], 350);
-        return text ?? (await stubAIProvider.answerArticleQuestion(context));
-      } catch {
-        return stubAIProvider.answerArticleQuestion(context);
-      }
+      const p = articleChatPrompt(context);
+      const text = await chat(
+        key,
+        [{ role: "system", content: p.system }, { role: "user", content: p.user }],
+        ARTICLE_CHAT_MAX_TOKENS,
+      );
+      return assertNonEmptyArticleChatReply(text);
     },
 
     async answerPortfolioQuestion(context: PortfolioCopilotContext) {

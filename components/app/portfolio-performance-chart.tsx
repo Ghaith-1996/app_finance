@@ -109,10 +109,49 @@ function generateChartData(
   return data;
 }
 
-function formatAxisValue(value: number): string {
-  if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`;
-  if (value >= 1_000) return `$${(value / 1_000).toFixed(0)}K`;
+function formatAxisValue(value: number, range: number): string {
+  if (value >= 1_000_000) {
+    const inM = value / 1_000_000;
+    return range < 500_000 ? `$${inM.toFixed(2)}M` : `$${inM.toFixed(1)}M`;
+  }
+  if (value >= 1_000) {
+    const inK = value / 1_000;
+    return range < 5_000 ? `$${inK.toFixed(1)}K` : `$${inK.toFixed(0)}K`;
+  }
   return `$${value.toFixed(0)}`;
+}
+
+function computeDomain(data: ChartPoint[]): { min: number; max: number; ticks: number[] } {
+  if (data.length === 0) return { min: 0, max: 100, ticks: [0, 25, 50, 75, 100] };
+
+  const values = data.map((d) => d.value);
+  const rawMin = Math.min(...values);
+  const rawMax = Math.max(...values);
+  const span = rawMax - rawMin || rawMax * 0.02 || 100;
+  const padding = span * 0.15;
+
+  const min = Math.max(0, rawMin - padding);
+  const max = rawMax + padding;
+
+  const tickCount = 5;
+  const step = (max - min) / (tickCount - 1);
+
+  let precision: number;
+  if (step >= 10_000) precision = -3;
+  else if (step >= 1_000) precision = -2;
+  else if (step >= 100) precision = -1;
+  else precision = 0;
+
+  const factor = Math.pow(10, -precision);
+  const niceStep = Math.ceil(step / factor) * factor;
+
+  const niceMin = Math.floor(min / factor) * factor;
+  const ticks: number[] = [];
+  for (let i = 0; i < tickCount; i++) {
+    ticks.push(niceMin + niceStep * i);
+  }
+
+  return { min: ticks[0], max: ticks[ticks.length - 1], ticks };
 }
 
 function CustomTooltip({
@@ -160,9 +199,9 @@ function getRangeDescription(range: TimeRange, createdAt: Date): string {
 
   if (range === "1D") {
     const hours = Math.min(24, Math.ceil(diffDays * 24));
-    return `Aggregate portfolio value over ${hours} hour${hours !== 1 ? "s" : ""}`;
+    return `Simulated trend over ${hours} hour${hours !== 1 ? "s" : ""}`;
   }
-  return `Aggregate portfolio value over ${diffDays} day${diffDays !== 1 ? "s" : ""}`;
+  return `Simulated trend over ${diffDays} day${diffDays !== 1 ? "s" : ""}`;
 }
 
 export function PortfolioPerformanceChart({
@@ -179,6 +218,13 @@ export function PortfolioPerformanceChart({
     () => generateChartData(totalValue, range, createdAt),
     [totalValue, range, createdAt],
   );
+
+  const { min: domainMin, max: domainMax, ticks } = useMemo(
+    () => computeDomain(data),
+    [data],
+  );
+
+  const axisRange = domainMax - domainMin;
 
   const dayGainDollar = totalValue * (dayChange / 100);
   const isPositive = dayChange >= 0;
@@ -233,9 +279,14 @@ export function PortfolioPerformanceChart({
       <div className="rounded-2xl border border-white/[0.06] bg-surface-raised p-6">
         <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
           <div>
-            <p className="text-sm font-bold uppercase tracking-[0.15em] text-white">
-              Growth Performance
-            </p>
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-bold uppercase tracking-[0.15em] text-white">
+                Growth Performance
+              </p>
+              <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-400">
+                Simulated
+              </span>
+            </div>
             <p className="mt-1 text-xs text-slate-500">
               {getRangeDescription(range, createdAt)}
             </p>
@@ -292,11 +343,12 @@ export function PortfolioPerformanceChart({
                 orientation="right"
                 axisLine={false}
                 tickLine={false}
-                tickFormatter={formatAxisValue}
+                tickFormatter={(v: number) => formatAxisValue(v, axisRange)}
                 tick={{ fill: "#475569", fontSize: 11, fontWeight: 500 }}
                 dx={8}
-                width={64}
-                domain={["auto", "auto"]}
+                width={72}
+                domain={[domainMin, domainMax]}
+                ticks={ticks}
               />
 
               <Tooltip

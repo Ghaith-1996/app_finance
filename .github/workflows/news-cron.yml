@@ -1,0 +1,49 @@
+name: News Cron
+
+on:
+  schedule:
+    - cron: "7,27,47 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  trigger-news-cron:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call production news cron
+        env:
+          CRON_ENDPOINT: ${{ secrets.CRON_ENDPOINT }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${CRON_ENDPOINT:-}" ]; then
+            echo "CRON_ENDPOINT secret is not set"
+            exit 1
+          fi
+
+          if [ -z "${CRON_SECRET:-}" ]; then
+            echo "CRON_SECRET secret is not set"
+            exit 1
+          fi
+
+          response_file="$(mktemp)"
+          http_code="$(
+            curl -sS \
+              -X GET \
+              -H "Authorization: Bearer ${CRON_SECRET}" \
+              -H "Accept: application/json" \
+              -o "${response_file}" \
+              -w "%{http_code}" \
+              "${CRON_ENDPOINT}"
+          )"
+
+          echo "HTTP ${http_code}"
+          cat "${response_file}"
+
+          if [ "${http_code}" -lt 200 ] || [ "${http_code}" -ge 300 ]; then
+            echo "News cron invocation failed"
+            exit 1
+          fi

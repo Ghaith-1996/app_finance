@@ -62,11 +62,12 @@ These decisions were made in the current thread and are reflected in code/doc ch
 - profile domain helpers/types now live in `lib/profile/utils.ts`; `lib/actions/profile.ts` is intentionally async-only because `"use server"` files cannot export sync helpers like `isProfileComplete`
 - added migration `supabase/migrations/012_user_profile_names.sql` for `user_profiles.first_name` and `user_profiles.last_name`
 - added regression coverage for the profile flow in `tests/profile-utils.test.ts`, `tests/auth-callback-route.test.ts`, and `tests/user-menu.test.tsx`
-- `app/api/news/cron/route.ts` now supports both `GET` and `POST`; Vercel Cron Jobs should use `GET` and manual/admin invocations can still use `POST`
-- added `vercel.json` with a `*/20 * * * *` schedule for `/api/news/cron`
+- `app/api/news/cron/route.ts` now supports both `GET` and `POST`; GitHub Actions calls the deployed route with `GET` and manual/admin invocations can still use `POST`
+- added `.github/workflows/news-cron.yml` to trigger the production cron route every 20 minutes at `7,27,47` minutes past the hour (UTC) plus `workflow_dispatch`
 - cron start/end observability was added in `app/api/news/cron/route.ts` with duration, inserted counts by source, enrichment count, and analysis processed/skipped/error counts
-- `README.md` and `PRE_LAUNCH_CHECKLIST.md` now document the Vercel cron setup, required env vars, and post-deploy smoke test
-- the remaining Vercel-specific risk is runtime compatibility for `runPythonWorker()` inside the deployed function; that must be verified after deploy
+- removed `vercel.json`; Vercel still hosts the route, but GitHub Actions is now the active scheduler
+- `README.md` and `PRE_LAUNCH_CHECKLIST.md` now document the GitHub Actions scheduler setup, required secrets/env vars, and post-deploy smoke test
+- the remaining deployment risk is runtime compatibility for `runPythonWorker()` inside the deployed Vercel function; moving the scheduler does not remove that requirement
 
 Important runtime note:
 
@@ -594,7 +595,7 @@ File:
 Behavior:
 
 - secured by `CRON_SECRET`
-- supports `GET` for Vercel Cron Jobs and `POST` for manual/admin invocation
+- supports `GET` for GitHub Actions-triggered endpoint calls and `POST` for manual/admin invocation
 - **primary ingestion path** — runs on a 20-minute schedule
 - resolves global ticker universe from **all holdings + all watchlist symbols** across all users
 - runs Python worker (EDGAR + NewsAPI + GNews)
@@ -611,7 +612,7 @@ Important:
 - this is the single source of truth for fresh `news_items`
 - user-triggered refresh (`/api/news/refresh`) is deprecated
 - personal feed updates depend on this cron completing
-- `vercel.json` schedules this route every 20 minutes in production
+- `.github/workflows/news-cron.yml` schedules the production endpoint every 20 minutes in UTC
 - deployed Vercel runtime compatibility for `runPythonWorker()` must be verified manually
 
 ### `GET /api/news/health`
@@ -1620,8 +1621,8 @@ Current docs in repo:
   - this handoff
 - `PRE_LAUNCH_CHECKLIST.md`
   - deployment checklist covering env vars, migrations, API quotas, smoke tests, rollback
-- `vercel.json`
-  - schedules `/api/news/cron` every 20 minutes in production
+- `.github/workflows/news-cron.yml`
+  - schedules the deployed `/api/news/cron` endpoint every 20 minutes and supports manual `workflow_dispatch`
 - `supabase/README.md`
   - migration application basics
 - `workers/news_ingestion/TROUBLESHOOTING.md`

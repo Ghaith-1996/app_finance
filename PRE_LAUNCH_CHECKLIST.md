@@ -11,7 +11,8 @@
 - [ ] `EDGAR_IDENTITY` — required for SEC EDGAR fetcher
 - [ ] At least one AI provider key (`AI_PROVIDER` + matching key)
 - [ ] `CRON_SECRET` — if using unattended ingestion via `/api/news/cron`
-- [ ] Vercel Project Settings includes all cron env vars in the **Production** environment
+- [ ] Vercel Project Settings includes all cron route env vars in the **Production** environment
+- [ ] GitHub repository secrets include `CRON_ENDPOINT` and `CRON_SECRET`
 
 ## Database Migrations
 
@@ -53,9 +54,10 @@ Verify RLS is enabled on all user-facing tables:
 - [ ] `npm run build` completes without errors
 - [ ] `.env` is **not** committed to version control
 - [ ] `.next/` is in `.gitignore`
-- [ ] `vercel.json` includes the `/api/news/cron` schedule
-- [ ] Vercel cron is visible in Project Settings after deploy
-- [ ] Vercel plan supports a 20-minute cron cadence
+- [ ] `.github/workflows/news-cron.yml` exists on the default branch
+- [ ] GitHub Actions is enabled for the repository
+- [ ] The `News Cron` workflow is visible in the Actions tab
+- [ ] The workflow schedule is offset from the top of the hour and matches the intended UTC cadence
 
 ## Smoke Tests
 
@@ -74,7 +76,8 @@ After deploy, verify each flow manually:
 - [ ] Article chat creates thread and returns AI response
 - [ ] Analysis pipeline completes: ingest → enrich → analyze
 - [ ] `GET /api/news/cron` succeeds with `Authorization: Bearer <CRON_SECRET>`
-- [ ] A scheduled Vercel cron invocation appears in logs and reaches `/api/news/cron`
+- [ ] `workflow_dispatch` successfully invokes the production cron route
+- [ ] A scheduled GitHub Actions run appears in the Actions tab and reaches `/api/news/cron`
 - [ ] The deployed environment can execute `runPythonWorker()` successfully
 
 ## Rollback
@@ -90,4 +93,5 @@ After deploy, verify each flow manually:
 - No real-time WebSocket price streaming
 - Personal feed can be empty if no articles score above the relevance threshold
 - Article chat depends on a configured AI provider
-- The cron route depends on `runPythonWorker()`, so Vercel runtime compatibility for that subprocess must be verified in production rather than assumed
+- The cron route depends on `runPythonWorker()`, so deployed Vercel runtime compatibility for that subprocess must be verified in production rather than assumed
+- GitHub scheduled workflows run in UTC on the default branch and can be delayed during high-load periods

@@ -39,11 +39,22 @@ node --env-file=.env scripts/test-azure-openai.mjs
 node --env-file=.env scripts/test-openrouter.mjs
 ```
 
-## Vercel cron
+## GitHub Actions news scheduler
 
-Production news ingestion and analysis are driven by `app/api/news/cron/route.ts` on a 20-minute schedule via `vercel.json`.
+Production news ingestion and analysis are driven by `app/api/news/cron/route.ts`, but the scheduler now lives in `.github/workflows/news-cron.yml`.
 
-Required Vercel project env vars for cron:
+The workflow:
+
+- runs every 20 minutes at `7,27,47` minutes past the hour in UTC
+- also supports manual `workflow_dispatch`
+- calls the deployed production `GET /api/news/cron` endpoint with `Authorization: Bearer <CRON_SECRET>`
+
+Required GitHub repository secrets:
+
+- `CRON_ENDPOINT` - full production URL for the cron route, for example `https://your-app.vercel.app/api/news/cron`
+- `CRON_SECRET`
+
+Required Vercel production env vars for the route itself:
 
 - `CRON_SECRET`
 - `NEXT_PUBLIC_SUPABASE_URL`
@@ -56,7 +67,8 @@ Required Vercel project env vars for cron:
 
 Notes:
 
-- Vercel cron jobs invoke the route with `GET`, so the route supports both `GET` and `POST`.
-- The 20-minute cadence requires a Vercel plan that supports sub-daily cron schedules.
-- Cron jobs run on production deployments only.
-- Before relying on the schedule, manually call the route once with `Authorization: Bearer <CRON_SECRET>` to confirm the deployed environment can execute `runPythonWorker()`.
+- Scheduled GitHub Actions workflows run on the latest commit of the default branch only.
+- Schedule times are interpreted in UTC.
+- GitHub can delay or drop scheduled workflows during high-load periods, especially near the top of the hour, which is why the workflow uses an offset schedule instead of `0,20,40`.
+- Public repositories can have scheduled workflows disabled automatically after 60 days of inactivity.
+- Before relying on the schedule, run the workflow once with `workflow_dispatch` and confirm the deployed environment can execute `runPythonWorker()`.

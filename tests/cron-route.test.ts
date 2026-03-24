@@ -1,10 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mockIngestNewsToSupabase = vi.fn();
-const mockRunAnalysis = vi.fn();
-const mockLoggerInfo = vi.fn();
-const mockLoggerWarn = vi.fn();
-const mockLoggerError = vi.fn();
+const {
+  mockIngestNewsToSupabase,
+  mockRunAnalysis,
+  mockLoggerInfo,
+  mockLoggerWarn,
+  mockLoggerError,
+} = vi.hoisted(() => ({
+  mockIngestNewsToSupabase: vi.fn(),
+  mockRunAnalysis: vi.fn(),
+  mockLoggerInfo: vi.fn(),
+  mockLoggerWarn: vi.fn(),
+  mockLoggerError: vi.fn(),
+}));
 
 vi.mock("@/lib/supabase/service", () => ({
   createServiceClient: () => mockSupabase,
@@ -122,7 +130,7 @@ describe("POST /api/news/cron", () => {
     const body = await res.json();
 
     expect(mockIngestNewsToSupabase).toHaveBeenCalledWith(mockSupabase, {
-      articleIds: ["id-e1", "id-n1", "id-n2", "id-n3", "id-f1", "id-f2"],
+      articleIds: ["id-e1", "id-f1", "id-f2", "id-n1", "id-n2", "id-n3"],
     });
     expect(mockRunAnalysis).toHaveBeenCalledWith(mockSupabase, "p1");
     expect(body.totalInserted).toBe(6);
@@ -193,3 +201,4 @@ describe("GET /api/news/cron", () => {
     expect(res.status).toBe(405);
   });
 });
+

@@ -53,7 +53,7 @@ function isPayload(value: unknown): value is CronFinalizePayload {
 }
 
 function dedupeArticleIds(ids: string[]): string[] {
-  return [...new Set(ids.map((id) => String(id).trim()).filter(Boolean))];
+  return [...new Set(ids.map((id) => String(id).trim()).filter(Boolean))].sort();
 }
 
 async function runFinalize(request: Request) {
@@ -226,3 +226,4 @@ export async function GET() {
 export async function POST(request: Request) {
   return runFinalize(request);
 }
+

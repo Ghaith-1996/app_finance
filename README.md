@@ -47,12 +47,18 @@ The workflow:
 
 - runs every 20 minutes at `7,27,47` minutes past the hour in UTC
 - also supports manual `workflow_dispatch`
-- calls the deployed production `GET /api/news/cron` endpoint with `Authorization: Bearer <CRON_SECRET>`
+- runs `python -m workers.news_ingestion.cron_runner` on the GitHub runner to build the ingest payload
+- `POST`s that JSON payload to the deployed production `/api/news/cron` endpoint with `Authorization: Bearer <CRON_SECRET>`
 
 Required GitHub repository secrets:
 
 - `CRON_ENDPOINT` - full production URL for the cron route, for example `https://your-app.vercel.app/api/news/cron`
 - `CRON_SECRET`
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `NEWSAPI_KEY` - if NewsAPI ingestion is enabled
+- `EDGAR_IDENTITY` - if EDGAR ingestion is enabled
+- `FINNHUB_API_KEY` - if Finnhub ingestion is enabled
 
 Required Vercel production env vars for the route itself:
 
@@ -60,9 +66,6 @@ Required Vercel production env vars for the route itself:
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
-- `NEWSAPI_KEY`
-- `EDGAR_IDENTITY`
-- `FINNHUB_API_KEY`
 - AI provider envs used by enrichment (`AI_PROVIDER` plus the matching provider credentials)
 
 Notes:
@@ -71,4 +74,5 @@ Notes:
 - Schedule times are interpreted in UTC.
 - GitHub can delay or drop scheduled workflows during high-load periods, especially near the top of the hour, which is why the workflow uses an offset schedule instead of `0,20,40`.
 - Public repositories can have scheduled workflows disabled automatically after 60 days of inactivity.
-- Before relying on the schedule, run the workflow once with `workflow_dispatch` and confirm the deployed environment can execute `runPythonWorker()`.
+- Before relying on the schedule, run the workflow once with `workflow_dispatch` and confirm GitHub Actions can execute `python -m workers.news_ingestion.cron_runner` and the deployed route accepts the `POST` payload.
+

@@ -12,7 +12,8 @@
 - [ ] At least one AI provider key (`AI_PROVIDER` + matching key)
 - [ ] `CRON_SECRET` — if using unattended ingestion via `/api/news/cron`
 - [ ] Vercel Project Settings includes all cron route env vars in the **Production** environment
-- [ ] GitHub repository secrets include `CRON_ENDPOINT` and `CRON_SECRET`
+- [ ] GitHub repository secrets include `CRON_ENDPOINT`, `CRON_SECRET`, `NEXT_PUBLIC_SUPABASE_URL`, and `SUPABASE_SERVICE_ROLE_KEY`
+- [ ] GitHub repository secrets include any enabled source creds (`NEWSAPI_KEY`, `EDGAR_IDENTITY`, `FINNHUB_API_KEY`)
 
 ## Database Migrations
 
@@ -75,10 +76,10 @@ After deploy, verify each flow manually:
 - [ ] Feed page loads personal and market feeds
 - [ ] Article chat creates thread and returns AI response
 - [ ] Analysis pipeline completes: ingest → enrich → analyze
-- [ ] `GET /api/news/cron` succeeds with `Authorization: Bearer <CRON_SECRET>`
-- [ ] `workflow_dispatch` successfully invokes the production cron route
-- [ ] A scheduled GitHub Actions run appears in the Actions tab and reaches `/api/news/cron`
-- [ ] The deployed environment can execute `runPythonWorker()` successfully
+- [ ] `workflow_dispatch` successfully runs `python -m workers.news_ingestion.cron_runner` in GitHub Actions
+- [ ] The workflow successfully `POST`s the generated payload to `/api/news/cron`
+- [ ] A scheduled GitHub Actions run appears in the Actions tab and reaches `/api/news/cron` with a `POST` payload
+- [ ] The GitHub runner can execute the Python ingestion worker with production secrets
 
 ## Rollback
 
@@ -93,5 +94,6 @@ After deploy, verify each flow manually:
 - No real-time WebSocket price streaming
 - Personal feed can be empty if no articles score above the relevance threshold
 - Article chat depends on a configured AI provider
-- The cron route depends on `runPythonWorker()`, so deployed Vercel runtime compatibility for that subprocess must be verified in production rather than assumed
+- The GitHub scheduler depends on `python -m workers.news_ingestion.cron_runner`, so the runner environment and repository secrets must be verified in production rather than assumed
 - GitHub scheduled workflows run in UTC on the default branch and can be delayed during high-load periods
+

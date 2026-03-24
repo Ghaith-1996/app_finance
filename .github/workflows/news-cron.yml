@@ -81,9 +81,8 @@ jobs:
             exit 1
           fi
 
-          # Extract insertedArticleIds and shouldEnrich from the response
           article_ids="$(python3 -c "
-          import json, sys
+          import json
           data = json.load(open('${response_file}'))
           ids = data.get('insertedArticleIds', [])
           print(json.dumps(ids))
@@ -111,7 +110,6 @@ jobs:
           echo "Enriching articles via ${ENRICH_URL}"
           echo "Total article IDs: $(echo "${ARTICLE_IDS}" | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))')"
 
-          # Split into batches of 10 and call enrich endpoint for each
           python3 -c "
           import json, subprocess, sys
 
@@ -133,11 +131,11 @@ jobs:
                   '-H', 'Content-Type: application/json',
                   '-H', 'Accept: application/json',
                   '-d', payload,
-                  '-w', '\\n%{http_code}',
+                  '-w', '\n%{http_code}',
                   '${ENRICH_URL}'
               ], capture_output=True, text=True, timeout=120)
 
-              lines = result.stdout.strip().rsplit('\\n', 1)
+              lines = result.stdout.strip().rsplit('\n', 1)
               body = lines[0] if len(lines) > 1 else ''
               http_code = lines[-1].strip()
 
@@ -152,7 +150,7 @@ jobs:
               try:
                   resp = json.loads(body)
                   if resp.get('error'):
-                      print(f'Enrich batch {i+1} returned error: {resp[\"error\"]}')
+                      print(f'Enrich batch {i+1} returned error: {resp["error"]}')
                       failed = True
                       break
               except json.JSONDecodeError:
@@ -166,30 +164,27 @@ jobs:
           print('All enrich batches completed successfully')
           "
 
-      - name: Run portfolio analysis
+      - name: Fetch eligible portfolio ids
         if: steps.ingest.outputs.should_enrich == 'true'
+        id: analysis_targets
         env:
           CRON_ENDPOINT: ${{ secrets.CRON_ENDPOINT }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
           set -euo pipefail
 
-          # Derive analysis URL from CRON_ENDPOINT
-          # CRON_ENDPOINT ends with /api/news/cron
-          # Analysis URL is /api/analysis/cron
           BASE_URL="${CRON_ENDPOINT%/api/news/cron}"
           ANALYSIS_URL="${BASE_URL}/api/analysis/cron"
 
-          echo "Running portfolio analysis via ${ANALYSIS_URL}"
+          echo "Fetching eligible portfolio ids via ${ANALYSIS_URL}"
 
           response_file="$(mktemp)"
 
           http_code="$(
             curl -sS \
-              -X POST \
+              -X GET \
               -H "Authorization: Bearer ${CRON_SECRET}" \
               -H "Accept: application/json" \
-              -H "Content-Type: application/json" \
               -o "${response_file}" \
               -w "%{http_code}" \
               "${ANALYSIS_URL}"
@@ -199,21 +194,92 @@ jobs:
           cat "${response_file}"
 
           if [ "${http_code}" -lt 200 ] || [ "${http_code}" -ge 300 ]; then
-            echo "Analysis cron invocation failed"
+            echo "Analysis target discovery failed"
             exit 1
           fi
 
-          # Check for errors in the analysis response
-          python3 -c "
-          import json, sys
+          portfolio_ids="$(python3 -c "
+          import json
           data = json.load(open('${response_file}'))
-          errors = data.get('errors', [])
-          if errors:
-              print(f'Analysis completed with {len(errors)} error(s):')
-              for e in errors:
-                  print(f'  Portfolio {e[\"portfolioId\"]}: {e[\"error\"]}')
-              sys.exit(1)
-          processed = data.get('portfoliosProcessed', 0)
-          skipped = data.get('portfoliosSkipped', 0)
-          print(f'Analysis complete: {processed} processed, {skipped} skipped, 0 errors')
+          print(json.dumps(data.get('portfolioIds', [])))
+          ")"
+          has_portfolios="$(python3 -c "
+          import json
+          data = json.load(open('${response_file}'))
+          print('true' if len(data.get('portfolioIds', [])) > 0 else 'false')
+          ")"
+          skipped_count="$(python3 -c "
+          import json
+          data = json.load(open('${response_file}'))
+          print(int(data.get('skippedCount', 0)))
+          ")"
+
+          echo "Eligible portfolios: ${portfolio_ids}"
+          echo "Skipped by cooldown: ${skipped_count}"
+
+          echo "portfolio_ids=${portfolio_ids}" >> "$GITHUB_OUTPUT"
+          echo "has_portfolios=${has_portfolios}" >> "$GITHUB_OUTPUT"
+
+      - name: Run portfolio analysis per portfolio
+        if: steps.ingest.outputs.should_enrich == 'true' && steps.analysis_targets.outputs.has_portfolios == 'true'
+        env:
+          CRON_ENDPOINT: ${{ secrets.CRON_ENDPOINT }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+
+          BASE_URL="${CRON_ENDPOINT%/api/news/cron}"
+          ANALYSIS_URL="${BASE_URL}/api/analysis/cron"
+          PORTFOLIO_IDS='${{ steps.analysis_targets.outputs.portfolio_ids }}'
+
+          echo "Running portfolio analysis via ${ANALYSIS_URL}"
+
+          python3 -c "
+          import json, subprocess, sys
+
+          portfolio_ids = json.loads('${PORTFOLIO_IDS}')
+          print(f'Processing {len(portfolio_ids)} portfolio(s) sequentially')
+
+          for i, portfolio_id in enumerate(portfolio_ids):
+              print(f'--- Portfolio {i+1}/{len(portfolio_ids)}: {portfolio_id} ---')
+              payload = json.dumps({'portfolioId': portfolio_id})
+
+              result = subprocess.run([
+                  'curl', '-sS',
+                  '-X', 'POST',
+                  '-H', 'Authorization: Bearer ${CRON_SECRET}',
+                  '-H', 'Content-Type: application/json',
+                  '-H', 'Accept: application/json',
+                  '-d', payload,
+                  '-w', '\n%{http_code}',
+                  '${ANALYSIS_URL}'
+              ], capture_output=True, text=True, timeout=300)
+
+              lines = result.stdout.strip().rsplit('\n', 1)
+              body = lines[0] if len(lines) > 1 else ''
+              http_code = lines[-1].strip()
+
+              print(f'HTTP {http_code}')
+              print(body)
+
+              if not (200 <= int(http_code) < 300):
+                  print(f'Analysis failed for portfolio {portfolio_id} with HTTP {http_code}')
+                  sys.exit(1)
+
+              try:
+                  resp = json.loads(body)
+              except json.JSONDecodeError:
+                  print(f'Analysis returned invalid JSON for portfolio {portfolio_id}')
+                  sys.exit(1)
+
+              if resp.get('error'):
+                  print(f'Analysis returned error for portfolio {portfolio_id}: {resp["error"]}')
+                  sys.exit(1)
+
+              if resp.get('skipped'):
+                  print(f'Portfolio {portfolio_id} skipped due to cooldown')
+              else:
+                  print(f'Portfolio {portfolio_id} processed successfully')
+
+          print('All portfolio analyses completed successfully')
           "

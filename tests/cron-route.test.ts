@@ -1,29 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
-  mockIngestNewsToSupabase,
-  mockRunAnalysis,
   mockLoggerInfo,
   mockLoggerWarn,
   mockLoggerError,
 } = vi.hoisted(() => ({
-  mockIngestNewsToSupabase: vi.fn(),
-  mockRunAnalysis: vi.fn(),
   mockLoggerInfo: vi.fn(),
   mockLoggerWarn: vi.fn(),
   mockLoggerError: vi.fn(),
-}));
-
-vi.mock("@/lib/supabase/service", () => ({
-  createServiceClient: () => mockSupabase,
-}));
-
-vi.mock("@/lib/services/news", () => ({
-  ingestNewsToSupabase: (...args: unknown[]) => mockIngestNewsToSupabase(...args),
-}));
-
-vi.mock("@/lib/services/analysis", () => ({
-  runAnalysis: (...args: unknown[]) => mockRunAnalysis(...args),
 }));
 
 vi.mock("@/lib/logger", () => ({
@@ -35,39 +19,6 @@ vi.mock("@/lib/logger", () => ({
 }));
 
 import { GET, POST } from "@/app/api/news/cron/route";
-
-let mockSupabase: ReturnType<typeof buildMockSupabase>;
-
-function buildMockSupabase(portfolios: Array<{ id: string; user_id: string }> = []) {
-  return {
-    from: (table: string) => {
-      if (table === "portfolios") {
-        return {
-          select: () => Promise.resolve({
-            data: portfolios,
-            error: null,
-          }),
-        };
-      }
-      if (table === "analysis_runs") {
-        return {
-          select: () => ({
-            eq: () => ({
-              eq: () => ({
-                order: () => ({
-                  limit: () => ({
-                    maybeSingle: () => Promise.resolve({ data: null, error: null }),
-                  }),
-                }),
-              }),
-            }),
-          }),
-        };
-      }
-      throw new Error(`Unexpected table: ${table}`);
-    },
-  };
-}
 
 function makePayload(overrides: Record<string, unknown> = {}) {
   return {
@@ -99,16 +50,9 @@ function makeRequest(secret?: string, body?: unknown): Request {
 describe("POST /api/news/cron", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    mockIngestNewsToSupabase.mockReset();
-    mockRunAnalysis.mockReset().mockResolvedValue({
-      runId: "run-1",
-      error: null,
-      meta: { feedItemsCreated: 2 },
-    });
     mockLoggerInfo.mockReset();
     mockLoggerWarn.mockReset();
     mockLoggerError.mockReset();
-    mockSupabase = buildMockSupabase([{ id: "p1", user_id: "u1" }]);
     process.env.CRON_SECRET = "test-secret";
   });
 
@@ -122,24 +66,26 @@ describe("POST /api/news/cron", () => {
     expect(res.status).toBe(400);
   });
 
-  it("finalizes ingest payload, enriches explicit article ids, and runs analysis", async () => {
-    mockIngestNewsToSupabase.mockResolvedValue({ enriched: 6, skipped: 0 });
-
+  it("returns insertedArticleIds sorted and shouldEnrich true when articles present", async () => {
     const res = await POST(makeRequest("test-secret", makePayload()));
     expect(res.status).toBe(200);
     const body = await res.json();
 
-    expect(mockIngestNewsToSupabase).toHaveBeenCalledWith(mockSupabase, {
-      articleIds: ["id-e1", "id-f1", "id-f2", "id-n1", "id-n2", "id-n3"],
-    });
-    expect(mockRunAnalysis).toHaveBeenCalledWith(mockSupabase, "p1");
+    expect(body.insertedArticleIds).toEqual(["id-e1", "id-f1", "id-f2", "id-n1", "id-n2", "id-n3"]);
+    expect(body.shouldEnrich).toBe(true);
     expect(body.totalInserted).toBe(6);
     expect(body.ingestBreakdown.finnhub.inserted).toBe(2);
-    expect(body.analysis.portfoliosProcessed).toBe(1);
-    expect(body.insertedArticleIds).toEqual(["id-e1", "id-f1", "id-f2", "id-n1", "id-n2", "id-n3"]);
   });
 
-  it("skips enrichment when no inserted article ids are provided", async () => {
+  it("does not call runAnalysis", async () => {
+    const res = await POST(makeRequest("test-secret", makePayload()));
+    const body = await res.json();
+
+    // The response should NOT contain an analysis field
+    expect(body.analysis).toBeUndefined();
+  });
+
+  it("returns shouldEnrich false when no inserted article ids", async () => {
     const payload = makePayload({
       total_inserted: 0,
       inserted_article_ids: [],
@@ -152,46 +98,19 @@ describe("POST /api/news/cron", () => {
     const res = await POST(makeRequest("test-secret", payload));
     const body = await res.json();
 
-    expect(mockIngestNewsToSupabase).not.toHaveBeenCalled();
-    expect(body.enriched).toBe(0);
+    expect(body.shouldEnrich).toBe(false);
+    expect(body.insertedArticleIds).toEqual([]);
   });
 
-  it("skips analysis for recently analyzed portfolios", async () => {
-    const recentlyCompleted = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-    mockSupabase = {
-      ...buildMockSupabase([{ id: "p1", user_id: "u1" }]),
-      from: ((table: string) => {
-        if (table === "portfolios") {
-          return { select: () => Promise.resolve({ data: [{ id: "p1", user_id: "u1" }], error: null }) };
-        }
-        if (table === "analysis_runs") {
-          return {
-            select: () => ({
-              eq: () => ({
-                eq: () => ({
-                  order: () => ({
-                    limit: () => ({
-                      maybeSingle: () => Promise.resolve({
-                        data: { completed_at: recentlyCompleted },
-                        error: null,
-                      }),
-                    }),
-                  }),
-                }),
-              }),
-            }),
-          };
-        }
-        return buildMockSupabase().from(table);
-      }) as typeof mockSupabase.from,
-    };
-    mockIngestNewsToSupabase.mockResolvedValue({ enriched: 1, skipped: 0 });
+  it("deduplicates and sorts article IDs", async () => {
+    const payload = makePayload({
+      inserted_article_ids: ["zz", "aa", "zz", "bb", " aa "],
+    });
 
-    const res = await POST(makeRequest("test-secret", makePayload()));
+    const res = await POST(makeRequest("test-secret", payload));
     const body = await res.json();
 
-    expect(mockRunAnalysis).not.toHaveBeenCalled();
-    expect(body.analysis.portfoliosSkipped).toBe(1);
+    expect(body.insertedArticleIds).toEqual(["aa", "bb", "zz"]);
   });
 });
 
@@ -201,4 +120,3 @@ describe("GET /api/news/cron", () => {
     expect(res.status).toBe(405);
   });
 });
-

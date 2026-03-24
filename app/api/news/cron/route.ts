@@ -1,12 +1,7 @@
-import { createServiceClient } from "@/lib/supabase/service";
-import { ingestNewsToSupabase } from "@/lib/services/news";
-import { runAnalysis } from "@/lib/services/analysis";
 import { formatIngestStage, type IngestInput, type SourceStats } from "@/lib/ingest-detail";
 import { createLogger } from "@/lib/logger";
 
 const log = createLogger("cron");
-
-const ANALYSIS_COOLDOWN_MS = 15 * 60 * 1000;
 
 type CronSourceKey = "edgar" | "newsapi" | "gnews" | "finnhub";
 
@@ -80,89 +75,15 @@ async function runFinalize(request: Request) {
   }
 
   const payload = body;
-  const supabase = createServiceClient();
   const insertedArticleIds = dedupeArticleIds(payload.inserted_article_ids);
+  const shouldEnrich = insertedArticleIds.length > 0;
 
   log.info("Cron finalize started", {
     tickers: payload.tickers.length,
     totalInserted: payload.total_inserted,
     articleIds: insertedArticleIds.length,
+    shouldEnrich,
   });
-
-  let enriched = 0;
-  let enrichError: string | undefined;
-  if (insertedArticleIds.length > 0) {
-    const enrichResult = await ingestNewsToSupabase(supabase, {
-      articleIds: insertedArticleIds,
-    });
-    enriched = enrichResult.enriched;
-    enrichError = enrichResult.error;
-  }
-
-  const { data: portfolios } = await supabase
-    .from("portfolios")
-    .select("id, user_id");
-
-  const analysisResults: Array<{
-    portfolioId: string;
-    runId: string | null;
-    feedItemsCreated: number;
-    error: string | null;
-    skipped?: boolean;
-  }> = [];
-
-  for (const portfolio of portfolios ?? []) {
-    try {
-      const { data: latestRun } = await supabase
-        .from("analysis_runs")
-        .select("completed_at")
-        .eq("portfolio_id", portfolio.id)
-        .eq("status", "complete")
-        .order("completed_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (latestRun?.completed_at) {
-        const elapsed = Date.now() - new Date(latestRun.completed_at).getTime();
-        if (elapsed < ANALYSIS_COOLDOWN_MS) {
-          analysisResults.push({
-            portfolioId: portfolio.id,
-            runId: null,
-            feedItemsCreated: 0,
-            error: null,
-            skipped: true,
-          });
-          continue;
-        }
-      }
-
-      const result = await runAnalysis(supabase, portfolio.id);
-      analysisResults.push({
-        portfolioId: portfolio.id,
-        runId: result.runId,
-        feedItemsCreated: result.meta?.feedItemsCreated ?? 0,
-        error: result.error,
-      });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      log.error("Analysis failed for portfolio", {
-        portfolioId: portfolio.id,
-        error: message,
-      });
-      analysisResults.push({
-        portfolioId: portfolio.id,
-        runId: null,
-        feedItemsCreated: 0,
-        error: message,
-      });
-    }
-  }
-
-  const analysisProcessed = analysisResults.filter((result) => !result.skipped && !result.error).length;
-  const analysisErrors = analysisResults
-    .filter((result) => result.error)
-    .map((result) => ({ portfolioId: result.portfolioId, error: result.error }));
-  const analysisSkipped = analysisResults.filter((result) => result.skipped).length;
 
   const ingestInput: IngestInput = {
     ingest_status: payload.ingest_status,
@@ -183,12 +104,7 @@ async function runFinalize(request: Request) {
       finnhub: payload.finnhub.inserted,
       total: payload.total_inserted,
     },
-    enriched,
-    analysis: {
-      processed: analysisProcessed,
-      skipped: analysisSkipped,
-      errors: analysisErrors.length,
-    },
+    shouldEnrich,
   });
 
   return json({
@@ -205,14 +121,7 @@ async function runFinalize(request: Request) {
     },
     totalInserted: payload.total_inserted,
     insertedArticleIds,
-    enriched,
-    enrichError: enrichError ?? null,
-    analysis: {
-      portfoliosProcessed: analysisProcessed,
-      portfoliosSkipped: analysisSkipped,
-      errors: analysisErrors,
-      results: analysisResults,
-    },
+    shouldEnrich,
   });
 }
 
@@ -226,4 +135,3 @@ export async function GET() {
 export async function POST(request: Request) {
   return runFinalize(request);
 }
-

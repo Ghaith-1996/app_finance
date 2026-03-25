@@ -1,14 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, act } from "@testing-library/react";
+import { render, screen, fireEvent, act, within, waitFor } from "@testing-library/react";
 import React from "react";
 
-// Mock next/navigation
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
   useSearchParams: () => new URLSearchParams(),
 }));
 
-// Mock supabase client
 vi.mock("@/lib/supabase/client", () => ({
   createClient: () => ({
     channel: () => ({
@@ -24,7 +22,8 @@ let mockSnapshot: LastIngestSnapshot | null = null;
 
 vi.mock("@/lib/ingest-hint", () => ({
   readLastIngestSnapshot: () => mockSnapshot,
-  isRecentIngestHint: (h: LastIngestSnapshot | null) => !!h && Date.now() - h.at < 86400000,
+  isRecentIngestHint: (hint: LastIngestSnapshot | null) =>
+    !!hint && Date.now() - hint.at < 86400000,
   writeLastIngestSnapshot: vi.fn(),
   LAST_INGEST_STORAGE_KEY: "test",
 }));
@@ -51,10 +50,20 @@ const makeFeedItem = (overrides: Partial<NewsItem> = {}): NewsItem => ({
   ...overrides,
 });
 
+function setViewport(width: number) {
+  Object.defineProperty(window, "innerWidth", {
+    configurable: true,
+    writable: true,
+    value: width,
+  });
+  window.dispatchEvent(new Event("resize"));
+}
+
 describe("FeedView", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     mockSnapshot = null;
+    setViewport(1440);
   });
 
   it("defaults to personal mode and fetches feed on mount", async () => {
@@ -94,10 +103,8 @@ describe("FeedView", () => {
       render(<FeedView portfolioId="p1" />);
     });
 
-    const marketButton = screen.getByText("Full market feed");
-
     await act(async () => {
-      fireEvent.click(marketButton);
+      fireEvent.click(screen.getByRole("button", { name: /full market/i }));
     });
 
     const lastCallUrl = (global.fetch as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0] as string;
@@ -129,8 +136,6 @@ describe("FeedView", () => {
       render(<FeedView portfolioId="p1" />);
     });
 
-    expect(screen.getByDisplayValue("All portfolio (6 holdings)")).toBeTruthy();
-
     const holdingSelect = screen.getByDisplayValue("All portfolio (6 holdings)");
     const optionLabels = Array.from((holdingSelect as HTMLSelectElement).options).map(
       (option) => option.text,
@@ -159,8 +164,7 @@ describe("FeedView", () => {
       render(<FeedView portfolioId="p1" />);
     });
 
-    const firstMatches = screen.getAllByText("First");
-    expect(firstMatches.length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("First").length).toBeGreaterThanOrEqual(1);
   });
 
   it("shows 'already ingested' hint when last ingest was all duplicates", async () => {
@@ -185,7 +189,6 @@ describe("FeedView", () => {
     });
 
     const hint = screen.getByTestId("ingest-hint-duplicates");
-    expect(hint).toBeTruthy();
     expect(hint.textContent).toContain("already in the database");
     expect(hint.textContent).toContain("5 articles");
   });
@@ -211,9 +214,9 @@ describe("FeedView", () => {
       render(<FeedView portfolioId="p1" />);
     });
 
-    const hint = screen.getByTestId("ingest-hint-empty-window");
-    expect(hint).toBeTruthy();
-    expect(hint.textContent).toContain("No articles were returned");
+    expect(screen.getByTestId("ingest-hint-empty-window").textContent).toContain(
+      "No articles were returned",
+    );
   });
 
   it("shows failure messaging when source errors exist", async () => {
@@ -222,8 +225,22 @@ describe("FeedView", () => {
       lookbackHours: 24,
       ingest: { status: "failed", detail: "Both sources failed" },
       breakdown: {
-        edgar: { fetched: 0, inserted: 0, skipped: 0, failed: 0, fetch_outcome: "failed", fetch_error: "timeout" },
-        newsapi: { fetched: 0, inserted: 0, skipped: 0, failed: 0, fetch_outcome: "failed", fetch_error: "503 error" },
+        edgar: {
+          fetched: 0,
+          inserted: 0,
+          skipped: 0,
+          failed: 0,
+          fetch_outcome: "failed",
+          fetch_error: "timeout",
+        },
+        newsapi: {
+          fetched: 0,
+          inserted: 0,
+          skipped: 0,
+          failed: 0,
+          fetch_outcome: "failed",
+          fetch_error: "503 error",
+        },
         total_inserted: 0,
       },
     };
@@ -238,7 +255,7 @@ describe("FeedView", () => {
     });
 
     expect(screen.getAllByText(/failed/i).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText(/Both sources failed/)).toBeTruthy();
+    expect(screen.getByText(/both sources failed/i)).toBeTruthy();
   });
 
   it("market view does not render ticker filter controls", async () => {
@@ -253,9 +270,8 @@ describe("FeedView", () => {
       render(<FeedView portfolioId="p1" />);
     });
 
-    const marketButton = screen.getByText("Full market feed");
     await act(async () => {
-      fireEvent.click(marketButton);
+      fireEvent.click(screen.getByRole("button", { name: /full market/i }));
     });
 
     expect(screen.queryByText("Tickers")).toBeNull();
@@ -277,14 +293,13 @@ describe("FeedView", () => {
       render(<FeedView portfolioId="p1" />);
     });
 
-    const marketButton = screen.getByText("Full market feed");
     await act(async () => {
-      fireEvent.click(marketButton);
+      fireEvent.click(screen.getByRole("button", { name: /full market/i }));
     });
 
     expect(screen.getByText("Source")).toBeTruthy();
     expect(screen.getByText("Category")).toBeTruthy();
-    expect(screen.getByText("Recency")).toBeTruthy();
+    expect(screen.getAllByText("Recency").length).toBeGreaterThan(0);
   });
 
   it("personal empty state mentions nothing qualified when recent ingest exists", async () => {
@@ -308,11 +323,13 @@ describe("FeedView", () => {
       render(<FeedView portfolioId="p1" />);
     });
 
-    expect(screen.getByText(/Nothing in the current 24-hour market pool qualified/)).toBeTruthy();
+    expect(
+      screen.getByText(/nothing in the current 24-hour market pool qualified/i),
+    ).toBeTruthy();
   });
 
-  it("loads and sends article chat messages from the detail panel", async () => {
-    const item = makeFeedItem({
+  it("loads and sends article chat messages in the separate desktop sidebar", async () => {
+    const story = makeFeedItem({
       id: "feed-1",
       newsItemId: "news-1",
       headline: "AI infrastructure spend accelerates",
@@ -322,16 +339,16 @@ describe("FeedView", () => {
       if (url.startsWith("/api/feed?")) {
         return {
           ok: true,
-          json: async () => ({ feed: [item], portfolioId: "p1", mode: "personal" }),
+          json: async () => ({ feed: [story], portfolioId: "p1", mode: "personal" }),
         };
       }
-      if (url.startsWith("/api/article-chat?")) {
+      if (url.includes("/api/article-chat?")) {
         return {
           ok: true,
           json: async () => ({ threadId: "thread-1", messages: [] }),
         };
       }
-      if (url === "/api/article-chat") {
+      if (url === "/api/article-chat" && init?.method === "POST") {
         return {
           ok: true,
           json: async () => ({
@@ -361,21 +378,27 @@ describe("FeedView", () => {
     });
 
     await act(async () => {
+      fireEvent.click(screen.getByText("AI infrastructure spend accelerates"));
+    });
+
+    await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: /ask ai about this story/i }));
     });
 
+    const sidebar = await screen.findByTestId("story-chat-sidebar");
+    expect(screen.queryByTestId("story-chat-sheet")).toBeNull();
     expect(global.fetch).toHaveBeenCalledWith(
       expect.stringContaining("/api/article-chat?portfolioId=p1&newsItemId=news-1"),
     );
 
     await act(async () => {
-      fireEvent.change(screen.getByLabelText(/ask a follow-up/i), {
+      fireEvent.change(within(sidebar).getByLabelText(/ask a follow-up/i), {
         target: { value: "What matters most here for my portfolio?" },
       });
     });
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
+      fireEvent.click(within(sidebar).getByRole("button", { name: /^send$/i }));
     });
 
     expect(global.fetch).toHaveBeenCalledWith(
@@ -385,6 +408,218 @@ describe("FeedView", () => {
         body: expect.stringContaining("\"newsItemId\":\"news-1\""),
       }),
     );
-    expect(screen.getByText(/sustained demand for semiconductor infrastructure/i)).toBeTruthy();
+    expect(
+      await within(sidebar).findByText(/sustained demand for semiconductor infrastructure/i),
+    ).toBeTruthy();
+  });
+
+  it("switches stories immediately when chat is open but inactive", async () => {
+    const stories = [
+      makeFeedItem({ id: "feed-1", newsItemId: "news-1", headline: "First story" }),
+      makeFeedItem({ id: "feed-2", newsItemId: "news-2", headline: "Second story" }),
+    ];
+    const fetchMock = vi.fn().mockImplementation(async (url: string) => {
+      if (url.startsWith("/api/feed?")) {
+        return {
+          ok: true,
+          json: async () => ({ feed: stories, portfolioId: "p1", mode: "personal" }),
+        };
+      }
+      if (url.includes("/api/article-chat?")) {
+        return {
+          ok: true,
+          json: async () => ({ threadId: "thread-1", messages: [] }),
+        };
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    global.fetch = fetchMock;
+
+    await act(async () => {
+      render(<FeedView portfolioId="p1" />);
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByText("First story"));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /ask ai about this story/i }));
+    });
+
+    await screen.findByTestId("story-chat-sidebar");
+
+    await act(async () => {
+      fireEvent.click(screen.getByText("Second story"));
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: /switch story chat/i })).toBeNull();
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/api/article-chat?portfolioId=p1&newsItemId=news-2"),
+    );
+    expect(screen.getByTestId("story-chat-sidebar").textContent).toContain("Second story");
+  });
+
+  it("shows a confirmation modal before switching active story chats", async () => {
+    const stories = [
+      makeFeedItem({ id: "feed-1", newsItemId: "news-1", headline: "First story" }),
+      makeFeedItem({ id: "feed-2", newsItemId: "news-2", headline: "Second story" }),
+    ];
+    const fetchMock = vi.fn().mockImplementation(async (url: string) => {
+      if (url.startsWith("/api/feed?")) {
+        return {
+          ok: true,
+          json: async () => ({ feed: stories, portfolioId: "p1", mode: "personal" }),
+        };
+      }
+      if (url.includes("/api/article-chat?")) {
+        return {
+          ok: true,
+          json: async () => ({ threadId: "thread-1", messages: [] }),
+        };
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    global.fetch = fetchMock;
+
+    await act(async () => {
+      render(<FeedView portfolioId="p1" />);
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByText("First story"));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /ask ai about this story/i }));
+    });
+
+    const sidebar = await screen.findByTestId("story-chat-sidebar");
+
+    await act(async () => {
+      fireEvent.change(within(sidebar).getByLabelText(/ask a follow-up/i), {
+        target: { value: "Tell me the risk here" },
+      });
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByText("Second story"));
+    });
+
+    expect(screen.getByRole("dialog", { name: /switch story chat/i })).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /switch story/i }));
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: /switch story chat/i })).toBeNull();
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/api/article-chat?portfolioId=p1&newsItemId=news-2"),
+    );
+    expect(screen.getByTestId("story-chat-sidebar").textContent).toContain("Second story");
+  });
+
+  it("keeps the current story when the switch confirmation is canceled", async () => {
+    const stories = [
+      makeFeedItem({ id: "feed-1", newsItemId: "news-1", headline: "First story" }),
+      makeFeedItem({ id: "feed-2", newsItemId: "news-2", headline: "Second story" }),
+    ];
+    const fetchMock = vi.fn().mockImplementation(async (url: string) => {
+      if (url.startsWith("/api/feed?")) {
+        return {
+          ok: true,
+          json: async () => ({ feed: stories, portfolioId: "p1", mode: "personal" }),
+        };
+      }
+      if (url.includes("/api/article-chat?")) {
+        return {
+          ok: true,
+          json: async () => ({ threadId: "thread-1", messages: [] }),
+        };
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    global.fetch = fetchMock;
+
+    await act(async () => {
+      render(<FeedView portfolioId="p1" />);
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByText("First story"));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /ask ai about this story/i }));
+    });
+
+    const sidebar = await screen.findByTestId("story-chat-sidebar");
+
+    await act(async () => {
+      fireEvent.change(within(sidebar).getByLabelText(/ask a follow-up/i), {
+        target: { value: "Hold this draft" },
+      });
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByText("Second story"));
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /stay here/i }));
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: /switch story chat/i })).toBeNull();
+    });
+
+    const articleChatCalls = fetchMock.mock.calls
+      .map(([url]) => url as string)
+      .filter((url) => url.includes("/api/article-chat?"));
+
+    expect(articleChatCalls.some((url) => url.includes("newsItemId=news-2"))).toBe(false);
+    expect(screen.getByTestId("story-chat-sidebar").textContent).toContain("First story");
+  });
+
+  it("opens story chat in a mobile sheet below the xl breakpoint", async () => {
+    setViewport(900);
+
+    const story = makeFeedItem({
+      id: "feed-1",
+      newsItemId: "news-1",
+      headline: "Mobile story",
+    });
+
+    global.fetch = vi.fn().mockImplementation(async (url: string) => {
+      if (url.startsWith("/api/feed?")) {
+        return {
+          ok: true,
+          json: async () => ({ feed: [story], portfolioId: "p1", mode: "personal" }),
+        };
+      }
+      if (url.includes("/api/article-chat?")) {
+        return {
+          ok: true,
+          json: async () => ({ threadId: "thread-1", messages: [] }),
+        };
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+
+    await act(async () => {
+      render(<FeedView portfolioId="p1" />);
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByText("Mobile story"));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /ask ai about this story/i }));
+    });
+
+    expect(await screen.findByTestId("story-chat-sheet")).toBeTruthy();
+    expect(screen.getByRole("dialog", { name: /story chat/i })).toBeTruthy();
   });
 });

@@ -14,7 +14,10 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
-import { ArticleChatPanel } from "@/components/app/article-chat-panel";
+import {
+  ArticleChatPanel,
+  type ArticleChatActivityState,
+} from "@/components/app/article-chat-panel";
 import { NewsFeedCard } from "@/components/app/news-feed-card";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonStyles } from "@/components/ui/button";
@@ -56,6 +59,12 @@ const sourceTypeOptions = [
 const selectTriggerClass =
   "w-full min-w-0 appearance-none rounded-xl border border-white/10 bg-surface-raised py-2.5 pl-3 pr-9 text-sm font-medium text-slate-200 shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20";
 
+const DESKTOP_CHAT_BREAKPOINT = 1280;
+const DEFAULT_CHAT_ACTIVITY: ArticleChatActivityState = {
+  hasMessages: false,
+  hasDraft: false,
+};
+
 export function FeedView({
   portfolioId,
   insights = [],
@@ -88,6 +97,18 @@ export function FeedView({
   const [selectedRecency, setSelectedRecency] = useState(recencyOptions[0].label);
   const [selectedStoryId, setSelectedStoryId] = useState<string | null>(null);
   const [lastIngestHint, setLastIngestHint] = useState<LastIngestSnapshot | null>(null);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatActivity, setChatActivity] = useState<ArticleChatActivityState>(
+    DEFAULT_CHAT_ACTIVITY,
+  );
+  const [pendingStoryId, setPendingStoryId] = useState<string | null>(null);
+  const [switchConfirmOpen, setSwitchConfirmOpen] = useState(false);
+  const [isDesktopChatLayout, setIsDesktopChatLayout] = useState(
+    () =>
+      typeof window === "undefined"
+        ? true
+        : window.innerWidth >= DESKTOP_CHAT_BREAKPOINT,
+  );
 
   const loadingRef = useRef(false);
   const initialSymbolAppliedRef = useRef(false);
@@ -95,6 +116,18 @@ export function FeedView({
   useEffect(() => {
     setLastIngestHint(readLastIngestSnapshot());
   }, [feed]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+
+    const updateLayoutMode = () => {
+      setIsDesktopChatLayout(window.innerWidth >= DESKTOP_CHAT_BREAKPOINT);
+    };
+
+    updateLayoutMode();
+    window.addEventListener("resize", updateLayoutMode);
+    return () => window.removeEventListener("resize", updateLayoutMode);
+  }, []);
 
   useEffect(() => {
     const raw = initialSymbol?.trim();
@@ -282,6 +315,83 @@ export function FeedView({
       filteredStories[0] ??
       null
     : null;
+  const chatHasActivity = chatActivity.hasMessages || chatActivity.hasDraft;
+  const showDesktopChat = Boolean(chatOpen && selectedStory && isDesktopChatLayout);
+  const showMobileChat = Boolean(chatOpen && selectedStory && !isDesktopChatLayout);
+
+  useEffect(() => {
+    if (selectedStory) return;
+    setChatOpen(false);
+    setChatActivity(DEFAULT_CHAT_ACTIVITY);
+    setPendingStoryId(null);
+    setSwitchConfirmOpen(false);
+  }, [selectedStory]);
+
+  useEffect(() => {
+    if (!showMobileChat || typeof document === "undefined") return undefined;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [showMobileChat]);
+
+  const handleChatActivityChange = useCallback(
+    (next: ArticleChatActivityState) => {
+      setChatActivity(next);
+    },
+    [],
+  );
+
+  const handleStoryOpen = useCallback(
+    (storyId: string) => {
+      if (storyId === selectedStoryId) return;
+
+      if (chatOpen && chatHasActivity) {
+        setPendingStoryId(storyId);
+        setSwitchConfirmOpen(true);
+        return;
+      }
+
+      setSelectedStoryId(storyId);
+    },
+    [chatHasActivity, chatOpen, selectedStoryId],
+  );
+
+  const handleCloseStory = useCallback(() => {
+    setSelectedStoryId(null);
+    setChatOpen(false);
+    setChatActivity(DEFAULT_CHAT_ACTIVITY);
+    setPendingStoryId(null);
+    setSwitchConfirmOpen(false);
+  }, []);
+
+  const handleToggleChat = useCallback(() => {
+    if (!selectedStory) return;
+
+    setChatOpen((open) => {
+      const next = !open;
+      if (!next) {
+        setChatActivity(DEFAULT_CHAT_ACTIVITY);
+        setPendingStoryId(null);
+        setSwitchConfirmOpen(false);
+      }
+      return next;
+    });
+  }, [selectedStory]);
+
+  const handleCancelStorySwitch = useCallback(() => {
+    setPendingStoryId(null);
+    setSwitchConfirmOpen(false);
+  }, []);
+
+  const handleConfirmStorySwitch = useCallback(() => {
+    if (!pendingStoryId) return;
+    setSelectedStoryId(pendingStoryId);
+    setPendingStoryId(null);
+    setSwitchConfirmOpen(false);
+  }, [pendingStoryId]);
 
   function resetFilters() {
     setSelectedHolding("All holdings");
@@ -290,6 +400,10 @@ export function FeedView({
     setSelectedCategory("All categories");
     setSelectedRecency(recencyOptions[0].label);
     setSelectedStoryId(null);
+    setChatOpen(false);
+    setChatActivity(DEFAULT_CHAT_ACTIVITY);
+    setPendingStoryId(null);
+    setSwitchConfirmOpen(false);
   }
 
   // --- Render ---
@@ -315,7 +429,13 @@ export function FeedView({
   }
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
+    <>
+      <div
+        className={cn(
+          "grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]",
+          showDesktopChat && "xl:grid-cols-[minmax(0,1fr)_380px_400px]",
+        )}
+      >
       <div className="space-y-6">
         <div className="rounded-2xl border border-white/[0.06] bg-surface-raised p-5 shadow-sm">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
@@ -501,7 +621,7 @@ export function FeedView({
                   story={story}
                   mode={mode}
                   selected={story.id === selectedStoryId}
-                  onOpen={() => setSelectedStoryId(story.id)}
+                  onOpen={() => handleStoryOpen(story.id)}
                 />
               ))}
             </div>
@@ -520,15 +640,56 @@ export function FeedView({
       </div>
 
       <div className="flex flex-col gap-5">
-        <FeedMomentumCard insights={insights} />
-        <DetailPanel
-          story={selectedStory}
-          mode={mode}
-          portfolioId={portfolioId}
-          onClose={() => setSelectedStoryId(null)}
-        />
+        {selectedStory ? (
+          <>
+            <DetailPanel
+              story={selectedStory}
+              mode={mode}
+              isChatOpen={chatOpen}
+              onToggleChat={handleToggleChat}
+              onClose={handleCloseStory}
+            />
+            <FeedMomentumCard insights={insights} />
+          </>
+        ) : (
+          <>
+            <FeedMomentumCard insights={insights} />
+            <DetailPanel
+              story={selectedStory}
+              mode={mode}
+              isChatOpen={chatOpen}
+              onToggleChat={handleToggleChat}
+              onClose={handleCloseStory}
+            />
+          </>
+        )}
       </div>
-    </div>
+      {showDesktopChat && selectedStory ? (
+        <StoryChatSidebar
+          story={selectedStory}
+          portfolioId={portfolioId}
+          onClose={() => setChatOpen(false)}
+          onActivityChange={handleChatActivityChange}
+        />
+      ) : null}
+      </div>
+
+      {showMobileChat && selectedStory ? (
+        <StoryChatMobileSheet
+          story={selectedStory}
+          portfolioId={portfolioId}
+          onClose={() => setChatOpen(false)}
+          onActivityChange={handleChatActivityChange}
+        />
+      ) : null}
+
+      {switchConfirmOpen && pendingStoryId ? (
+        <StorySwitchConfirmDialog
+          onCancel={handleCancelStorySwitch}
+          onConfirm={handleConfirmStorySwitch}
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -631,6 +792,160 @@ function FeedMomentumCard({ insights }: { insights: PortfolioInsight[] }) {
   );
 }
 
+function StoryChatHeader({
+  headline,
+  onClose,
+}: {
+  headline: string;
+  onClose: () => void;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-4">
+      <div className="space-y-2">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-brand">
+          Story chat
+        </p>
+        <h2 className="text-lg font-semibold leading-snug tracking-tight text-white">
+          {headline}
+        </h2>
+        <p className="text-sm leading-6 text-slate-400">
+          Ask follow-up questions without leaving the article detail view.
+        </p>
+      </div>
+      <button
+        type="button"
+        aria-label="Close story chat"
+        className="shrink-0 rounded-full border border-white/10 bg-white/5 p-2 text-slate-500 transition hover:bg-white/10 hover:text-slate-300"
+        onClick={onClose}
+      >
+        <X className="h-4 w-4" />
+      </button>
+    </div>
+  );
+}
+
+function StoryChatSidebar({
+  story,
+  portfolioId,
+  onClose,
+  onActivityChange,
+}: {
+  story: NewsItem;
+  portfolioId?: string | null;
+  onClose: () => void;
+  onActivityChange: (state: ArticleChatActivityState) => void;
+}) {
+  return (
+    <Panel
+      data-testid="story-chat-sidebar"
+      className="hidden h-fit space-y-5 rounded-2xl border-white/[0.06] bg-surface-raised p-6 shadow-sm xl:sticky xl:top-28 xl:block"
+    >
+      <StoryChatHeader headline={story.headline} onClose={onClose} />
+      <ArticleChatPanel
+        portfolioId={portfolioId}
+        newsItemId={story.newsItemId}
+        headline={story.headline}
+        onActivityChange={onActivityChange}
+        showHeader={false}
+        className="border-0 bg-transparent p-0"
+      />
+    </Panel>
+  );
+}
+
+function StoryChatMobileSheet({
+  story,
+  portfolioId,
+  onClose,
+  onActivityChange,
+}: {
+  story: NewsItem;
+  portfolioId?: string | null;
+  onClose: () => void;
+  onActivityChange: (state: ArticleChatActivityState) => void;
+}) {
+  return (
+    <div
+      data-testid="story-chat-sheet"
+      className="fixed inset-0 z-50 xl:hidden"
+    >
+      <button
+        type="button"
+        aria-label="Close story chat"
+        className="absolute inset-0 bg-black/55 backdrop-blur-sm"
+        onClick={onClose}
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Story chat"
+        className="absolute right-0 top-0 flex h-full w-full max-w-xl flex-col border-l border-white/10 bg-background shadow-2xl"
+      >
+        <div className="flex-1 overflow-y-auto px-5 py-6">
+          <div className="rounded-2xl border border-white/[0.06] bg-surface-raised p-5 shadow-sm">
+            <StoryChatHeader headline={story.headline} onClose={onClose} />
+            <div className="mt-5">
+              <ArticleChatPanel
+                portfolioId={portfolioId}
+                newsItemId={story.newsItemId}
+                headline={story.headline}
+                onActivityChange={onActivityChange}
+                showHeader={false}
+                className="border-0 bg-transparent p-0"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StorySwitchConfirmDialog({
+  onCancel,
+  onConfirm,
+}: {
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+      <button
+        type="button"
+        aria-label="Dismiss story switch confirmation"
+        className="absolute inset-0 bg-black/55 backdrop-blur-sm"
+        onClick={onCancel}
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Switch story chat"
+        className="relative w-full max-w-md rounded-3xl border border-white/[0.08] bg-surface-raised p-6 shadow-2xl"
+      >
+        <div className="space-y-3">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-brand">
+            Switch story?
+          </p>
+          <h2 className="text-xl font-semibold tracking-tight text-white">
+            Keep this chat or switch to the new article
+          </h2>
+          <p className="text-sm leading-7 text-slate-400">
+            The current story chat has messages or an unsent draft. Switching will replace the active story context in the chat panel.
+          </p>
+        </div>
+        <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end">
+          <Button type="button" variant="secondary" onClick={onCancel}>
+            Stay here
+          </Button>
+          <Button type="button" onClick={onConfirm}>
+            Switch story
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ModeToggle({
   mode,
   onChange,
@@ -671,20 +986,17 @@ function ModeToggle({
 function DetailPanel({
   story,
   mode,
-  portfolioId,
+  isChatOpen,
+  onToggleChat,
   onClose,
 }: {
   story: NewsItem | null;
   mode: FeedMode;
-  portfolioId?: string | null;
+  isChatOpen: boolean;
+  onToggleChat: () => void;
   onClose: () => void;
 }) {
   const isMarket = mode === "market";
-  const [chatOpen, setChatOpen] = useState(false);
-
-  useEffect(() => {
-    setChatOpen(false);
-  }, [story?.newsItemId]);
 
   if (!story) {
     return (
@@ -809,6 +1121,17 @@ function DetailPanel({
             </div>
           )}
 
+          <div className="border-t border-white/[0.06] pt-5">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={onToggleChat}
+            >
+              <MessageSquare className="mr-2 h-4 w-4" />
+              {isChatOpen ? "Hide story chat" : "Ask AI about this story"}
+            </Button>
+          </div>
+
           {/* Connected holdings — personal only */}
           {!isMarket && (story.holdings ?? []).length > 0 && (
             <div className="space-y-3">
@@ -873,25 +1196,6 @@ function DetailPanel({
               <ArrowRight className="ml-2 h-4 w-4" />
             </a>
           )}
-
-          <div className="border-t border-white/[0.06] pt-5">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => setChatOpen((open) => !open)}
-            >
-              <MessageSquare className="mr-2 h-4 w-4" />
-              {chatOpen ? "Hide story chat" : "Ask AI about this story"}
-            </Button>
-          </div>
-
-          {chatOpen ? (
-            <ArticleChatPanel
-              portfolioId={portfolioId}
-              newsItemId={story.newsItemId}
-              headline={story.headline}
-            />
-          ) : null}
       </div>
     </Panel>
   );

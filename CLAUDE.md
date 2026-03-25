@@ -68,6 +68,10 @@ These decisions were made in the current thread and are reflected in code/doc ch
 - removed `vercel.json`; Vercel still hosts the route, but GitHub Actions is now the active scheduler
 - `README.md` and `PRE_LAUNCH_CHECKLIST.md` now document the GitHub Actions scheduler setup, required secrets/env vars, and post-deploy smoke test
 - the remaining deployment risk is keeping GitHub Actions worker secrets and the deployed cron finalize route in sync
+- article chat UI moved out of the article detail panel into a separate surface: right-side sticky sidebar at `xl+` and a mobile slide-over sheet below `xl`
+- FeedView now owns article chat state, including activity tracking and a guarded story-switch confirmation modal when the current chat has messages or a draft
+- ArticleChatPanel now reports activity via `onActivityChange` and supports headerless/styled reuse inside the sidebar/sheet
+- tests updated to cover the new chat panel placement, mobile sheet rendering, and story switch guard behavior (`tests/feed-view.test.tsx`, `tests/article-chat-panel.test.tsx`)
 
 Important runtime note:
 

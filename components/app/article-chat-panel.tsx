@@ -7,6 +7,7 @@ import { Loader2, SendHorizonal, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { ArticleChatMessage } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 const STARTER_QUESTIONS = [
   "What matters most here for my portfolio?",
@@ -14,14 +15,25 @@ const STARTER_QUESTIONS = [
   "What follow-up should I watch next?",
 ];
 
+export type ArticleChatActivityState = {
+  hasMessages: boolean;
+  hasDraft: boolean;
+};
+
 export function ArticleChatPanel({
   portfolioId,
   newsItemId,
   headline,
+  onActivityChange,
+  className,
+  showHeader = true,
 }: {
   portfolioId?: string | null;
   newsItemId: string;
   headline: string;
+  onActivityChange?: (state: ArticleChatActivityState) => void;
+  className?: string;
+  showHeader?: boolean;
 }) {
   const [messages, setMessages] = useState<ArticleChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
@@ -37,17 +49,28 @@ export function ArticleChatPanel({
   );
 
   useEffect(() => {
+    onActivityChange?.({
+      hasMessages: messages.length > 0,
+      hasDraft: draft.trim().length > 0,
+    });
+  }, [draft, messages, onActivityChange]);
+
+  useEffect(() => {
     let cancelled = false;
 
     async function loadThread() {
+      setMessages([]);
+      setDraft("");
+      setSending(false);
+      setError(null);
+      setErrorCode(null);
+
       if (!portfolioId) {
-        setMessages([]);
         setLoading(false);
         return;
       }
 
       setLoading(true);
-      setError(null);
       try {
         const params = new URLSearchParams({
           portfolioId,
@@ -114,21 +137,28 @@ export function ArticleChatPanel({
   }
 
   return (
-    <div className="space-y-4 rounded-3xl border border-white/[0.06] bg-surface-raised p-4">
-      <div className="flex items-center justify-between gap-3">
-        <div className="space-y-1">
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-brand">
-            Ask AI
-          </p>
-          <p className="text-sm text-slate-400">
-            Ask follow-up questions about this article in the context of the portfolio.
-          </p>
+    <div
+      className={cn(
+        "space-y-4 rounded-3xl border border-white/[0.06] bg-surface-raised p-4",
+        className,
+      )}
+    >
+      {showHeader ? (
+        <div className="flex items-center justify-between gap-3">
+          <div className="space-y-1">
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-brand">
+              Ask AI
+            </p>
+            <p className="text-sm text-slate-400">
+              Ask follow-up questions about this article in the context of the portfolio.
+            </p>
+          </div>
+          <Badge tone="brand">
+            <Sparkles className="mr-1 h-3.5 w-3.5" />
+            Story chat
+          </Badge>
         </div>
-        <Badge tone="brand">
-          <Sparkles className="mr-1 h-3.5 w-3.5" />
-          Story chat
-        </Badge>
-      </div>
+      ) : null}
 
       {disabled ? (
         <p className="text-sm text-slate-500">

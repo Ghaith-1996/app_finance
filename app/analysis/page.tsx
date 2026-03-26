@@ -1,30 +1,16 @@
 import Link from "next/link";
-import { Suspense, use } from "react";
+import type { ReactNode } from "react";
 
 import { Activity, ArrowRight, BrainCircuit, RefreshCw } from "lucide-react";
 
-import { AppShell } from "@/components/app/app-shell";
 import { AnalysisRunTrigger } from "@/components/app/analysis-run-trigger";
+import { AppShell } from "@/components/app/app-shell";
+import { InlineRefreshPricesButton } from "@/components/app/inline-refresh-prices-button";
 import { Badge } from "@/components/ui/badge";
 import { buttonStyles } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
-import {
-  getPortfolioInsights,
-  getPortfolioOverview,
-  getUserPortfolios,
-} from "@/lib/actions/portfolio";
-import { loadFreshOverviewAfterPriceSync } from "@/lib/server/portfolio-refresh-loaders";
+import { loadAnalysisPageData } from "@/lib/server/page-loaders";
 import { formatCurrency, formatPercent } from "@/lib/utils";
-
-const ANALYSIS_OVERVIEW_FALLBACK = {
-  totalValue: 0,
-  dayChange: 0,
-  monthlyChange: 0,
-  lastSyncedAt: "—",
-  lastAnalyzedAt: "Never",
-  coverage: "0 stories",
-  primaryGoal: "Add a portfolio and run analysis.",
-};
 
 export default async function AnalysisPage({
   searchParams,
@@ -32,16 +18,12 @@ export default async function AnalysisPage({
   searchParams: Promise<{ portfolioId?: string }>;
 }) {
   const params = await searchParams;
-  const { data: portfolios } = await getUserPortfolios();
-  const portfolioId = params.portfolioId ?? portfolios?.[0]?.id ?? null;
-
-  const [overviewResult, insightsResult] = await Promise.all([
-    portfolioId ? getPortfolioOverview(portfolioId) : { data: null, error: null },
-    portfolioId ? getPortfolioInsights(portfolioId) : { data: [], error: null },
-  ]);
-
-  const portfolioOverview = overviewResult?.data ?? ANALYSIS_OVERVIEW_FALLBACK;
-  const portfolioInsights = insightsResult?.data ?? [];
+  const {
+    showOnboardingNav,
+    portfolioId,
+    portfolioOverview,
+    portfolioInsights,
+  } = await loadAnalysisPageData(params.portfolioId ?? null);
 
   return (
     <AppShell
@@ -49,18 +31,16 @@ export default async function AnalysisPage({
       title="Your AI brief updates automatically"
       description="Every 20 minutes, the system ingests new articles and matches them against your portfolio holdings and watchlist symbols."
       activePath="/analysis"
+      showOnboardingNav={showOnboardingNav}
       actions={
         <>
           <Link
-            href={portfolioId ? `/portfolio` : "/portfolio"}
+            href={portfolioId ? "/portfolio" : "/portfolio"}
             className={buttonStyles({ variant: "secondary" })}
           >
             Review portfolio
           </Link>
-          <Link
-            href={portfolioId ? `/feed` : "/feed"}
-            className={buttonStyles({ size: "lg" })}
-          >
+          <Link href={portfolioId ? "/feed" : "/feed"} className={buttonStyles({ size: "lg" })}>
             Open feed
             <ArrowRight className="ml-2 h-4 w-4" />
           </Link>
@@ -69,10 +49,7 @@ export default async function AnalysisPage({
     >
       <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
         <div className="space-y-6">
-          <Panel
-            glow
-            className="space-y-6 bg-[#0d1520] p-8 border-white/[0.06]"
-          >
+          <Panel glow className="space-y-6 border-white/[0.06] bg-[#0d1520] p-8">
             {portfolioId ? (
               <AnalysisRunTrigger
                 portfolioId={portfolioId}
@@ -88,8 +65,8 @@ export default async function AnalysisPage({
                   Create a portfolio first
                 </h2>
                 <p className="max-w-2xl text-sm leading-7 text-slate-400">
-                  Go to onboarding to add a portfolio. Once created, your feed
-                  will update automatically every 20 minutes.
+                  Go to onboarding to add a portfolio. Once created, your feed will update
+                  automatically every 20 minutes.
                 </p>
                 <Link href="/onboarding" className={buttonStyles({ size: "lg" })}>
                   Go to onboarding
@@ -100,9 +77,7 @@ export default async function AnalysisPage({
         </div>
 
         <div className="space-y-6">
-          <Suspense fallback={<PortfolioSnapshotPanelFallback />}>
-            <RefreshedPortfolioSnapshotPanel portfolioId={portfolioId} />
-          </Suspense>
+          <PortfolioSnapshotPanel overview={portfolioOverview} portfolioId={portfolioId} />
 
           <Panel className="space-y-4">
             <div className="flex items-center gap-3">
@@ -128,12 +103,8 @@ export default async function AnalysisPage({
                     <p className="text-sm uppercase tracking-[0.18em] text-slate-500">
                       {insight.title}
                     </p>
-                    <p className="mt-2 text-lg font-semibold text-white">
-                      {insight.value}
-                    </p>
-                    <p className="mt-2 text-sm leading-7 text-slate-400">
-                      {insight.detail}
-                    </p>
+                    <p className="mt-2 text-lg font-semibold text-white">{insight.value}</p>
+                    <p className="mt-2 text-sm leading-7 text-slate-400">{insight.detail}</p>
                   </div>
                 ))
               ) : (
@@ -149,28 +120,9 @@ export default async function AnalysisPage({
   );
 }
 
-function RefreshedPortfolioSnapshotPanel({
-  portfolioId,
-}: {
-  portfolioId: string | null;
-}) {
-  if (!portfolioId) {
-    return <PortfolioSnapshotPanel overview={ANALYSIS_OVERVIEW_FALLBACK} loading={false} />;
-  }
-
-  const freshOverview =
-    use(loadFreshOverviewAfterPriceSync(portfolioId)).data ?? ANALYSIS_OVERVIEW_FALLBACK;
-
-  return <PortfolioSnapshotPanel overview={freshOverview} loading={false} />;
-}
-
-function PortfolioSnapshotPanelFallback() {
-  return <PortfolioSnapshotPanel overview={ANALYSIS_OVERVIEW_FALLBACK} loading />;
-}
-
 function PortfolioSnapshotPanel({
   overview,
-  loading,
+  portfolioId,
 }: {
   overview: {
     totalValue: number;
@@ -179,7 +131,7 @@ function PortfolioSnapshotPanel({
     lastSyncedAt: string;
     coverage: string;
   };
-  loading: boolean;
+  portfolioId: string | null;
 }) {
   return (
     <Panel className="space-y-5">
@@ -201,7 +153,17 @@ function PortfolioSnapshotPanel({
         <Metric label="30 day move" value={formatPercent(overview.monthlyChange)} />
         <Metric
           label="Last sync"
-          value={loading ? "Refreshing snapshot..." : overview.lastSyncedAt}
+          value={
+            <div className="flex items-center gap-2">
+              <span>{overview.lastSyncedAt}</span>
+              {portfolioId ? (
+                <InlineRefreshPricesButton
+                  portfolioId={portfolioId}
+                  className="h-6 px-1.5 text-[10px]"
+                />
+              ) : null}
+            </div>
+          }
         />
         <Metric label="Coverage" value={overview.coverage} />
       </div>
@@ -209,11 +171,11 @@ function PortfolioSnapshotPanel({
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
+function Metric({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-4">
       <p className="text-sm uppercase tracking-[0.18em] text-slate-500">{label}</p>
-      <p className="mt-2 text-lg font-semibold text-white">{value}</p>
+      <div className="mt-2 text-lg font-semibold text-white">{value}</div>
     </div>
   );
 }

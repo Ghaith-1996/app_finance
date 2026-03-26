@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app/app-shell";
 import { ProfileForm } from "@/components/app/profile-form";
 import { getCurrentUserProfile, saveCurrentUserProfile } from "@/lib/actions/profile";
+import { loadOnboardingNavState } from "@/lib/server/page-loaders";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function SettingsPage() {
@@ -15,6 +16,7 @@ export default async function SettingsPage() {
   }
 
   const profile = await getCurrentUserProfile();
+  const showOnboardingNav = await loadOnboardingNavState();
 
   return (
     <AppShell
@@ -24,6 +26,7 @@ export default async function SettingsPage() {
       activePath="/settings"
       backHref="/home"
       backLabel="Back to home"
+      showOnboardingNav={showOnboardingNav}
     >
       <ProfileForm
         initialProfile={

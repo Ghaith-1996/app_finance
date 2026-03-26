@@ -23,6 +23,7 @@ type HoldingRow = {
 const mocked = vi.hoisted(() => ({
   revalidatePath: vi.fn(),
   getQuotes: vi.fn(),
+  upsertHoldings: vi.fn(),
   state: {
     authUserId: null as string | null,
     portfolios: [] as PortfolioRow[],
@@ -32,8 +33,9 @@ const mocked = vi.hoisted(() => ({
 
 function makeBuilder(table: "portfolios" | "holdings") {
   const filters = new Map<string, unknown>();
-  let mode: "select" | "update" = "select";
+  let mode: "select" | "update" | "upsert" = "select";
   let payload: Record<string, unknown> | null = null;
+  let upsertPayload: Array<Record<string, unknown>> = [];
 
   const matches = (row: Record<string, unknown>) => {
     for (const [key, value] of filters.entries()) {
@@ -66,7 +68,27 @@ function makeBuilder(table: "portfolios" | "holdings") {
     return { data: null, error: null as null | { message: string } };
   };
 
-  const run = () => (mode === "select" ? runSelect() : runUpdate());
+  const runUpsert = () => {
+    if (table !== "holdings") {
+      return { data: null, error: { message: "Unsupported table" } };
+    }
+
+    mocked.upsertHoldings(upsertPayload);
+
+    for (const row of upsertPayload) {
+      const existing = mocked.state.holdings.find((holding) => holding.id === row.id);
+      if (!existing) continue;
+      Object.assign(existing, row);
+    }
+
+    return { data: null, error: null as null | { message: string } };
+  };
+
+  const run = () => {
+    if (mode === "select") return runSelect();
+    if (mode === "update") return runUpdate();
+    return runUpsert();
+  };
 
   const builder = {
     select: () => {
@@ -76,6 +98,11 @@ function makeBuilder(table: "portfolios" | "holdings") {
     update: (nextPayload: Record<string, unknown>) => {
       mode = "update";
       payload = nextPayload;
+      return builder;
+    },
+    upsert: (rows: Array<Record<string, unknown>>) => {
+      mode = "upsert";
+      upsertPayload = rows;
       return builder;
     },
     eq: (column: string, value: unknown) => {
@@ -145,6 +172,7 @@ describe("portfolio price sync", () => {
     vi.setSystemTime(new Date("2026-03-25T12:00:00.000Z"));
     mocked.getQuotes.mockReset();
     mocked.revalidatePath.mockReset();
+    mocked.upsertHoldings.mockReset();
 
     mocked.state = {
       authUserId: "user-1",
@@ -210,6 +238,7 @@ describe("portfolio price sync", () => {
 
     expect(result).toEqual({ updated: 2, skipped: false, error: null });
     expect(mocked.getQuotes).toHaveBeenCalledTimes(1);
+    expect(mocked.upsertHoldings).toHaveBeenCalledTimes(1);
 
     const aapl = mocked.state.holdings.find((row) => row.id === "holding-1");
     const msft = mocked.state.holdings.find((row) => row.id === "holding-2");

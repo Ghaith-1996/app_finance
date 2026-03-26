@@ -1,0 +1,51 @@
+import React from "react";
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+
+const createClient = vi.fn();
+
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/feed",
+}));
+
+vi.mock("next/link", () => ({
+  default: ({
+    children,
+    href,
+    ...props
+  }: React.AnchorHTMLAttributes<HTMLAnchorElement> & { href: string }) => (
+    <a href={href} {...props}>
+      {children}
+    </a>
+  ),
+}));
+
+vi.mock("@/components/app/user-menu", () => ({
+  UserMenu: () => <div>User menu</div>,
+}));
+
+vi.mock("@/lib/supabase/client", () => ({
+  createClient,
+}));
+
+describe("AppShellLayout", () => {
+  it("uses the server-provided onboarding visibility without client auth queries", async () => {
+    const { AppShellLayout } = await import("@/components/app/app-shell-layout");
+
+    render(
+      <AppShellLayout
+        eyebrow="Feed"
+        title="Title"
+        description="Description"
+        showOnboardingNav={false}
+      >
+        <div>Child content</div>
+      </AppShellLayout>,
+    );
+
+    expect(screen.getByText("Child content")).toBeTruthy();
+    expect(screen.queryByRole("link", { name: /onboarding/i })).toBeNull();
+    expect(screen.getAllByRole("link", { name: /feed/i }).length).toBeGreaterThan(0);
+    expect(createClient).not.toHaveBeenCalled();
+  });
+});

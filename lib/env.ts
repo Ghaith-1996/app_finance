@@ -67,6 +67,18 @@ export interface AzureConfigResult {
   model: string;
 }
 
+export interface MistralConfigIssue {
+  field: string;
+  reason: string;
+}
+
+export interface MistralConfigResult {
+  ok: boolean;
+  issues: MistralConfigIssue[];
+  key: string;
+  model: string;
+}
+
 export function validateAzureConfig(): AzureConfigResult {
   const issues: AzureConfigIssue[] = [];
 
@@ -104,6 +116,29 @@ export function validateAzureConfig(): AzureConfigResult {
     issues,
     key: rawKey,
     baseUrl: rawUrl,
+    model: rawModel,
+  };
+}
+
+export function validateMistralConfig(): MistralConfigResult {
+  const issues: MistralConfigIssue[] = [];
+
+  const rawKey = process.env.MISTRAL_API_KEY?.trim() ?? "";
+  const rawModel = process.env.MISTRAL_MODEL?.trim() || "mistral-large-latest";
+
+  if (!rawKey) {
+    issues.push({ field: "MISTRAL_API_KEY", reason: "missing" });
+  } else if (PLACEHOLDER_RE.test(rawKey)) {
+    issues.push({
+      field: "MISTRAL_API_KEY",
+      reason: "placeholder value — replace with a real Mistral API key",
+    });
+  }
+
+  return {
+    ok: issues.length === 0,
+    issues,
+    key: rawKey,
     model: rawModel,
   };
 }

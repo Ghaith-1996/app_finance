@@ -99,3 +99,40 @@ describe("validateAzureConfig", () => {
     expect(result.issues).toHaveLength(0);
   });
 });
+
+describe("validateMistralConfig", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    process.env = { ...ENV_BACKUP };
+  });
+
+  afterAll(() => {
+    process.env = ENV_BACKUP;
+  });
+
+  it("reports missing key", async () => {
+    delete process.env.MISTRAL_API_KEY;
+    const { validateMistralConfig } = await import("@/lib/env");
+    const result = validateMistralConfig();
+    expect(result.ok).toBe(false);
+    expect(result.issues.some((i) => i.field === "MISTRAL_API_KEY" && i.reason === "missing")).toBe(true);
+  });
+
+  it("reports placeholder key", async () => {
+    process.env.MISTRAL_API_KEY = "your-mistral-api-key";
+    const { validateMistralConfig } = await import("@/lib/env");
+    const result = validateMistralConfig();
+    expect(result.ok).toBe(false);
+    expect(result.issues.some((i) => i.field === "MISTRAL_API_KEY" && /placeholder/i.test(i.reason))).toBe(true);
+  });
+
+  it("passes with valid config", async () => {
+    process.env.MISTRAL_API_KEY = "mistral-real-key";
+    process.env.MISTRAL_MODEL = "mistral-large-latest";
+    const { validateMistralConfig } = await import("@/lib/env");
+    const result = validateMistralConfig();
+    expect(result.ok).toBe(true);
+    expect(result.issues).toHaveLength(0);
+    expect(result.model).toBe("mistral-large-latest");
+  });
+});

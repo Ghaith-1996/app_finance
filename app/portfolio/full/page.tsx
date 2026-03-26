@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { Suspense, use } from "react";
 import {
   BarChart3,
   Cpu,
@@ -17,30 +16,14 @@ import { PortfolioPerformanceChart } from "@/components/app/portfolio-performanc
 import { RefreshPricesButton } from "@/components/app/refresh-prices-button";
 import { AppShell } from "@/components/app/app-shell";
 import { buttonStyles } from "@/components/ui/button";
-import {
-  getPortfolio,
-  getPortfolioFeedHighlights,
-  getPortfolioInsights,
-  getPortfolioOverview,
-  getUserPortfolios,
-} from "@/lib/actions/portfolio";
-import { loadFreshFullPortfolioAfterPriceSync } from "@/lib/server/portfolio-refresh-loaders";
+import { loadFullPortfolioPageData } from "@/lib/server/page-loaders";
 import type {
   Holding,
   PortfolioFeedHighlight,
   PortfolioInsight,
+  PortfolioOverview,
 } from "@/lib/types";
 import { categoryLabel, formatCurrency } from "@/lib/utils";
-
-const FULL_OVERVIEW_FALLBACK = {
-  totalValue: 0,
-  dayChange: 0,
-  monthlyChange: 0,
-  lastSyncedAt: "Not synced",
-  lastAnalyzedAt: "Never",
-  coverage: "0 stories",
-  primaryGoal: "Add holdings and run analysis.",
-};
 
 interface SectorCard {
   label: string;
@@ -275,8 +258,15 @@ function buildInsightSummary(
 }
 
 export default async function FullPortfolioPage() {
-  const { data: portfolios } = await getUserPortfolios();
-  const portfolioId = portfolios?.[0]?.id ?? null;
+  const {
+    showOnboardingNav,
+    portfolioId,
+    portfolioCreatedAt,
+    holdings,
+    portfolioOverview,
+    insights,
+    feedHighlights,
+  } = await loadFullPortfolioPageData();
 
   if (!portfolioId) {
     return (
@@ -286,6 +276,7 @@ export default async function FullPortfolioPage() {
         description="Create a portfolio from onboarding to unlock the detailed holdings view."
         activePath="/portfolio"
         backHref="/portfolio"
+        showOnboardingNav={showOnboardingNav}
         actions={
           <Link href="/portfolio" className={buttonStyles({ variant: "secondary" })}>
             Back to overview
@@ -308,23 +299,8 @@ export default async function FullPortfolioPage() {
       </AppShell>
     );
   }
-
-  const [portfolioResult, overviewResult, insightsResult, feedResult] =
-    await Promise.all([
-      getPortfolio(portfolioId),
-      getPortfolioOverview(portfolioId),
-      getPortfolioInsights(portfolioId),
-      getPortfolioFeedHighlights(portfolioId),
-    ]);
-
-  const holdings = portfolioResult.data?.holdings ?? [];
-  const portfolioOverview = overviewResult.data ?? FULL_OVERVIEW_FALLBACK;
-  const insights = insightsResult.data ?? [];
-  const feedHighlights = feedResult.data ?? [];
-  const portfolioDayChange = portfolioOverview.dayChange ?? 0;
   const sectorCards = buildSectorCards(holdings);
   const insightSummary = buildInsightSummary(insights, feedHighlights, sectorCards);
-  const refreshedFullPortfolio = loadFreshFullPortfolioAfterPriceSync(portfolioId);
 
   return (
     <AppShell
@@ -333,16 +309,16 @@ export default async function FullPortfolioPage() {
       description="Advanced position oversight for your diversified Signal Emerald custody account."
       activePath="/portfolio"
       backHref="/portfolio"
+      showOnboardingNav={showOnboardingNav}
     >
       <div className="-mx-4 rounded-[2.5rem] bg-[#0a0f15] p-6 shadow-inner sm:mx-0 lg:p-10">
         {/* Performance chart hero */}
         <div className="mb-10">
-          <Suspense fallback={<PortfolioHeroFallback />}>
-            <RefreshedPortfolioHero
-              refreshedFullPortfolio={refreshedFullPortfolio}
-              portfolioCreatedAt={portfolios[0]?.createdAt ?? new Date().toISOString()}
-            />
-          </Suspense>
+          <PortfolioPerformanceChart
+            totalValue={portfolioOverview.totalValue}
+            dayChange={portfolioOverview.dayChange ?? 0}
+            portfolioCreatedAt={portfolioCreatedAt ?? new Date().toISOString()}
+          />
         </div>
 
         <div className="flex flex-col gap-10 lg:flex-row">
@@ -390,12 +366,11 @@ export default async function FullPortfolioPage() {
               </div>
             </div>
 
-            <Suspense fallback={<HoldingsBlockFallback />}>
-              <RefreshedHoldingsBlock
-                portfolioId={portfolioId}
-                refreshedFullPortfolio={refreshedFullPortfolio}
-              />
-            </Suspense>
+            <HoldingsBlock
+              portfolioId={portfolioId}
+              holdings={holdings}
+              overview={portfolioOverview}
+            />
           </div>
 
           <div className="w-full shrink-0 space-y-4 lg:w-[340px]">
@@ -506,45 +481,15 @@ export default async function FullPortfolioPage() {
   );
 }
 
-function RefreshedPortfolioHero({
-  refreshedFullPortfolio,
-  portfolioCreatedAt,
-}: {
-  refreshedFullPortfolio: ReturnType<typeof loadFreshFullPortfolioAfterPriceSync>;
-  portfolioCreatedAt: string;
-}) {
-  const { overviewResult } = use(refreshedFullPortfolio);
-  const overview = overviewResult.data ?? FULL_OVERVIEW_FALLBACK;
-
-  return (
-    <PortfolioPerformanceChart
-      totalValue={overview.totalValue}
-      dayChange={overview.dayChange ?? 0}
-      portfolioCreatedAt={portfolioCreatedAt}
-    />
-  );
-}
-
-function PortfolioHeroFallback() {
-  return (
-    <div className="rounded-[2rem] border border-white/[0.06] bg-surface-raised px-6 py-8 text-slate-500">
-      Refreshing performance chart...
-    </div>
-  );
-}
-
-function RefreshedHoldingsBlock({
+function HoldingsBlock({
   portfolioId,
-  refreshedFullPortfolio,
+  holdings,
+  overview,
 }: {
   portfolioId: string;
-  refreshedFullPortfolio: ReturnType<typeof loadFreshFullPortfolioAfterPriceSync>;
+  holdings: Holding[];
+  overview: PortfolioOverview;
 }) {
-  const { portfolioResult, overviewResult } = use(refreshedFullPortfolio);
-
-  const holdings = portfolioResult.data?.holdings ?? [];
-  const overview = overviewResult.data ?? FULL_OVERVIEW_FALLBACK;
-
   return (
     <div>
       <div className="mb-6 flex items-end justify-between gap-4">
@@ -583,22 +528,6 @@ function RefreshedHoldingsBlock({
           No holdings available yet.
         </div>
       )}
-    </div>
-  );
-}
-
-function HoldingsBlockFallback() {
-  return (
-    <div>
-      <div className="mb-6 flex items-end justify-between gap-4">
-        <div>
-          <h2 className="text-[22px] font-bold tracking-tight text-white">Active Holdings</h2>
-          <p className="mt-1 text-sm text-slate-500">Refreshing holdings...</p>
-        </div>
-      </div>
-      <div className="rounded-[1.5rem] border border-white/[0.06] bg-surface-raised px-6 py-8 text-center text-sm text-slate-500 shadow-sm">
-        Loading synced holdings...
-      </div>
     </div>
   );
 }

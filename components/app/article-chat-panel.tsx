@@ -24,6 +24,7 @@ const GENERAL_STARTER_QUESTIONS = [
 const TIER_OPTIONS: Array<{ tier: ArticleChatModelTier; label: string }> = [
   { tier: "free", label: "Free" },
   { tier: "premium", label: "Premium" },
+  { tier: "ultimate", label: "Ultimate" },
 ];
 
 export type ArticleChatActivityState = {

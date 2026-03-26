@@ -42,6 +42,7 @@ vi.mock("@/lib/ingest-hint", () => ({
 
 import { FeedView } from "@/components/app/feed-view";
 import type { NewsItem } from "@/lib/types";
+import type { FeedResponsePayload } from "@/lib/server/feed";
 
 function createDeferred<T>() {
   let resolve!: (value: T) => void;
@@ -88,6 +89,7 @@ describe("FeedView", () => {
     supabaseMockState.removeChannel.mockReset();
     mockSnapshot = null;
     setViewport(1440);
+    window.scrollTo = vi.fn();
   });
 
   afterEach(() => {
@@ -109,6 +111,79 @@ describe("FeedView", () => {
     expect(global.fetch).toHaveBeenCalledWith(
       expect.stringContaining("mode=personal"),
     );
+  });
+
+  it("uses the initial feed payload without fetching on mount", async () => {
+    const items = [makeFeedItem({ id: "story-1", headline: "Hydrated story" })];
+    global.fetch = vi.fn();
+
+    const initialFeedPayload: FeedResponsePayload = {
+      feed: items,
+      portfolioId: "p1",
+      mode: "personal",
+      portfolioSymbols: ["AAPL"],
+      portfolioSectors: ["Technology"],
+      watchlistSymbols: ["TSLA"],
+      page: 1,
+      pageSize: 50,
+      totalCount: 1,
+      totalPages: 1,
+    };
+
+    await act(async () => {
+      render(<FeedView portfolioId="p1" initialFeedPayload={initialFeedPayload} />);
+    });
+
+    expect(screen.getByText("Hydrated story")).toBeTruthy();
+    expect(screen.queryByText(/loading feed/i)).toBeNull();
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("fetches once after hydration when initialSymbol selects a specific holding", async () => {
+    const initialFeedPayload: FeedResponsePayload = {
+      feed: [makeFeedItem({ id: "story-1", headline: "Hydrated story", holdings: ["AAPL"] })],
+      portfolioId: "p1",
+      mode: "personal",
+      portfolioSymbols: ["AAPL", "MSFT"],
+      portfolioSectors: ["Technology"],
+      watchlistSymbols: [],
+      page: 1,
+      pageSize: 50,
+      totalCount: 1,
+      totalPages: 1,
+    };
+
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        feed: [makeFeedItem({ id: "story-2", headline: "Microsoft story", holdings: ["MSFT"] })],
+        portfolioId: "p1",
+        mode: "personal",
+        portfolioSymbols: ["AAPL", "MSFT"],
+        portfolioSectors: ["Technology"],
+        watchlistSymbols: [],
+        page: 1,
+        pageSize: 50,
+        totalCount: 1,
+        totalPages: 1,
+      }),
+    });
+
+    await act(async () => {
+      render(
+        <FeedView
+          portfolioId="p1"
+          initialSymbol="MSFT"
+          initialFeedPayload={initialFeedPayload}
+        />,
+      );
+    });
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining("holding=MSFT"),
+      );
+    });
   });
 
   it("shows the blocking loading state only before the first feed response", async () => {
@@ -596,6 +671,11 @@ describe("FeedView", () => {
       fireEvent.click(screen.getByRole("button", { name: /next/i }));
     });
 
+    expect(window.scrollTo).toHaveBeenCalledWith({
+      top: 0,
+      behavior: "smooth",
+    });
+
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
         expect.stringContaining("page=2"),
@@ -607,6 +687,11 @@ describe("FeedView", () => {
 
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: /previous/i }));
+    });
+
+    expect(window.scrollTo).toHaveBeenCalledWith({
+      top: 0,
+      behavior: "smooth",
     });
 
     await waitFor(() => {
@@ -870,6 +955,7 @@ describe("FeedView", () => {
     );
     expect(within(sidebar).getByRole("button", { name: /^free$/i })).toHaveAttribute("aria-pressed", "true");
     expect(within(sidebar).getByRole("button", { name: /^premium$/i })).toHaveAttribute("aria-pressed", "false");
+    expect(within(sidebar).getByRole("button", { name: /^ultimate$/i })).toHaveAttribute("aria-pressed", "false");
 
     await act(async () => {
       fireEvent.change(within(sidebar).getByLabelText(/ask a follow-up/i), {
@@ -975,6 +1061,7 @@ describe("FeedView", () => {
 
     const updatedSidebar = screen.getByTestId("story-chat-sidebar");
     expect(within(updatedSidebar).getByRole("button", { name: /^premium$/i })).toHaveAttribute("aria-pressed", "true");
+    expect(within(updatedSidebar).getByRole("button", { name: /^ultimate$/i })).toHaveAttribute("aria-pressed", "false");
 
     await act(async () => {
       fireEvent.change(within(updatedSidebar).getByLabelText(/ask a follow-up/i), {
@@ -1206,5 +1293,6 @@ describe("FeedView", () => {
     expect(screen.getByRole("dialog", { name: /ask ai chat/i })).toBeTruthy();
     expect(within(sheet).getByRole("button", { name: /^free$/i })).toHaveAttribute("aria-pressed", "true");
     expect(within(sheet).getByRole("button", { name: /^premium$/i })).toHaveAttribute("aria-pressed", "false");
+    expect(within(sheet).getByRole("button", { name: /^ultimate$/i })).toHaveAttribute("aria-pressed", "false");
   });
 });

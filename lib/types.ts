@@ -218,7 +218,7 @@ export interface FAQItem {
 }
 
 export type ArticleChatRole = "user" | "assistant";
-export const ARTICLE_CHAT_MODEL_TIERS = ["free", "premium"] as const;
+export const ARTICLE_CHAT_MODEL_TIERS = ["free", "premium", "ultimate"] as const;
 export type ArticleChatModelTier = (typeof ARTICLE_CHAT_MODEL_TIERS)[number];
 
 export interface ArticleChatMessage {

@@ -11,7 +11,7 @@ const mockComputePortfolioOverview = vi.fn().mockResolvedValue({
   coverage: "Balanced",
   primaryGoal: "Compound capital",
 });
-const mockGetAIProviderById = vi.fn((_id: "azure" | "anthropic" | "openai" | "openrouter") => ({
+const mockGetAIProviderById = vi.fn((_id: "azure" | "anthropic" | "openai" | "openrouter" | "mistral") => ({
   answerArticleQuestion: mockAnswerArticleQuestion,
   answerPortfolioQuestion: mockAnswerPortfolioQuestion,
 }));
@@ -24,7 +24,7 @@ vi.mock("@/lib/services/ai", async () => {
   const actual = await vi.importActual<typeof import("@/lib/services/ai")>("@/lib/services/ai");
   return {
     ...actual,
-    getAIProviderById: (id: "azure" | "anthropic" | "openai" | "openrouter") => mockGetAIProviderById(id),
+    getAIProviderById: (id: "azure" | "anthropic" | "openai" | "openrouter" | "mistral") => mockGetAIProviderById(id),
   };
 });
 
@@ -296,6 +296,25 @@ describe("POST /api/article-chat", () => {
         newsItemId: "n1",
         message: "What matters here?",
         modelTier: "premium",
+      }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    expect(mockGetAIProviderById).toHaveBeenCalledWith("mistral");
+  });
+
+  it("uses the ultimate tier provider when modelTier is ultimate", async () => {
+    mockAnswerArticleQuestion.mockResolvedValue("Ultimate-tier answer.");
+
+    const req = new Request("http://localhost/api/article-chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        portfolioId: "p1",
+        newsItemId: "n1",
+        message: "What matters here?",
+        modelTier: "ultimate",
       }),
     });
 

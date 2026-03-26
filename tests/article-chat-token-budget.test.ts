@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ARTICLE_CHAT_MAX_TOKENS } from "@/lib/services/ai/constants";
 import { createAnthropicProvider } from "@/lib/services/ai/anthropic-provider";
 import { createAzureOpenAIProvider } from "@/lib/services/ai/azure-openai-provider";
+import { createMistralProvider } from "@/lib/services/ai/mistral-provider";
 import { createOpenAIProvider } from "@/lib/services/ai/openai-provider";
 import { createOpenRouterProvider } from "@/lib/services/ai/openrouter-provider";
 
@@ -104,6 +105,29 @@ describe("article chat token budgets", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const provider = createOpenRouterProvider();
+    await provider.answerArticleQuestion(baseContext);
+
+    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as {
+      max_tokens: number;
+    };
+    expect(body.max_tokens).toBe(ARTICLE_CHAT_MAX_TOKENS);
+  });
+
+  it("uses 2000 tokens for the Mistral article-chat path", async () => {
+    process.env.MISTRAL_API_KEY = "test-key";
+    process.env.MISTRAL_MODEL = "mistral-test-model";
+
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [{ message: { content: "Mistral answer" } }],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const provider = createMistralProvider();
     await provider.answerArticleQuestion(baseContext);
 
     const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as {

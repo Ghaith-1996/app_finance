@@ -16,12 +16,14 @@ import type {
 
 const log = createLogger("article-chat");
 
-type ArticleChatProviderId = "azure" | "openrouter";
+type ArticleChatProviderId = "azure" | "openrouter" | "mistral";
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 type ChatHistoryItem = Pick<ArticleChatMessage, "role" | "content">;
 
 function providerIdForTier(tier: ArticleChatModelTier): ArticleChatProviderId {
-  return tier === "premium" ? "azure" : "openrouter";
+  if (tier === "ultimate") return "azure";
+  if (tier === "premium") return "mistral";
+  return "openrouter";
 }
 
 function deploymentLabelForLogs(id: ArticleChatProviderId): string {
@@ -32,6 +34,9 @@ function deploymentLabelForLogs(id: ArticleChatProviderId): string {
       "azure"
     );
   }
+  if (id === "mistral") {
+    return process.env.MISTRAL_MODEL?.trim() || "mistral-large-latest";
+  }
   return process.env.OPENROUTER_MODEL?.trim() || "openrouter-default";
 }
 
@@ -39,7 +44,7 @@ function parseModelTier(value: unknown): ArticleChatModelTier | null {
   if (value == null) return "free";
   if (typeof value !== "string") return null;
   const normalized = value.trim().toLowerCase();
-  if (normalized === "free" || normalized === "premium") {
+  if (normalized === "free" || normalized === "premium" || normalized === "ultimate") {
     return normalized;
   }
   return null;
@@ -518,7 +523,7 @@ export async function POST(request: Request) {
     return json({ error: "portfolioId and message are required" }, 400);
   }
   if (!modelTier) {
-    return json({ error: "modelTier must be 'free' or 'premium'" }, 400);
+    return json({ error: "modelTier must be 'free', 'premium', or 'ultimate'" }, 400);
   }
 
   const ownsPortfolio = await verifyPortfolioOwnership(supabase, portfolioId, user.id);
@@ -636,3 +641,4 @@ export async function POST(request: Request) {
     return json({ error: error instanceof Error ? error.message : "Failed to send chat message" }, 500);
   }
 }
+

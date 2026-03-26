@@ -2,26 +2,32 @@ import React from "react";
 import { act, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const getUserPortfolios = vi.fn();
-const getPortfolio = vi.fn();
-const getPortfolioOverview = vi.fn();
-const getPortfolioInsights = vi.fn();
-const getPortfolioFeedHighlights = vi.fn();
+const loadFeedPageData = vi.fn();
+const loadPortfolioPageData = vi.fn();
+const loadAnalysisPageData = vi.fn();
+const loadFullPortfolioPageData = vi.fn();
 
-const loadFreshOverviewAfterPriceSync = vi.fn();
-const loadFreshFullPortfolioAfterPriceSync = vi.fn();
+const ActivePortfolioValueCard = vi.fn(
+  ({ initialOverview }: { initialOverview: { totalValue: number } }) => (
+    <div>Active value {initialOverview.totalValue}</div>
+  ),
+);
+const FeedView = vi.fn((props?: unknown) => <div>{props ? "Feed view" : "Feed view"}</div>);
 
-vi.mock("@/lib/actions/portfolio", () => ({
-  getUserPortfolios,
-  getPortfolio,
-  getPortfolioOverview,
-  getPortfolioInsights,
-  getPortfolioFeedHighlights,
+vi.mock("@/lib/server/page-loaders", () => ({
+  loadFeedPageData,
+  loadPortfolioPageData,
+  loadAnalysisPageData,
+  loadFullPortfolioPageData,
 }));
 
-vi.mock("@/lib/server/portfolio-refresh-loaders", () => ({
-  loadFreshOverviewAfterPriceSync,
-  loadFreshFullPortfolioAfterPriceSync,
+vi.mock("@/components/app/active-portfolio-value-card", () => ({
+  ActivePortfolioValueCard: (props: { initialOverview: { totalValue: number } }) =>
+    ActivePortfolioValueCard(props),
+}));
+
+vi.mock("@/components/app/inline-refresh-prices-button", () => ({
+  InlineRefreshPricesButton: () => <button type="button">Inline refresh</button>,
 }));
 
 vi.mock("@/components/app/app-shell", () => ({
@@ -29,7 +35,7 @@ vi.mock("@/components/app/app-shell", () => ({
 }));
 
 vi.mock("@/components/app/feed-view", () => ({
-  FeedView: () => <div>Feed view</div>,
+  FeedView: (props: unknown) => FeedView(props),
 }));
 
 vi.mock("@/components/app/analysis-run-trigger", () => ({
@@ -60,34 +66,63 @@ vi.mock("@/components/app/refresh-prices-button", () => ({
   RefreshPricesButton: () => <button type="button">Refresh prices</button>,
 }));
 
-const pendingPromise = new Promise<never>(() => {
-  // Keep unresolved to force Suspense fallbacks in tests.
-});
-
-describe("streamed page-level price refresh surfaces", () => {
+describe("portfolio value surfaces render cached data and manual refresh controls", () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    getUserPortfolios.mockResolvedValue({
-      data: [{ id: "portfolio-1", createdAt: "2026-03-20T00:00:00.000Z" }],
-      error: null,
-    });
-
-    getPortfolioOverview.mockResolvedValue({
-      data: {
+    loadFeedPageData.mockResolvedValue({
+      showOnboardingNav: false,
+      portfolioId: "portfolio-1",
+      portfolioOverview: {
         totalValue: 12345,
         dayChange: 1.2,
         monthlyChange: 2.1,
         lastSyncedAt: "1 min ago",
         lastAnalyzedAt: "2 hours ago",
-        coverage: "4 stories",
+        coverage: "4 high-signal stories",
         primaryGoal: "Stay balanced",
       },
-      error: null,
+      portfolioInsights: [],
+      initialFeedPayload: {
+        feed: [
+          {
+            id: "feed-1",
+            newsItemId: "news-1",
+            headline: "Hydrated story",
+            source: "Source",
+            publishedAt: "5 minutes ago",
+            publishedMinutesAgo: 5,
+            category: "technology",
+            stockTags: ["AAPL"],
+            globalSummary: "Summary",
+            displayEffect: "bullish",
+            tickerImpacts: [],
+            sourceType: "newsapi",
+            sourceConfidence: "standard",
+            metadata: {},
+            angle: "",
+            holdings: ["AAPL"],
+            sectors: ["Technology"],
+            aiSummary: "Summary",
+            whyItMatters: "Matters",
+          },
+        ],
+        portfolioId: "portfolio-1",
+        mode: "personal",
+        portfolioSymbols: ["AAPL"],
+        portfolioSectors: ["Technology"],
+        watchlistSymbols: ["TSLA"],
+        page: 1,
+        pageSize: 50,
+        totalCount: 1,
+        totalPages: 1,
+      },
     });
 
-    getPortfolio.mockResolvedValue({
-      data: {
+    loadPortfolioPageData.mockResolvedValue({
+      showOnboardingNav: false,
+      portfolioId: "portfolio-1",
+      portfolioData: {
         sourceType: "manual",
         holdings: [
           {
@@ -114,12 +149,16 @@ describe("streamed page-level price refresh surfaces", () => {
           },
         ],
       },
-      error: null,
-    });
-
-    getPortfolioInsights.mockResolvedValue({ data: [], error: null });
-    getPortfolioFeedHighlights.mockResolvedValue({
-      data: [
+      portfolioOverview: {
+        totalValue: 12345,
+        dayChange: 1.2,
+        monthlyChange: 0,
+        lastSyncedAt: "1 min ago",
+        lastAnalyzedAt: "2 hours ago",
+        coverage: "4 stories",
+        primaryGoal: "Stay balanced",
+      },
+      feedHighlights: [
         {
           headline: "Story",
           source: "Source",
@@ -133,14 +172,67 @@ describe("streamed page-level price refresh surfaces", () => {
           matchReasonCodes: [],
         },
       ],
-      error: null,
     });
 
-    loadFreshOverviewAfterPriceSync.mockReturnValue(pendingPromise);
-    loadFreshFullPortfolioAfterPriceSync.mockReturnValue(pendingPromise);
+    loadAnalysisPageData.mockResolvedValue({
+      showOnboardingNav: false,
+      portfolioId: "portfolio-1",
+      portfolioOverview: {
+        totalValue: 12345,
+        dayChange: 1.2,
+        monthlyChange: 0,
+        lastSyncedAt: "1 min ago",
+        lastAnalyzedAt: "2 hours ago",
+        coverage: "4 stories",
+        primaryGoal: "Stay balanced",
+      },
+      portfolioInsights: [],
+    });
+
+    loadFullPortfolioPageData.mockResolvedValue({
+      showOnboardingNav: false,
+      portfolioId: "portfolio-1",
+      portfolioCreatedAt: "2026-03-20T00:00:00.000Z",
+      holdings: [
+        {
+          id: "h1",
+          symbol: "AAPL",
+          company: "Apple",
+          sector: "Technology",
+          market: "US",
+          source: "Manual",
+          price: 100,
+          dailyChange: 0.5,
+          allocation: 50,
+          thesis: "",
+          quantity: 2,
+          averageCost: 90,
+          costBasis: 180,
+          currentPrice: 100,
+          currentValue: 200,
+          unrealizedGainAmount: 20,
+          unrealizedGainPercent: 11.1,
+          quoteCurrency: "USD",
+          quoteAsOf: "2026-03-25T11:59:00.000Z",
+          importSource: "manual",
+        },
+      ],
+      sourceType: "manual",
+      portfolioOverview: {
+        totalValue: 12345,
+        dayChange: 1.2,
+        monthlyChange: 0,
+        lastSyncedAt: "1 min ago",
+        lastAnalyzedAt: "2 hours ago",
+        coverage: "4 stories",
+        primaryGoal: "Stay balanced",
+      },
+      insights: [],
+      feedHighlights: [],
+    });
   });
 
-  it("/feed renders shell content while active value card is loading", async () => {
+  it("/feed renders cached active value data immediately", async () => {
     const { default: FeedPage } = await import("@/app/feed/page");
 
     const page = await FeedPage({
@@ -150,12 +242,30 @@ describe("streamed page-level price refresh surfaces", () => {
       render(page);
     });
 
+    expect(loadFeedPageData).toHaveBeenCalledTimes(1);
     expect(screen.getByText("Intelligence coverage")).toBeTruthy();
-    expect(screen.getByText("Refreshing portfolio value...")).toBeTruthy();
+    expect(screen.getByText("Active value 12345")).toBeTruthy();
     expect(screen.getByText("Feed view")).toBeTruthy();
+    expect(ActivePortfolioValueCard).toHaveBeenCalledWith(
+      expect.objectContaining({
+        portfolioId: "portfolio-1",
+        initialOverview: expect.objectContaining({ totalValue: 12345 }),
+      }),
+    );
+    expect(FeedView).toHaveBeenCalledWith(
+      expect.objectContaining({
+        portfolioId: "portfolio-1",
+        initialFeedPayload: expect.objectContaining({
+          feed: expect.arrayContaining([
+            expect.objectContaining({ headline: "Hydrated story" }),
+          ]),
+          portfolioSymbols: ["AAPL"],
+        }),
+      }),
+    );
   });
 
-  it("/portfolio renders import method and top stories without waiting for refreshed total card", async () => {
+  it("/portfolio renders cached total value and an inline refresh control", async () => {
     const { default: PortfolioPage } = await import("@/app/portfolio/page");
 
     const page = await PortfolioPage();
@@ -163,12 +273,15 @@ describe("streamed page-level price refresh surfaces", () => {
       render(page);
     });
 
+    expect(loadPortfolioPageData).toHaveBeenCalledTimes(1);
     expect(screen.getByText("IMPORT METHOD")).toBeTruthy();
     expect(screen.getByText("Top Stories")).toBeTruthy();
-    expect(screen.getByText("Refreshing portfolio value...")).toBeTruthy();
+    expect(screen.getByText(/updated 1 min ago/i)).toBeTruthy();
+    expect(screen.getByText("Inline refresh")).toBeTruthy();
+    expect(screen.queryByText("Refreshing portfolio value...")).toBeNull();
   });
 
-  it("/analysis renders analysis panel without waiting for refreshed snapshot panel", async () => {
+  it("/analysis renders cached snapshot data and a manual refresh control", async () => {
     const { default: AnalysisPage } = await import("@/app/analysis/page");
 
     const page = await AnalysisPage({
@@ -178,11 +291,14 @@ describe("streamed page-level price refresh surfaces", () => {
       render(page);
     });
 
+    expect(loadAnalysisPageData).toHaveBeenCalledTimes(1);
     expect(screen.getByText("Analysis run panel")).toBeTruthy();
-    expect(screen.getByText("Refreshing snapshot...")).toBeTruthy();
+    expect(screen.getByText("Portfolio snapshot")).toBeTruthy();
+    expect(screen.getByText("Inline refresh")).toBeTruthy();
+    expect(screen.queryByText("Refreshing snapshot...")).toBeNull();
   });
 
-  it("/portfolio/full keeps side panels visible while hero and holdings surfaces stream", async () => {
+  it("/portfolio/full renders cached holdings and chart immediately while keeping the large refresh button", async () => {
     const { default: FullPortfolioPage } = await import("@/app/portfolio/full/page");
 
     const page = await FullPortfolioPage();
@@ -190,8 +306,12 @@ describe("streamed page-level price refresh surfaces", () => {
       render(page);
     });
 
+    expect(loadFullPortfolioPageData).toHaveBeenCalledTimes(1);
     expect(screen.getByText("Insight Summary")).toBeTruthy();
-    expect(screen.getByText("Refreshing performance chart...")).toBeTruthy();
-    expect(screen.getByText("Loading synced holdings...")).toBeTruthy();
+    expect(screen.getByText("Performance chart")).toBeTruthy();
+    expect(screen.getByText("Holdings table")).toBeTruthy();
+    expect(screen.getByText("Refresh prices")).toBeTruthy();
+    expect(screen.queryByText("Refreshing performance chart...")).toBeNull();
+    expect(screen.queryByText("Loading synced holdings...")).toBeNull();
   });
 });

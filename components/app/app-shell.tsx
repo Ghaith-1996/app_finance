@@ -12,6 +12,7 @@ export function AppShell({
   mainClassName,
   backHref,
   backLabel = "Back to portfolio",
+  showOnboardingNav = true,
 }: {
   eyebrow: string;
   title: string;
@@ -23,6 +24,7 @@ export function AppShell({
   mainClassName?: string;
   backHref?: string;
   backLabel?: string;
+  showOnboardingNav?: boolean;
 }) {
   return (
     <AppShellLayout
@@ -33,6 +35,7 @@ export function AppShell({
       mainClassName={mainClassName}
       backHref={backHref}
       backLabel={backLabel}
+      showOnboardingNav={showOnboardingNav}
     >
       {children}
     </AppShellLayout>

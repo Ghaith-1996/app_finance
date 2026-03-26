@@ -44,6 +44,7 @@ import {
   isRecentIngestHint,
   type LastIngestSnapshot,
 } from "@/lib/ingest-hint";
+import type { FeedResponsePayload } from "@/lib/server/feed";
 
 /** UI recency choices; API and ingestion cap visibility at 24 hours. */
 const FEED_HARD_CAP_MINUTES = 24 * 60;
@@ -76,21 +77,27 @@ export function FeedView({
   portfolioId,
   insights = [],
   initialSymbol,
+  initialFeedPayload,
 }: {
   portfolioId?: string | null;
   insights?: PortfolioInsight[];
   /** When set (e.g. from `/feed?symbol=AAPL`), pre-select that holding in personal mode if it appears in the feed. */
   initialSymbol?: string;
+  initialFeedPayload?: FeedResponsePayload | null;
 }) {
   const [mode, setMode] = useState<FeedMode>("personal");
-  const [feed, setFeed] = useState<NewsItem[]>([]);
-  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [feed, setFeed] = useState<NewsItem[]>(() => initialFeedPayload?.feed ?? []);
+  const [isInitialLoading, setIsInitialLoading] = useState(() => !initialFeedPayload);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [backgroundError, setBackgroundError] = useState<string | null>(null);
   const [visibleCount, setVisibleCount] = useState(8);
-  const [portfolioSymbols, setPortfolioSymbols] = useState<string[]>([]);
-  const [portfolioSectors, setPortfolioSectors] = useState<string[]>([]);
+  const [portfolioSymbols, setPortfolioSymbols] = useState<string[]>(
+    () => initialFeedPayload?.portfolioSymbols ?? [],
+  );
+  const [portfolioSectors, setPortfolioSectors] = useState<string[]>(
+    () => initialFeedPayload?.portfolioSectors ?? [],
+  );
 
   // Personal-mode filters
   const [selectedHolding, setSelectedHolding] = useState("All holdings");
@@ -106,8 +113,10 @@ export function FeedView({
   // Shared filters
   const [selectedCategory, setSelectedCategory] = useState("All categories");
   const [selectedRecency, setSelectedRecency] = useState(recencyOptions[0].label);
-  const [page, setPage] = useState(1);
-  const [totalCount, setTotalCount] = useState(0);
+  const [page, setPage] = useState(() => initialFeedPayload?.page ?? 1);
+  const [totalCount, setTotalCount] = useState(
+    () => initialFeedPayload?.totalCount ?? 0,
+  );
   const [selectedStoryId, setSelectedStoryId] = useState<string | null>(null);
   const [lastIngestHint, setLastIngestHint] = useState<LastIngestSnapshot | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
@@ -128,7 +137,8 @@ export function FeedView({
   const loadingRef = useRef(false);
   const queuedSilentRefreshRef = useRef(false);
   const realtimeRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const hasLoadedFeedRef = useRef(false);
+  const hasLoadedFeedRef = useRef(Boolean(initialFeedPayload));
+  const initialFetchHandledRef = useRef(false);
   const initialSymbolAppliedRef = useRef(false);
 
   useEffect(() => {
@@ -201,6 +211,17 @@ export function FeedView({
         params.set("mode", mode);
         if (portfolioId) params.set("portfolioId", portfolioId);
         params.set("maxMinutes", String(recencyMax));
+        if (mode === "personal") {
+          if (selectedHolding !== "All holdings") {
+            params.set("holding", selectedHolding);
+          }
+          if (selectedSector !== "All sectors") {
+            params.set("sector", selectedSector);
+          }
+          if (selectedCategory !== "All categories") {
+            params.set("category", selectedCategory);
+          }
+        }
         if (mode === "market") {
           params.set("page", String(page));
           params.set("pageSize", String(MARKET_PAGE_SIZE));
@@ -285,14 +306,47 @@ export function FeedView({
       portfolioId,
       appliedTickerQuery,
       selectedCategory,
+      selectedHolding,
       selectedRecency,
+      selectedSector,
       selectedSourceType,
     ],
   );
 
   useEffect(() => {
+    const shouldUseInitialPayload =
+      !initialFetchHandledRef.current &&
+      Boolean(initialFeedPayload) &&
+      mode === "personal" &&
+      page === (initialFeedPayload?.page ?? 1) &&
+      selectedHolding === "All holdings" &&
+      selectedSector === "All sectors" &&
+      selectedCategory === "All categories" &&
+      selectedRecency === recencyOptions[0].label &&
+      selectedSourceType === sourceTypeOptions[0].label &&
+      appliedTickerQuery.trim().length === 0;
+
+    if (shouldUseInitialPayload) {
+      initialFetchHandledRef.current = true;
+      hasLoadedFeedRef.current = true;
+      setIsInitialLoading(false);
+      return;
+    }
+
+    initialFetchHandledRef.current = true;
     void fetchFeed();
-  }, [fetchFeed]);
+  }, [
+    appliedTickerQuery,
+    fetchFeed,
+    initialFeedPayload,
+    mode,
+    page,
+    selectedCategory,
+    selectedHolding,
+    selectedRecency,
+    selectedSector,
+    selectedSourceType,
+  ]);
 
   const scheduleSilentRefresh = useCallback(() => {
     if (realtimeRefreshTimerRef.current) return;
@@ -353,6 +407,19 @@ export function FeedView({
     setSelectedStoryId(null);
     resetChatSurface();
   }
+
+  const scrollToTopAfterPageChange = useCallback(() => {
+    if (typeof window === "undefined") return;
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
+
+  const handleMarketPageChange = useCallback(
+    (updater: (currentPage: number) => number) => {
+      setPage((currentPage) => updater(currentPage));
+      scrollToTopAfterPageChange();
+    },
+    [scrollToTopAfterPageChange],
+  );
 
   // --- Derived filter options ---
 
@@ -806,7 +873,11 @@ export function FeedView({
                   <button
                     type="button"
                     disabled={page <= 1}
-                    onClick={() => setPage((currentPage) => Math.max(1, currentPage - 1))}
+                    onClick={() =>
+                      handleMarketPageChange((currentPage) =>
+                        Math.max(1, currentPage - 1),
+                      )
+                    }
                     className={cn(
                       buttonStyles({ variant: "ghost", className: "h-9 px-3" }),
                       "disabled:opacity-40",
@@ -818,7 +889,9 @@ export function FeedView({
                     type="button"
                     disabled={page >= totalPages}
                     onClick={() =>
-                      setPage((currentPage) => Math.min(totalPages, currentPage + 1))
+                      handleMarketPageChange((currentPage) =>
+                        Math.min(totalPages, currentPage + 1),
+                      )
                     }
                     className={cn(
                       buttonStyles({ variant: "ghost", className: "h-9 px-3" }),

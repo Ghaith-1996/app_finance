@@ -973,7 +973,7 @@ type SyncHoldingPricesResult = {
   shouldRevalidate: boolean;
 };
 
-const DEFAULT_PRICE_SYNC_MIN_AGE_MS = 60_000;
+const DEFAULT_PRICE_SYNC_MIN_AGE_MS = 5 * 60_000;
 
 /**
  * Update holding prices in the database from live quotes. Does not call revalidatePath —
@@ -1119,25 +1119,26 @@ async function syncHoldingPricesInternal(
     })
     .filter((m): m is NonNullable<typeof m> => m !== null);
 
-  const results = await Promise.all(
-    matched.map((m) =>
-      supabase
-        .from("holdings")
-        .update({
-          price: m.quote.price,
-          current_price: m.quote.price,
-          daily_change: m.quote.dailyChange,
-          quote_currency: m.quote.currency,
-          quote_as_of: now,
-          ...(totalValue > 0
-            ? { allocation: Math.round((m.posValue / totalValue) * 10000) / 100 }
-            : {}),
-        })
-        .eq("id", m.id),
-    ),
-  );
+  let updated = 0;
+  if (matched.length > 0) {
+    const upsertRows = matched.map((m) => ({
+      id: m.id,
+      price: m.quote.price,
+      current_price: m.quote.price,
+      daily_change: m.quote.dailyChange,
+      quote_currency: m.quote.currency,
+      quote_as_of: now,
+      ...(totalValue > 0
+        ? { allocation: Math.round((m.posValue / totalValue) * 10000) / 100 }
+        : {}),
+    }));
 
-  const updated = results.filter((r) => !r.error).length;
+    const { error: upsertError } = await supabase
+      .from("holdings")
+      .upsert(upsertRows, { onConflict: "id" });
+
+    updated = upsertError ? 0 : matched.length;
+  }
 
   await supabase
     .from("portfolios")

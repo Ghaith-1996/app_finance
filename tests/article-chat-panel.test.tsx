@@ -97,7 +97,7 @@ describe("ArticleChatPanel", () => {
     });
   });
 
-  it("renders Free and Premium controls with Free selected by default", async () => {
+  it("renders Free, Premium, and Ultimate controls with Free selected by default", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ threadId: "t1", messages: [] }), {
         status: 200,
@@ -112,6 +112,7 @@ describe("ArticleChatPanel", () => {
 
     expect(screen.getByRole("button", { name: /^free$/i })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: /^premium$/i })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: /^ultimate$/i })).toHaveAttribute("aria-pressed", "false");
   });
 
   it("reports draft activity when the user types without sending", async () => {
@@ -243,6 +244,60 @@ describe("ArticleChatPanel", () => {
     );
   });
 
+  it("sends the selected ultimate tier in the next POST body", async () => {
+    const fetchMock = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
+      const resolvedUrl = typeof url === "string" ? url : url.toString();
+      if (resolvedUrl.includes("/api/article-chat") && init?.method === "POST") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              threadId: "t1",
+              messages: [
+                makeMessage({ id: "user-1", role: "user", content: "Why does this matter?" }),
+                makeMessage({ id: "assistant-1", content: "Ultimate answer" }),
+              ],
+            }),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            },
+          ),
+        );
+      }
+
+      return Promise.resolve(
+        new Response(JSON.stringify({ threadId: "t1", messages: [] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ControlledPanel />);
+
+    const input = await screen.findByPlaceholderText(/ask how this article/i);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^ultimate$/i }));
+    });
+
+    expect(screen.getByRole("button", { name: /^ultimate$/i })).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.change(input, { target: { value: "Why does this matter?" } });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/article-chat",
+      expect.objectContaining({
+        method: "POST",
+        body: expect.stringContaining('"modelTier":"ultimate"'),
+      }),
+    );
+  });
+
   it("uses the selected tier for starter-question sends", async () => {
     const fetchMock = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
       const resolvedUrl = typeof url === "string" ? url : url.toString();
@@ -305,6 +360,7 @@ describe("ArticleChatPanel", () => {
     const input = await screen.findByPlaceholderText(/ask how this article/i);
     const freeButton = screen.getByRole("button", { name: /^free$/i });
     const premiumButton = screen.getByRole("button", { name: /^premium$/i });
+    const ultimateButton = screen.getByRole("button", { name: /^ultimate$/i });
 
     fireEvent.change(input, { target: { value: "Hold on while this sends" } });
 
@@ -315,6 +371,7 @@ describe("ArticleChatPanel", () => {
     await waitFor(() => {
       expect(freeButton).toBeDisabled();
       expect(premiumButton).toBeDisabled();
+      expect(ultimateButton).toBeDisabled();
     });
 
     if (postResolver.current) {
@@ -329,6 +386,7 @@ describe("ArticleChatPanel", () => {
     await waitFor(() => {
       expect(freeButton).not.toBeDisabled();
       expect(premiumButton).not.toBeDisabled();
+      expect(ultimateButton).not.toBeDisabled();
     });
   });
 

@@ -2,17 +2,19 @@ import React from "react";
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const getUserPortfolios = vi.fn();
-const redirect = vi.fn((path: string) => {
-  throw new Error(`redirect:${path}`);
-});
+const mockState = vi.hoisted(() => ({
+  getUserPortfolios: vi.fn(),
+  redirect: vi.fn((path: string) => {
+    throw new Error(`redirect:${path}`);
+  }),
+}));
 
 vi.mock("@/lib/actions/portfolio", () => ({
-  getUserPortfolios,
+  getUserPortfolios: mockState.getUserPortfolios,
 }));
 
 vi.mock("next/navigation", () => ({
-  redirect,
+  redirect: mockState.redirect,
 }));
 
 vi.mock("@/components/app/onboarding-page-client", () => ({
@@ -27,17 +29,17 @@ describe("OnboardingPage", () => {
   });
 
   it("redirects users with an existing portfolio to /home", async () => {
-    getUserPortfolios.mockResolvedValue({
+    mockState.getUserPortfolios.mockResolvedValue({
       data: [{ id: "p1" }],
       error: null,
     });
 
     await expect(OnboardingPage()).rejects.toThrow("redirect:/home");
-    expect(redirect).toHaveBeenCalledWith("/home");
+    expect(mockState.redirect).toHaveBeenCalledWith("/home");
   });
 
   it("renders the onboarding client for first-time users", async () => {
-    getUserPortfolios.mockResolvedValue({
+    mockState.getUserPortfolios.mockResolvedValue({
       data: [],
       error: null,
     });

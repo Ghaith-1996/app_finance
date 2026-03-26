@@ -25,6 +25,9 @@ export function SiteHeader() {
           <a href="#platform" className="transition hover:text-slate-300">
             Product
           </a>
+          <a href="#use-cases" className="transition hover:text-slate-300">
+            Use cases
+          </a>
           <a href="#workflow" className="transition hover:text-slate-300">
             How it works
           </a>

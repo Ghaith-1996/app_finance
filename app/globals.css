@@ -76,3 +76,60 @@ a {
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.18);
 }
+
+/* ── Use-cases section animations ── */
+
+@keyframes uc-fade-up {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes uc-slide-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes uc-crossfade-in {
+  from { opacity: 0; transform: translateX(12px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes uc-count-in {
+  from { opacity: 0; transform: scale(0.92); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes uc-type-in {
+  from { opacity: 0; max-height: 0; }
+  to   { opacity: 1; max-height: 200px; }
+}
+
+@keyframes uc-glow-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+  50%      { box-shadow: 0 0 16px 2px rgba(16, 185, 129, 0.18); }
+}
+
+.uc-animate-fade-up {
+  animation: uc-fade-up 0.6s ease-out both;
+}
+
+.uc-animate-slide-in {
+  animation: uc-slide-in 0.45s ease-out both;
+}
+
+.uc-animate-crossfade {
+  animation: uc-crossfade-in 0.4s ease-out both;
+}
+
+.uc-animate-count {
+  animation: uc-count-in 0.5s ease-out both;
+}
+
+.uc-animate-type {
+  animation: uc-type-in 0.6s ease-out both;
+  overflow: hidden;
+}
+
+.uc-animate-glow {
+  animation: uc-glow-pulse 2s ease-in-out infinite;
+}

@@ -11,6 +11,7 @@ import type {
   SiteStat,
   SourceTag,
   Testimonial,
+  UseCase,
   WorkflowStep,
 } from "@/lib/types";
 
@@ -633,5 +634,112 @@ export const faqs: FAQItem[] = [
     question: "What comes after the frontend MVP?",
     answer:
       "The next phase should add authentication, secure broker linking, persistent portfolios, news ingestion, and the AI analysis pipeline behind the mocked product states.",
+  },
+];
+
+/* ── Use cases (landing page marketing section) ── */
+
+export const useCases: UseCase[] = [
+  {
+    id: "morning-brief",
+    moment: "Every morning",
+    headline: "Open the day with a brief shaped by what you own",
+    summary:
+      "See portfolio-aware stories, top risks, and how your holdings moved overnight — before you open a single other tab.",
+    proofPoints: [
+      "Coverage card ranked by relevance",
+      "Active portfolio value at a glance",
+      "Top 3 stories matched to your holdings",
+    ],
+    ctaLabel: "Try the feed",
+    ctaHref: "/feed",
+    preview: {
+      portfolioValue: "$246,380",
+      portfolioChange: "+1.14%",
+      holdings: [
+        { symbol: "NVDA", company: "NVIDIA", change: 1.8, highlight: true },
+        { symbol: "MSFT", company: "Microsoft", change: 0.7 },
+        { symbol: "LLY", company: "Eli Lilly", change: -0.5 },
+      ],
+      stories: [
+        {
+          headline: "Cloud spending accelerates as enterprise AI budgets expand",
+          source: "Reuters",
+          relevance: 96,
+        },
+        {
+          headline: "Oil holds gains, keeping inflation pressure in focus",
+          source: "Yahoo Finance",
+          relevance: 88,
+        },
+        {
+          headline: "New obesity treatment data sharpens pharma focus",
+          source: "New York Times",
+          relevance: 84,
+        },
+      ],
+    },
+  },
+  {
+    id: "why-moving",
+    moment: "Mid-day check",
+    headline: "Ask AI why the portfolio is moving today",
+    summary:
+      "Type a question and get a portfolio-grounded answer that highlights which holdings are driving the move and why.",
+    proofPoints: [
+      "Natural-language prompt",
+      "Answer grounded in your holdings",
+      "Highlighted movers with context",
+    ],
+    ctaLabel: "Try the analysis",
+    ctaHref: "/analysis",
+    preview: {
+      holdings: [
+        { symbol: "NVDA", company: "NVIDIA", change: 2.4, highlight: true },
+        { symbol: "MSFT", company: "Microsoft", change: 1.1, highlight: true },
+        { symbol: "XOM", company: "Exxon Mobil", change: -1.8 },
+      ],
+      stories: [],
+      prompt: "Why is my portfolio moving more than the market today?",
+      answer:
+        "Your biggest weights in NVIDIA and Microsoft are reacting to stronger AI infrastructure headlines. At the same time, Exxon is dragging on easing oil prices. The net effect is +1.4% vs the S&P's +0.6%.",
+    },
+  },
+  {
+    id: "story-chat",
+    moment: "Deep dive",
+    headline: "Read a story, see the impact, then ask AI about it",
+    summary:
+      "Open any article from the feed, see which holdings it touches and why it matters, then continue into a focused AI conversation.",
+    proofPoints: [
+      "Impact summary per holding",
+      "One-tap story chat",
+      "Follow-up questions in context",
+    ],
+    ctaLabel: "Get started",
+    ctaHref: "/onboarding",
+    preview: {
+      holdings: [
+        { symbol: "MSFT", company: "Microsoft", change: 0.7, highlight: true },
+        { symbol: "NVDA", company: "NVIDIA", change: 1.8, highlight: true },
+      ],
+      stories: [
+        {
+          headline: "Cloud spending accelerates as enterprise AI budgets expand",
+          source: "Reuters",
+          relevance: 96,
+        },
+      ],
+      chatBubbles: [
+        {
+          role: "user",
+          text: "How does this affect my MSFT position specifically?",
+        },
+        {
+          role: "assistant",
+          text: "Microsoft benefits directly through Azure demand. With 21% of your portfolio in MSFT, this spending signal supports your second-largest holding.",
+        },
+      ],
+    },
   },
 ];

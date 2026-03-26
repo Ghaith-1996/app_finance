@@ -237,3 +237,44 @@ export interface ArticleChatMessage {
   content: string;
   createdAt: string;
 }
+
+/* ── Use-case marketing section ── */
+
+export interface UseCasePreviewHolding {
+  symbol: string;
+  company: string;
+  change: number;
+  highlight?: boolean;
+}
+
+export interface UseCasePreviewStory {
+  headline: string;
+  source: string;
+  relevance: number;
+}
+
+export interface UseCasePreview {
+  /** Mock portfolio value shown in the preview */
+  portfolioValue?: string;
+  /** Mock portfolio day change shown in the preview */
+  portfolioChange?: string;
+  holdings: UseCasePreviewHolding[];
+  stories: UseCasePreviewStory[];
+  /** AI prompt chip text (for ask-AI use cases) */
+  prompt?: string;
+  /** AI answer text (for ask-AI use cases) */
+  answer?: string;
+  /** Chat bubbles for the story-chat use case */
+  chatBubbles?: { role: "user" | "assistant"; text: string }[];
+}
+
+export interface UseCase {
+  id: string;
+  moment: string;
+  headline: string;
+  summary: string;
+  proofPoints: string[];
+  ctaLabel: string;
+  ctaHref: string;
+  preview: UseCasePreview;
+}

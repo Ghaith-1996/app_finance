@@ -85,6 +85,13 @@ These decisions were made in the current thread and are reflected in code/doc ch
 - added focused sync primitive coverage in `tests/portfolio-price-sync.test.ts` for stale-skip rules, stale refresh, no-holdings non-fatal behavior, provider-failure swallowing, auth/ownership protection, repeated-call suppression, and manual refresh behavior
 - added render-focused streaming tests in `tests/streamed-price-refresh-pages.test.tsx` covering localized Suspense fallbacks on `/portfolio`, `/feed`, `/analysis`, and `/portfolio/full`
 - added loader dedupe coverage in `tests/portfolio-refresh-loaders.test.ts` to assert a single sync/read pass for concurrent full-portfolio loader calls
+- the landing page (`/`) was completely redesigned with a high-density bento grid, glassmorphism, and kinetic typography
+- added `components/marketing/use-cases.tsx`: a premium interactive section showcasing AI Use Cases (Strategy Synthesis, Portfolio Guardrails, Macro Signal, Alpha Capture) with motion-tracked glass cards and GLSL-inspired noise backgrounds
+- landing page hero now uses GSAP-powered floating decorative elements and an "Available on GitHub" banner
+- landing page layout is now fully semantic and responsive, using a custom grid system that feels premium and "alive"
+- global CSS (`app/globals.css`) now includes high-performance keyframe animations for floating elements and glass shimmer effects
+- added high-res AI assets (Strategy, Guardrails, Macro, Alpha) for the interactive use cases section
+- installed `framer-motion`, `gsap`, and `clsx` to support the new premium interface standards
 
 Important runtime note:
 
@@ -101,6 +108,8 @@ Important runtime note:
 - Yahoo Finance (`yahoo-finance2`)
 - Python worker for ingestion
 - Vitest + Testing Library
+- Framer Motion & GSAP (Performance animation layer)
+- `clsx` for tailwind utility merging
 
 Node scripts:
 
@@ -245,9 +254,10 @@ File:
 
 Purpose:
 
-- marketing/landing page
-- built from mock/static content in `lib/mock-data.ts`
-- showcases product story, FAQ, proof, feature framing
+- premium marketing/landing page with high-density Bento Grid and Kinetic Typography
+- built with motion-tracked glass surfaces and GLSL-inspired visual effects
+- interactive "Use Cases" section demonstrating Strategy, Guardrails, Macro, and Alpha workflows
+- clear conversion paths to GitHub and Login
 
 Important caveat:
 
@@ -1461,6 +1471,28 @@ Notes:
 - `handle` remains the unique username field
 - `display_name` is now written as `first_name + last_name`
 - `first_name` and `last_name` were added in `012_user_profile_names.sql`
+
+## Marketing & Interaction Components
+
+These components represent the "Visual Excellence" layer of the public-facing surfaces.
+
+### `hero.tsx`
+
+Located in `components/marketing/`. Uses GSAP for high-performance floating physics on decorative elements (Strategy, Signal, Risk nodes). Features an "Available on GitHub" banner and a glass-morphic primary CTA.
+
+### `use-cases.tsx`
+
+Located in `components/marketing/`. An interactive bento-grid section that uses motion-tracking on glass cards. Features:
+- Interactive state-driven grid (Strategy, Guardrails, Macro, Alpha)
+- GLSL-inspired animated noise backgrounds
+- Responsive layout transition between high-density desktop grid and mobile stacks
+
+### Global Performance Styles
+
+Global animations and utility tokens are stored in `app/globals.css`, including:
+- `floating` keyframes with varying offsets
+- `glass-shimmer` hover effects
+- Bento grid spacing and transition tokens
 
 ## RLS Model
 

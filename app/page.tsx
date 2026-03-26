@@ -12,6 +12,7 @@ import {
 
 import { Hero } from "@/components/marketing/hero";
 import { HowItWorks } from "@/components/marketing/how-it-works";
+import { UseCases } from "@/components/marketing/use-cases";
 import { SiteHeader } from "@/components/marketing/site-header";
 import { Badge } from "@/components/ui/badge";
 import { buttonStyles } from "@/components/ui/button";
@@ -56,6 +57,7 @@ export default function Home() {
         <Hero />
         <ProblemSection />
         <PlatformSection />
+        <UseCases />
         <HowItWorks />
         <ProofSection />
         <FaqSection />

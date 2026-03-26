@@ -9,7 +9,13 @@ import {
   normalizeRows,
 } from "@/lib/services/csv-parser";
 import { getQuote, getQuotes, searchSymbol } from "@/lib/services/yahoo-finance";
-import type { HoldingDraft, PortfolioFeedHighlight, SaveMode } from "@/lib/types";
+import type {
+  Holding,
+  HoldingDraft,
+  PortfolioFeedHighlight,
+  PortfolioPricingRefreshResult,
+  SaveMode,
+} from "@/lib/types";
 
 const sourceTypeMap = {
   manual: "manual" as const,
@@ -108,6 +114,51 @@ function mapHoldingFromDb(row: any) {
     quoteAsOf: (row.quote_as_of as string) ?? null,
     importSource: (row.import_source as string) ?? "manual",
   };
+}
+
+async function getOwnedPortfolioContext<T extends string>(
+  portfolioId: string,
+  select: T,
+) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+  if (userError || !user) {
+    return { supabase, userId: null, portfolio: null, error: "Unauthorized" as const };
+  }
+
+  const { data: portfolio } = await supabase
+    .from("portfolios")
+    .select(select)
+    .eq("id", portfolioId)
+    .eq("user_id", user.id)
+    .single();
+
+  if (!portfolio) {
+    return { supabase, userId: user.id, portfolio: null, error: "Portfolio not found" as const };
+  }
+
+  return {
+    supabase,
+    userId: user.id,
+    portfolio,
+    error: null,
+  };
+}
+
+async function loadMappedPortfolioHoldings(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  portfolioId: string,
+): Promise<Holding[]> {
+  const { data: holdingsRows } = await supabase
+    .from("holdings")
+    .select("*")
+    .eq("portfolio_id", portfolioId)
+    .order("created_at", { ascending: true });
+
+  return (holdingsRows ?? []).map(mapHoldingFromDb);
 }
 
 function revalidateAll() {
@@ -967,8 +1018,10 @@ export async function getPortfolioFeedHighlights(portfolioId: string) {
 }
 
 type SyncHoldingPricesResult = {
+  status: "updated" | "no_quotes" | "error";
   updated: number;
   error: string | null;
+  message: string | null;
   /** When true, safe to call revalidatePath (not during RSC render). */
   shouldRevalidate: boolean;
 };
@@ -993,26 +1046,15 @@ export async function syncHoldingPricesIfStale(
 ): Promise<{ updated: number; skipped: boolean; error: string | null }> {
   const minAgeMs = Math.max(0, config?.minAgeMs ?? DEFAULT_PRICE_SYNC_MIN_AGE_MS);
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
-  if (userError || !user) {
+  const context = await getOwnedPortfolioContext(portfolioId, "id, last_synced_at");
+  if (context.error === "Unauthorized" || !context.userId) {
     return { updated: 0, skipped: false, error: "Unauthorized" };
   }
-
-  const { data: portfolio } = await supabase
-    .from("portfolios")
-    .select("id, last_synced_at")
-    .eq("id", portfolioId)
-    .eq("user_id", user.id)
-    .single();
-  if (!portfolio) {
+  if (context.error === "Portfolio not found" || !context.portfolio) {
     return { updated: 0, skipped: false, error: "Portfolio not found" };
   }
 
-  const { data: holdings } = await supabase
+  const { data: holdings } = await context.supabase
     .from("holdings")
     .select("id, quote_as_of")
     .eq("portfolio_id", portfolioId);
@@ -1021,8 +1063,8 @@ export async function syncHoldingPricesIfStale(
     return { updated: 0, skipped: true, error: null };
   }
 
-  const lastSyncedMs = portfolio.last_synced_at
-    ? Date.parse(String(portfolio.last_synced_at))
+  const lastSyncedMs = context.portfolio.last_synced_at
+    ? Date.parse(String(context.portfolio.last_synced_at))
     : Number.NaN;
 
   let latestQuoteAsOfMs = Number.NaN;
@@ -1051,6 +1093,72 @@ export async function syncHoldingPricesIfStale(
   return { updated: r.updated, skipped: false, error: r.error };
 }
 
+export async function refreshPortfolioPricingSnapshot(
+  portfolioId: string,
+  options?: { includeHoldings?: boolean },
+): Promise<PortfolioPricingRefreshResult> {
+  const r = await syncHoldingPricesInternal(portfolioId);
+
+  if (r.status === "error") {
+    return {
+      status: "error",
+      updated: r.updated,
+      message: r.message ?? r.error ?? "Refresh failed.",
+      overview: null,
+      holdings: options?.includeHoldings ? null : undefined,
+    };
+  }
+
+  if (r.status === "no_quotes") {
+    return {
+      status: "no_quotes",
+      updated: 0,
+      message: r.message ?? "Live quotes are unavailable right now. Try again shortly.",
+      overview: null,
+      holdings: options?.includeHoldings ? null : undefined,
+    };
+  }
+
+  const context = await getOwnedPortfolioContext(portfolioId, "id");
+  if (context.error === "Unauthorized") {
+    return {
+      status: "error",
+      updated: 0,
+      message: "Unauthorized",
+      overview: null,
+      holdings: options?.includeHoldings ? null : undefined,
+    };
+  }
+  if (context.error === "Portfolio not found" || !context.portfolio) {
+    return {
+      status: "error",
+      updated: 0,
+      message: "Portfolio not found",
+      overview: null,
+      holdings: options?.includeHoldings ? null : undefined,
+    };
+  }
+
+  if (r.shouldRevalidate) {
+    revalidateAll();
+  }
+
+  const overview = await computePortfolioOverview(context.supabase, portfolioId);
+  const holdings = options?.includeHoldings
+    ? await loadMappedPortfolioHoldings(context.supabase, portfolioId)
+    : undefined;
+
+  return {
+    status: "updated",
+    updated: r.updated,
+    message:
+      r.message ??
+      (r.updated === 1 ? "Updated 1 holding." : `Updated ${r.updated} holdings.`),
+    overview,
+    holdings,
+  };
+}
+
 /**
  * Same DB work as syncHoldingPrices, then invalidates cached routes. Only call from
  * Server Actions, route handlers, or client-triggered flows — not during RSC render.
@@ -1066,32 +1174,39 @@ export async function refreshHoldingPrices(portfolioId: string) {
 async function syncHoldingPricesInternal(
   portfolioId: string,
 ): Promise<SyncHoldingPricesResult> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
-  if (userError || !user) {
-    return { updated: 0, error: "Unauthorized", shouldRevalidate: false };
+  const context = await getOwnedPortfolioContext(portfolioId, "id");
+  if (context.error === "Unauthorized" || !context.userId) {
+    return {
+      status: "error",
+      updated: 0,
+      error: "Unauthorized",
+      message: "Unauthorized",
+      shouldRevalidate: false,
+    };
+  }
+  if (context.error === "Portfolio not found" || !context.portfolio) {
+    return {
+      status: "error",
+      updated: 0,
+      error: "Portfolio not found",
+      message: "Portfolio not found",
+      shouldRevalidate: false,
+    };
   }
 
-  const { data: portfolio } = await supabase
-    .from("portfolios")
-    .select("id")
-    .eq("id", portfolioId)
-    .eq("user_id", user.id)
-    .single();
-  if (!portfolio) {
-    return { updated: 0, error: "Portfolio not found", shouldRevalidate: false };
-  }
-
-  const { data: holdings } = await supabase
+  const { data: holdings } = await context.supabase
     .from("holdings")
     .select("id, symbol, quantity")
     .eq("portfolio_id", portfolioId);
 
   if (!holdings || holdings.length === 0) {
-    return { updated: 0, error: null, shouldRevalidate: false };
+    return {
+      status: "error",
+      updated: 0,
+      error: "No holdings to refresh",
+      message: "No holdings to refresh.",
+      shouldRevalidate: false,
+    };
   }
 
   const symbols = holdings.map((h) => h.symbol as string);
@@ -1099,11 +1214,23 @@ async function syncHoldingPricesInternal(
   try {
     quotes = await getQuotes(symbols);
   } catch {
-    return { updated: 0, error: null, shouldRevalidate: false };
+    return {
+      status: "no_quotes",
+      updated: 0,
+      error: null,
+      message: "Live quotes are unavailable right now. Try again shortly.",
+      shouldRevalidate: false,
+    };
   }
 
   if (quotes.size === 0) {
-    return { updated: 0, error: null, shouldRevalidate: false };
+    return {
+      status: "no_quotes",
+      updated: 0,
+      error: null,
+      message: "No live quotes were returned. Try again shortly.",
+      shouldRevalidate: false,
+    };
   }
 
   const now = new Date().toISOString();
@@ -1119,31 +1246,86 @@ async function syncHoldingPricesInternal(
     })
     .filter((m): m is NonNullable<typeof m> => m !== null);
 
-  let updated = 0;
-  if (matched.length > 0) {
-    const upsertRows = matched.map((m) => ({
-      id: m.id,
-      price: m.quote.price,
-      current_price: m.quote.price,
-      daily_change: m.quote.dailyChange,
-      quote_currency: m.quote.currency,
-      quote_as_of: now,
-      ...(totalValue > 0
-        ? { allocation: Math.round((m.posValue / totalValue) * 10000) / 100 }
-        : {}),
-    }));
-
-    const { error: upsertError } = await supabase
-      .from("holdings")
-      .upsert(upsertRows, { onConflict: "id" });
-
-    updated = upsertError ? 0 : matched.length;
+  if (matched.length === 0) {
+    return {
+      status: "no_quotes",
+      updated: 0,
+      error: null,
+      message: "No live quotes matched your holdings. Try again shortly.",
+      shouldRevalidate: false,
+    };
   }
 
-  await supabase
+  let updated = 0;
+
+  for (const matchedHolding of matched) {
+    const holdingUpdate = {
+      price: matchedHolding.quote.price,
+      current_price: matchedHolding.quote.price,
+      daily_change: matchedHolding.quote.dailyChange,
+      quote_currency: matchedHolding.quote.currency,
+      quote_as_of: now,
+      ...(totalValue > 0
+        ? {
+            allocation:
+              Math.round((matchedHolding.posValue / totalValue) * 10000) / 100,
+          }
+        : {}),
+    };
+
+    const { error: holdingUpdateError } = await context.supabase
+      .from("holdings")
+      .update(holdingUpdate)
+      .eq("id", matchedHolding.id)
+      .eq("portfolio_id", portfolioId);
+
+    if (holdingUpdateError) {
+      return {
+        status: "error",
+        updated,
+        error: holdingUpdateError.message,
+        message:
+          updated > 0
+            ? "Some refreshed holding prices could not be saved."
+            : "Failed to save refreshed holding prices.",
+        shouldRevalidate: false,
+      };
+    }
+
+    updated += 1;
+  }
+
+  if (updated === 0) {
+    return {
+      status: "error",
+      updated: 0,
+      error: "No holding rows were updated",
+      message: "Failed to save refreshed holding prices.",
+      shouldRevalidate: false,
+    };
+  }
+
+  const { error: portfolioUpdateError } = await context.supabase
     .from("portfolios")
     .update({ last_synced_at: now, sync_status: "active" })
     .eq("id", portfolioId);
 
-  return { updated, error: null, shouldRevalidate: true };
+  if (portfolioUpdateError) {
+    return {
+      status: "error",
+      updated,
+      error: portfolioUpdateError.message,
+      message: "Refreshed prices saved, but the portfolio sync timestamp could not be updated.",
+      shouldRevalidate: false,
+    };
+  }
+
+  return {
+    status: "updated",
+    updated,
+    error: null,
+    message:
+      updated === 1 ? "Updated 1 holding." : `Updated ${updated} holdings.`,
+    shouldRevalidate: true,
+  };
 }

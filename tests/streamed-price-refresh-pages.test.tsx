@@ -6,6 +6,7 @@ const loadFeedPageData = vi.fn();
 const loadPortfolioPageData = vi.fn();
 const loadAnalysisPageData = vi.fn();
 const loadFullPortfolioPageData = vi.fn();
+const refreshPortfolioPricingSnapshot = vi.fn();
 
 const ActivePortfolioValueCard = vi.fn(
   ({ initialOverview }: { initialOverview: { totalValue: number } }) => (
@@ -19,6 +20,10 @@ vi.mock("@/lib/server/page-loaders", () => ({
   loadPortfolioPageData,
   loadAnalysisPageData,
   loadFullPortfolioPageData,
+}));
+
+vi.mock("@/lib/actions/portfolio", () => ({
+  refreshPortfolioPricingSnapshot,
 }));
 
 vi.mock("@/components/app/active-portfolio-value-card", () => ({
@@ -69,6 +74,13 @@ vi.mock("@/components/app/refresh-prices-button", () => ({
 describe("portfolio value surfaces render cached data and manual refresh controls", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    refreshPortfolioPricingSnapshot.mockResolvedValue({
+      status: "no_quotes",
+      updated: 0,
+      message: "No live quotes were returned. Try again shortly.",
+      overview: null,
+      holdings: null,
+    });
 
     loadFeedPageData.mockResolvedValue({
       showOnboardingNav: false,

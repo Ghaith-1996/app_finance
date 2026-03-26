@@ -23,19 +23,21 @@ type HoldingRow = {
 const mocked = vi.hoisted(() => ({
   revalidatePath: vi.fn(),
   getQuotes: vi.fn(),
-  upsertHoldings: vi.fn(),
+  updateHolding: vi.fn(),
+  computePortfolioOverview: vi.fn(),
   state: {
     authUserId: null as string | null,
     portfolios: [] as PortfolioRow[],
     holdings: [] as HoldingRow[],
   },
+  failHoldingUpdateIds: new Set<string>(),
+  portfolioUpdateError: null as string | null,
 }));
 
 function makeBuilder(table: "portfolios" | "holdings") {
   const filters = new Map<string, unknown>();
-  let mode: "select" | "update" | "upsert" = "select";
+  let mode: "select" | "update" = "select";
   let payload: Record<string, unknown> | null = null;
-  let upsertPayload: Array<Record<string, unknown>> = [];
 
   const matches = (row: Record<string, unknown>) => {
     for (const [key, value] of filters.entries()) {
@@ -60,6 +62,35 @@ function makeBuilder(table: "portfolios" | "holdings") {
   const runUpdate = () => {
     const rows =
       table === "portfolios" ? mocked.state.portfolios : mocked.state.holdings;
+    const filteredRows = rows.filter((row) =>
+      matches(row as unknown as Record<string, unknown>),
+    );
+
+    if (table === "holdings") {
+      const holdingId = filters.get("id");
+      if (
+        typeof holdingId === "string" &&
+        mocked.failHoldingUpdateIds.has(holdingId)
+      ) {
+        return {
+          data: null,
+          error: { message: `Failed to update holding ${holdingId}` },
+        };
+      }
+    }
+
+    if (table === "portfolios" && mocked.portfolioUpdateError && filteredRows.length > 0) {
+      return { data: null, error: { message: mocked.portfolioUpdateError } };
+    }
+
+    if (table === "holdings") {
+      const holdingId = filters.get("id");
+      const portfolioId = filters.get("portfolio_id");
+      if (typeof holdingId === "string" && typeof portfolioId === "string") {
+        mocked.updateHolding(holdingId, portfolioId, payload);
+      }
+    }
+
     for (const row of rows) {
       if (!matches(row as unknown as Record<string, unknown>)) continue;
       Object.assign(row, payload ?? {});
@@ -68,26 +99,9 @@ function makeBuilder(table: "portfolios" | "holdings") {
     return { data: null, error: null as null | { message: string } };
   };
 
-  const runUpsert = () => {
-    if (table !== "holdings") {
-      return { data: null, error: { message: "Unsupported table" } };
-    }
-
-    mocked.upsertHoldings(upsertPayload);
-
-    for (const row of upsertPayload) {
-      const existing = mocked.state.holdings.find((holding) => holding.id === row.id);
-      if (!existing) continue;
-      Object.assign(existing, row);
-    }
-
-    return { data: null, error: null as null | { message: string } };
-  };
-
   const run = () => {
     if (mode === "select") return runSelect();
-    if (mode === "update") return runUpdate();
-    return runUpsert();
+    return runUpdate();
   };
 
   const builder = {
@@ -100,15 +114,11 @@ function makeBuilder(table: "portfolios" | "holdings") {
       payload = nextPayload;
       return builder;
     },
-    upsert: (rows: Array<Record<string, unknown>>) => {
-      mode = "upsert";
-      upsertPayload = rows;
-      return builder;
-    },
     eq: (column: string, value: unknown) => {
       filters.set(column, value);
       return builder;
     },
+    order: () => builder,
     single: async () => {
       const result = run();
       const first = result.data?.[0] ?? null;
@@ -156,11 +166,16 @@ vi.mock("@/lib/services/yahoo-finance", () => ({
   searchSymbol: vi.fn(),
 }));
 
+vi.mock("@/lib/services/portfolio", () => ({
+  computePortfolioOverview: mocked.computePortfolioOverview,
+}));
+
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => currentSupabase,
 }));
 
 import {
+  refreshPortfolioPricingSnapshot,
   refreshHoldingPrices,
   syncHoldingPricesIfStale,
 } from "@/lib/actions/portfolio";
@@ -172,7 +187,10 @@ describe("portfolio price sync", () => {
     vi.setSystemTime(new Date("2026-03-25T12:00:00.000Z"));
     mocked.getQuotes.mockReset();
     mocked.revalidatePath.mockReset();
-    mocked.upsertHoldings.mockReset();
+    mocked.updateHolding.mockReset();
+    mocked.computePortfolioOverview.mockReset();
+    mocked.failHoldingUpdateIds = new Set<string>();
+    mocked.portfolioUpdateError = null;
 
     mocked.state = {
       authUserId: "user-1",
@@ -208,6 +226,15 @@ describe("portfolio price sync", () => {
         ["MSFT", { price: 200, dailyChange: -0.5, currency: "USD" }],
       ]),
     );
+    mocked.computePortfolioOverview.mockResolvedValue({
+      totalValue: 800,
+      dayChange: 0.1,
+      monthlyChange: 0,
+      lastSyncedAt: "Just now",
+      lastAnalyzedAt: "Never",
+      coverage: "0 high-signal stories",
+      primaryGoal: "Compound around quality holdings and resilient names.",
+    });
   });
 
   afterEach(() => {
@@ -238,7 +265,7 @@ describe("portfolio price sync", () => {
 
     expect(result).toEqual({ updated: 2, skipped: false, error: null });
     expect(mocked.getQuotes).toHaveBeenCalledTimes(1);
-    expect(mocked.upsertHoldings).toHaveBeenCalledTimes(1);
+    expect(mocked.updateHolding).toHaveBeenCalledTimes(2);
 
     const aapl = mocked.state.holdings.find((row) => row.id === "holding-1");
     const msft = mocked.state.holdings.find((row) => row.id === "holding-2");
@@ -319,5 +346,92 @@ describe("portfolio price sync", () => {
     expect(mocked.revalidatePath).toHaveBeenCalledWith("/onboarding");
     expect(mocked.revalidatePath).toHaveBeenCalledWith("/feed");
     expect(mocked.revalidatePath).toHaveBeenCalledWith("/analysis");
+  });
+
+  it("returns explicit updated status with fresh overview for the UI refresh action", async () => {
+    const result = await refreshPortfolioPricingSnapshot("portfolio-1");
+
+    expect(result).toEqual({
+      status: "updated",
+      updated: 2,
+      message: "Updated 2 holdings.",
+      overview: {
+        totalValue: 800,
+        dayChange: 0.1,
+        monthlyChange: 0,
+        lastSyncedAt: "Just now",
+        lastAnalyzedAt: "Never",
+        coverage: "0 high-signal stories",
+        primaryGoal: "Compound around quality holdings and resilient names.",
+      },
+    });
+    expect(mocked.computePortfolioOverview).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns an error status with a clearer message when saving a holding update fails", async () => {
+    mocked.failHoldingUpdateIds = new Set(["holding-2"]);
+
+    const result = await refreshPortfolioPricingSnapshot("portfolio-1");
+
+    expect(result).toEqual({
+      status: "error",
+      updated: 1,
+      message: "Some refreshed holding prices could not be saved.",
+      overview: null,
+    });
+  });
+
+  it("can return refreshed holdings for the full-portfolio section", async () => {
+    const result = await refreshPortfolioPricingSnapshot("portfolio-1", {
+      includeHoldings: true,
+    });
+
+    expect(result.status).toBe("updated");
+    expect(result.holdings).toHaveLength(2);
+    expect(result.holdings?.[0]).toMatchObject({
+      id: "holding-1",
+      symbol: "AAPL",
+      currentPrice: 100,
+    });
+  });
+
+  it("returns a no-quotes status when live quotes are unavailable", async () => {
+    mocked.getQuotes.mockRejectedValue(new Error("provider unavailable"));
+
+    const result = await refreshPortfolioPricingSnapshot("portfolio-1");
+
+    expect(result).toEqual({
+      status: "no_quotes",
+      updated: 0,
+      message: "Live quotes are unavailable right now. Try again shortly.",
+      overview: null,
+    });
+  });
+
+  it("returns an error status for unauthorized manual refresh", async () => {
+    mocked.state.authUserId = null;
+
+    const result = await refreshPortfolioPricingSnapshot("portfolio-1");
+
+    expect(result).toEqual({
+      status: "error",
+      updated: 0,
+      message: "Unauthorized",
+      overview: null,
+    });
+  });
+
+  it("returns a specific message when the portfolio sync timestamp update fails", async () => {
+    mocked.portfolioUpdateError = "portfolio timestamp failed";
+
+    const result = await refreshPortfolioPricingSnapshot("portfolio-1");
+
+    expect(result).toEqual({
+      status: "error",
+      updated: 2,
+      message:
+        "Refreshed prices saved, but the portfolio sync timestamp could not be updated.",
+      overview: null,
+    });
   });
 });

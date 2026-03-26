@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PortfolioOverview } from "@/lib/types";
 
 const mocked = vi.hoisted(() => ({
-  refreshHoldingPrices: vi.fn(),
+  refreshPortfolioPricingSnapshot: vi.fn(),
   routerRefresh: vi.fn(),
 }));
 
@@ -14,7 +14,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("@/lib/actions/portfolio", () => ({
-  refreshHoldingPrices: mocked.refreshHoldingPrices,
+  refreshPortfolioPricingSnapshot: mocked.refreshPortfolioPricingSnapshot,
 }));
 
 import { ActivePortfolioValueCard } from "@/components/app/active-portfolio-value-card";
@@ -29,20 +29,11 @@ const initialOverview: PortfolioOverview = {
   primaryGoal: "Stay balanced",
 };
 
-function createDeferred() {
-  let resolve!: () => void;
-  const promise = new Promise<void>((res) => {
-    resolve = res;
-  });
-  return { promise, resolve };
-}
-
 describe("ActivePortfolioValueCard", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    mocked.refreshHoldingPrices.mockReset();
+    mocked.refreshPortfolioPricingSnapshot.mockReset();
     mocked.routerRefresh.mockReset();
-    global.fetch = vi.fn();
   });
 
   it("renders cached overview immediately without background sync", () => {
@@ -56,12 +47,21 @@ describe("ActivePortfolioValueCard", () => {
     expect(screen.getByText("$20,000.00")).toBeTruthy();
     expect(screen.getByText(/updated 5 minutes ago/i)).toBeTruthy();
     expect(screen.getByRole("button", { name: /refresh prices/i })).toBeTruthy();
-    expect(global.fetch).not.toHaveBeenCalled();
+    expect(mocked.refreshPortfolioPricingSnapshot).not.toHaveBeenCalled();
   });
 
-  it("refreshes prices only when the inline button is clicked", async () => {
-    const deferred = createDeferred();
-    mocked.refreshHoldingPrices.mockReturnValue(deferred.promise);
+  it("updates the card in place on successful refresh", async () => {
+    mocked.refreshPortfolioPricingSnapshot.mockResolvedValue({
+      status: "updated",
+      updated: 2,
+      message: "Updated 2 holdings.",
+      overview: {
+        ...initialOverview,
+        totalValue: 20800,
+        dayChange: 1.4,
+        lastSyncedAt: "Just now",
+      },
+    });
 
     render(
       <ActivePortfolioValueCard
@@ -70,18 +70,67 @@ describe("ActivePortfolioValueCard", () => {
       />,
     );
 
-    const button = screen.getByRole("button", { name: /refresh prices/i });
-    fireEvent.click(button);
-
-    expect(mocked.refreshHoldingPrices).toHaveBeenCalledWith("portfolio-1");
-    expect(screen.getByText("Refreshing...")).toBeTruthy();
-
-    deferred.resolve();
+    fireEvent.click(screen.getByRole("button", { name: /refresh prices/i }));
 
     await waitFor(() => {
-      expect(mocked.routerRefresh).toHaveBeenCalledTimes(1);
+      expect(mocked.refreshPortfolioPricingSnapshot).toHaveBeenCalledWith(
+        "portfolio-1",
+      );
     });
 
-    expect(screen.getByText("Refresh")).toBeTruthy();
+    expect(await screen.findByText("$20,800.00")).toBeTruthy();
+    expect(screen.getByText(/updated just now/i)).toBeTruthy();
+    expect(screen.getByText("Updated 2 holdings.")).toBeTruthy();
+    expect(mocked.routerRefresh).not.toHaveBeenCalled();
+  });
+
+  it("keeps previous values visible and shows inline status on no-quote refresh", async () => {
+    mocked.refreshPortfolioPricingSnapshot.mockResolvedValue({
+      status: "no_quotes",
+      updated: 0,
+      message: "Live quotes are unavailable right now. Try again shortly.",
+      overview: null,
+    });
+
+    render(
+      <ActivePortfolioValueCard
+        portfolioId="portfolio-1"
+        initialOverview={initialOverview}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /refresh prices/i }));
+
+    expect(
+      await screen.findByText("Live quotes are unavailable right now. Try again shortly."),
+    ).toBeTruthy();
+    expect(screen.getByText("$20,000.00")).toBeTruthy();
+    expect(screen.getByText(/updated 5 minutes ago/i)).toBeTruthy();
+    expect(mocked.routerRefresh).not.toHaveBeenCalled();
+  });
+
+  it("keeps previous values visible and shows inline status on save failure", async () => {
+    mocked.refreshPortfolioPricingSnapshot.mockResolvedValue({
+      status: "error",
+      updated: 1,
+      message: "Some refreshed holding prices could not be saved.",
+      overview: null,
+    });
+
+    render(
+      <ActivePortfolioValueCard
+        portfolioId="portfolio-1"
+        initialOverview={initialOverview}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /refresh prices/i }));
+
+    expect(
+      await screen.findByText("Some refreshed holding prices could not be saved."),
+    ).toBeTruthy();
+    expect(screen.getByText("$20,000.00")).toBeTruthy();
+    expect(screen.getByText(/updated 5 minutes ago/i)).toBeTruthy();
+    expect(mocked.routerRefresh).not.toHaveBeenCalled();
   });
 });

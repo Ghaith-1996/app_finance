@@ -140,6 +140,16 @@ export interface PortfolioOverview {
   primaryGoal: string;
 }
 
+export type PortfolioPricingRefreshStatus = "updated" | "no_quotes" | "error";
+
+export interface PortfolioPricingRefreshResult {
+  status: PortfolioPricingRefreshStatus;
+  updated: number;
+  message: string | null;
+  overview: PortfolioOverview | null;
+  holdings?: Holding[] | null;
+}
+
 export interface PortfolioInsight {
   title: string;
   value: string;

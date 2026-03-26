@@ -2,10 +2,10 @@ import Link from "next/link";
 import { ArrowRight, Bookmark } from "lucide-react";
 
 import { AppShell } from "@/components/app/app-shell";
-import { InlineRefreshPricesButton } from "@/components/app/inline-refresh-prices-button";
+import { PortfolioValueCard } from "@/components/app/portfolio-value-card";
 import { loadPortfolioPageData } from "@/lib/server/page-loaders";
 import type { Holding, PortfolioFeedHighlight } from "@/lib/types";
-import { categoryLabel, formatCurrency } from "@/lib/utils";
+import { categoryLabel } from "@/lib/utils";
 
 function formatStoryTime(iso: string): string {
   const t = new Date(iso).getTime();
@@ -75,7 +75,10 @@ export default async function PortfolioPage() {
       <div className="space-y-6">
         {/* Top row cards */}
         <div className="grid gap-4 md:grid-cols-[1.1fr_0.9fr_0.9fr]">
-          <PortfolioValueCard overview={portfolioOverview} portfolioId={portfolioId} />
+          <PortfolioValueCard
+            initialOverview={portfolioOverview}
+            portfolioId={portfolioId}
+          />
 
           <div className="flex flex-col justify-between rounded-2xl border border-white/[0.06] bg-surface-raised p-8 min-h-[180px]">
             <div>
@@ -210,45 +213,6 @@ export default async function PortfolioPage() {
         </div>
       </div>
     </AppShell>
-  );
-}
-
-function PortfolioValueCard({
-  overview,
-  portfolioId,
-}: {
-  overview: {
-    totalValue: number;
-    dayChange: number;
-    lastSyncedAt: string;
-  };
-  portfolioId: string;
-}) {
-  return (
-    <div className="flex min-h-[180px] flex-col justify-between rounded-2xl border border-white/[0.06] bg-surface-raised p-8">
-      <div>
-        <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">
-          TOTAL VALUE
-        </p>
-        <div className="mt-4 flex items-baseline gap-3">
-          <p className="text-4xl font-bold tracking-tight text-white">
-            {formatCurrency(overview.totalValue || 17900).split(".")[0]}
-          </p>
-          <p
-            className={`flex items-center text-sm font-semibold ${
-              overview.dayChange >= 0 ? "text-emerald-400" : "text-red-400"
-            }`}
-          >
-            {overview.dayChange >= 0 ? "+" : ""}
-            {overview.dayChange}%
-          </p>
-        </div>
-      </div>
-      <div className="flex items-center gap-2 text-[13px] text-slate-600">
-        <span>{`Updated ${overview.lastSyncedAt || "2 mins ago"}`}</span>
-        <InlineRefreshPricesButton portfolioId={portfolioId} />
-      </div>
-    </div>
   );
 }
 

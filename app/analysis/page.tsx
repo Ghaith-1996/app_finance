@@ -1,16 +1,14 @@
 import Link from "next/link";
-import type { ReactNode } from "react";
 
-import { Activity, ArrowRight, BrainCircuit, RefreshCw } from "lucide-react";
+import { ArrowRight, BrainCircuit, RefreshCw } from "lucide-react";
 
 import { AnalysisRunTrigger } from "@/components/app/analysis-run-trigger";
 import { AppShell } from "@/components/app/app-shell";
-import { InlineRefreshPricesButton } from "@/components/app/inline-refresh-prices-button";
+import { PortfolioSnapshotPanel } from "@/components/app/portfolio-snapshot-panel";
 import { Badge } from "@/components/ui/badge";
 import { buttonStyles } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
 import { loadAnalysisPageData } from "@/lib/server/page-loaders";
-import { formatCurrency, formatPercent } from "@/lib/utils";
 
 export default async function AnalysisPage({
   searchParams,
@@ -77,7 +75,10 @@ export default async function AnalysisPage({
         </div>
 
         <div className="space-y-6">
-          <PortfolioSnapshotPanel overview={portfolioOverview} portfolioId={portfolioId} />
+          <PortfolioSnapshotPanel
+            initialOverview={portfolioOverview}
+            portfolioId={portfolioId}
+          />
 
           <Panel className="space-y-4">
             <div className="flex items-center gap-3">
@@ -117,65 +118,5 @@ export default async function AnalysisPage({
         </div>
       </div>
     </AppShell>
-  );
-}
-
-function PortfolioSnapshotPanel({
-  overview,
-  portfolioId,
-}: {
-  overview: {
-    totalValue: number;
-    dayChange: number;
-    monthlyChange: number;
-    lastSyncedAt: string;
-    coverage: string;
-  };
-  portfolioId: string | null;
-}) {
-  return (
-    <Panel className="space-y-5">
-      <div className="flex items-center gap-3">
-        <div className="rounded-xl border border-white/[0.06] bg-white/5 p-3 text-brand">
-          <Activity className="h-5 w-5" />
-        </div>
-        <div>
-          <p className="text-sm uppercase tracking-[0.18em] text-slate-500">
-            Portfolio snapshot
-          </p>
-          <p className="text-lg font-semibold text-white">
-            {formatCurrency(overview.totalValue)}
-          </p>
-        </div>
-      </div>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Metric label="Day change" value={formatPercent(overview.dayChange)} />
-        <Metric label="30 day move" value={formatPercent(overview.monthlyChange)} />
-        <Metric
-          label="Last sync"
-          value={
-            <div className="flex items-center gap-2">
-              <span>{overview.lastSyncedAt}</span>
-              {portfolioId ? (
-                <InlineRefreshPricesButton
-                  portfolioId={portfolioId}
-                  className="h-6 px-1.5 text-[10px]"
-                />
-              ) : null}
-            </div>
-          }
-        />
-        <Metric label="Coverage" value={overview.coverage} />
-      </div>
-    </Panel>
-  );
-}
-
-function Metric({ label, value }: { label: string; value: ReactNode }) {
-  return (
-    <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-4">
-      <p className="text-sm uppercase tracking-[0.18em] text-slate-500">{label}</p>
-      <div className="mt-2 text-lg font-semibold text-white">{value}</div>
-    </div>
   );
 }

@@ -1,7 +1,10 @@
+"use client";
+
+import { useState } from "react";
 import { TrendingDown, TrendingUp } from "lucide-react";
 
 import { InlineRefreshPricesButton } from "@/components/app/inline-refresh-prices-button";
-import type { PortfolioOverview } from "@/lib/types";
+import type { PortfolioOverview, PortfolioPricingRefreshResult } from "@/lib/types";
 import { formatCurrency, formatPercent, formatPrice } from "@/lib/utils";
 
 export function ActivePortfolioValueCard({
@@ -11,9 +14,15 @@ export function ActivePortfolioValueCard({
   portfolioId: string | null;
   initialOverview: PortfolioOverview;
 }) {
-  const overview = initialOverview;
+  const [overview, setOverview] = useState(initialOverview);
   const dayPct = overview.dayChange;
   const dayDollar = Math.round(overview.totalValue * (dayPct / 100) * 100) / 100;
+
+  function handleRefreshed(result: PortfolioPricingRefreshResult) {
+    if (result.status === "updated" && result.overview) {
+      setOverview(result.overview);
+    }
+  }
 
   return (
     <div className="flex flex-col justify-between rounded-2xl border border-white/[0.06] bg-surface-raised p-6">
@@ -37,9 +46,14 @@ export function ActivePortfolioValueCard({
         ) : null}
         <span>{`${formatPercent(dayPct)} (${formatCurrency(Math.abs(dayDollar))})`}</span>
       </div>
-      <div className="mt-3 flex items-center gap-2 text-xs text-slate-500">
+      <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
         <span>{`Updated ${overview.lastSyncedAt}`}</span>
-        {portfolioId ? <InlineRefreshPricesButton portfolioId={portfolioId} /> : null}
+        {portfolioId ? (
+          <InlineRefreshPricesButton
+            portfolioId={portfolioId}
+            onRefreshed={handleRefreshed}
+          />
+        ) : null}
       </div>
     </div>
   );

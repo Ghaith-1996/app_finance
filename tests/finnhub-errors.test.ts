@@ -3,12 +3,25 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 const fetchMock = vi.fn();
 vi.stubGlobal("fetch", fetchMock);
 
+const logger = vi.hoisted(() => ({
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+}));
+
+vi.mock("@/lib/logger", () => ({
+  createLogger: () => logger,
+}));
+
 const ENV_BACKUP = { ...process.env };
 
 describe("Finnhub service error handling", () => {
   beforeEach(() => {
     vi.resetModules();
     fetchMock.mockReset();
+    logger.info.mockReset();
+    logger.warn.mockReset();
+    logger.error.mockReset();
     process.env = { ...ENV_BACKUP };
   });
 
@@ -23,11 +36,12 @@ describe("Finnhub service error handling", () => {
     await expect(searchSymbols("AAPL")).rejects.toMatchObject({ code: "missing_key" });
   });
 
-  it("throws unauthorized on 401", async () => {
+  it("throws unauthorized on 401 and logs it as an error", async () => {
     process.env.FINNHUB_API_KEY = "test-key";
     fetchMock.mockResolvedValueOnce({ ok: false, status: 401 });
     const { searchSymbols } = await import("@/lib/services/finnhub");
     await expect(searchSymbols("AAPL")).rejects.toMatchObject({ code: "unauthorized", status: 401 });
+    expect(logger.error).toHaveBeenCalledWith("HTTP 401 for /search", { status: 401 });
   });
 
   it("throws unauthorized on 403", async () => {
@@ -37,11 +51,12 @@ describe("Finnhub service error handling", () => {
     await expect(searchSymbols("AAPL")).rejects.toMatchObject({ code: "unauthorized", status: 403 });
   });
 
-  it("throws rate_limited on 429", async () => {
+  it("throws rate_limited on 429 and logs it as a warning", async () => {
     process.env.FINNHUB_API_KEY = "test-key";
     fetchMock.mockResolvedValueOnce({ ok: false, status: 429 });
     const { searchSymbols } = await import("@/lib/services/finnhub");
     await expect(searchSymbols("AAPL")).rejects.toMatchObject({ code: "rate_limited", status: 429 });
+    expect(logger.warn).toHaveBeenCalledWith("HTTP 429 for /search", { status: 429 });
   });
 
   it("throws http_error on 500", async () => {
@@ -60,6 +75,22 @@ describe("Finnhub service error handling", () => {
     });
     const { getQuote } = await import("@/lib/services/finnhub");
     await expect(getQuote("AAPL")).rejects.toMatchObject({ code: "bad_payload" });
+  });
+
+  it("logs warn on timeout", async () => {
+    process.env.FINNHUB_API_KEY = "test-key";
+    fetchMock.mockRejectedValueOnce(new DOMException("aborted", "AbortError"));
+    const { getQuote } = await import("@/lib/services/finnhub");
+    await expect(getQuote("AAPL")).rejects.toMatchObject({ code: "timeout" });
+    expect(logger.warn).toHaveBeenCalledWith("Timeout after 8000ms for /quote");
+  });
+
+  it("logs warn on network errors", async () => {
+    process.env.FINNHUB_API_KEY = "test-key";
+    fetchMock.mockRejectedValueOnce(new Error("network down"));
+    const { getQuote } = await import("@/lib/services/finnhub");
+    await expect(getQuote("AAPL")).rejects.toMatchObject({ code: "http_error" });
+    expect(logger.warn).toHaveBeenCalledWith("Network error for /quote", { error: "network down" });
   });
 
   it("returns empty array when search has no equity matches", async () => {

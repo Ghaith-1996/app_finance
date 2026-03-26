@@ -8,12 +8,8 @@ import {
   Zap,
 } from "lucide-react";
 
-import { AddPositionForm } from "@/components/app/add-position-form";
-import { PortfolioCsvImportFlow } from "@/components/app/portfolio-csv-import-flow";
 import { PortfolioCopilotPanel } from "@/components/app/portfolio-copilot-panel";
-import { PortfolioHoldingsTable } from "@/components/app/portfolio-holdings-table";
-import { PortfolioPerformanceChart } from "@/components/app/portfolio-performance-chart";
-import { RefreshPricesButton } from "@/components/app/refresh-prices-button";
+import { PortfolioPricingSection } from "@/components/app/portfolio-pricing-section";
 import { AppShell } from "@/components/app/app-shell";
 import { buttonStyles } from "@/components/ui/button";
 import { loadFullPortfolioPageData } from "@/lib/server/page-loaders";
@@ -21,7 +17,6 @@ import type {
   Holding,
   PortfolioFeedHighlight,
   PortfolioInsight,
-  PortfolioOverview,
 } from "@/lib/types";
 import { categoryLabel, formatCurrency } from "@/lib/utils";
 
@@ -312,17 +307,13 @@ export default async function FullPortfolioPage() {
       showOnboardingNav={showOnboardingNav}
     >
       <div className="-mx-4 rounded-[2.5rem] bg-[#0a0f15] p-6 shadow-inner sm:mx-0 lg:p-10">
-        {/* Performance chart hero */}
-        <div className="mb-10">
-          <PortfolioPerformanceChart
-            totalValue={portfolioOverview.totalValue}
-            dayChange={portfolioOverview.dayChange ?? 0}
-            portfolioCreatedAt={portfolioCreatedAt ?? new Date().toISOString()}
-          />
-        </div>
-
         <div className="flex flex-col gap-10 lg:flex-row">
-          <div className="flex-1 space-y-12">
+          <PortfolioPricingSection
+            portfolioId={portfolioId}
+            portfolioCreatedAt={portfolioCreatedAt ?? new Date().toISOString()}
+            initialOverview={portfolioOverview}
+            initialHoldings={holdings}
+          >
             <div>
               <h2 className="mb-6 text-[22px] font-bold tracking-tight text-white">
                 Allocation & Position
@@ -365,13 +356,7 @@ export default async function FullPortfolioPage() {
                 })}
               </div>
             </div>
-
-            <HoldingsBlock
-              portfolioId={portfolioId}
-              holdings={holdings}
-              overview={portfolioOverview}
-            />
-          </div>
+          </PortfolioPricingSection>
 
           <div className="w-full shrink-0 space-y-4 lg:w-[340px]">
             <div className="relative overflow-hidden rounded-[2.5rem] border border-white/[0.06] bg-surface-raised p-8 shadow-sm">
@@ -478,56 +463,5 @@ export default async function FullPortfolioPage() {
         </div>
       </div>
     </AppShell>
-  );
-}
-
-function HoldingsBlock({
-  portfolioId,
-  holdings,
-  overview,
-}: {
-  portfolioId: string;
-  holdings: Holding[];
-  overview: PortfolioOverview;
-}) {
-  return (
-    <div>
-      <div className="mb-6 flex items-end justify-between gap-4">
-        <div>
-          <h2 className="text-[22px] font-bold tracking-tight text-white">Active Holdings</h2>
-          <p className="mt-1 text-sm text-slate-500">Synced {overview.lastSyncedAt}</p>
-        </div>
-        <div className="flex shrink-0 items-center gap-3">
-          <p className="text-[12px] font-bold uppercase tracking-widest text-brand">
-            {holdings.length} positions
-          </p>
-          <RefreshPricesButton
-            portfolioId={portfolioId}
-            className="h-9 gap-1.5 px-3 text-[11px] font-bold uppercase tracking-wider"
-          />
-        </div>
-      </div>
-
-      <AddPositionForm portfolioId={portfolioId} />
-      <div className="mt-4">
-        <PortfolioCsvImportFlow
-          portfolioId={portfolioId}
-          saveBehavior="refresh"
-          title="Bulk import holdings"
-          description="Upload a broker CSV, review the parsed holdings, then choose whether to merge into this portfolio or replace it."
-          showEntryButton
-          entryLabel="Import CSV"
-          defaultOpen={false}
-        />
-      </div>
-
-      {holdings.length > 0 ? (
-        <PortfolioHoldingsTable holdings={holdings} portfolioId={portfolioId} />
-      ) : (
-        <div className="rounded-[1.5rem] border border-white/[0.06] bg-surface-raised px-6 py-8 text-center text-sm text-slate-500 shadow-sm">
-          No holdings available yet.
-        </div>
-      )}
-    </div>
   );
 }

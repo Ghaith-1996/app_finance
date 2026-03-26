@@ -48,13 +48,15 @@ async function get<T>(path: string, params: Record<string, string> = {}): Promis
     });
 
     if (!res.ok) {
-      log.error(`HTTP ${res.status} for ${path}`, { status: res.status });
       if (res.status === 401 || res.status === 403) {
+        log.error(`HTTP ${res.status} for ${path}`, { status: res.status });
         throw new FinnhubError("unauthorized", `Finnhub rejected the request (${res.status}).`, res.status);
       }
       if (res.status === 429) {
+        log.warn(`HTTP ${res.status} for ${path}`, { status: res.status });
         throw new FinnhubError("rate_limited", "Finnhub rate limit reached.", res.status);
       }
+      log.error(`HTTP ${res.status} for ${path}`, { status: res.status });
       throw new FinnhubError("http_error", `Finnhub HTTP ${res.status}`, res.status);
     }
 
@@ -68,10 +70,10 @@ async function get<T>(path: string, params: Record<string, string> = {}): Promis
   } catch (err) {
     if (err instanceof FinnhubError) throw err;
     if (err instanceof DOMException && err.name === "AbortError") {
-      log.error(`Timeout after ${TIMEOUT_MS}ms for ${path}`);
+      log.warn(`Timeout after ${TIMEOUT_MS}ms for ${path}`);
       throw new FinnhubError("timeout", `Finnhub request timed out after ${TIMEOUT_MS}ms.`);
     }
-    log.error(`Network error for ${path}`, { error: err instanceof Error ? err.message : String(err) });
+    log.warn(`Network error for ${path}`, { error: err instanceof Error ? err.message : String(err) });
     throw new FinnhubError("http_error", err instanceof Error ? err.message : "Unknown network error.");
   } finally {
     clearTimeout(timeout);

@@ -24,6 +24,8 @@ interface Props {
   onSelectSymbol: (symbol: string) => void;
 }
 
+type RefreshMode = "idle" | "auto" | "manual";
+
 export function WatchlistItems({ initialItems, selectedSymbol, onSelectSymbol }: Props) {
   const [items, setItems] = useState<WatchlistItemData[]>(initialItems);
   const router = useRouter();
@@ -34,8 +36,10 @@ export function WatchlistItems({ initialItems, selectedSymbol, onSelectSymbol }:
 
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [refreshingAll, setRefreshingAll] = useState(false);
+  const [refreshMode, setRefreshMode] = useState<RefreshMode>("idle");
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [banner, setBanner] = useState<string | null>(null);
+  const autoRefreshStartedRef = useRef(false);
 
   const closeMenu = useCallback(() => setOpenMenuId(null), []);
 
@@ -48,19 +52,34 @@ export function WatchlistItems({ initialItems, selectedSymbol, onSelectSymbol }:
     return () => document.removeEventListener("keydown", onKey);
   }, [openMenuId, closeMenu]);
 
-  async function handleRefreshAll() {
+  async function runRefresh(options?: { silent?: boolean }) {
+    const silent = options?.silent ?? false;
     if (items.length === 0) return;
+
     setRefreshingAll(true);
-    setBanner(null);
+    setRefreshMode(silent ? "auto" : "manual");
+    if (!silent) {
+      setBanner(null);
+    }
 
     try {
       const updated = await refreshWatchlistPrices();
       if (updated.length > 0) setItems(updated);
     } catch {
-      setBanner("Refresh failed. Try again.");
+      if (!silent) {
+        setBanner("Refresh failed. Try again.");
+      }
+    } finally {
+      setRefreshingAll(false);
+      setRefreshMode("idle");
     }
-    setRefreshingAll(false);
   }
+
+  useEffect(() => {
+    if (autoRefreshStartedRef.current || initialItems.length === 0) return;
+    autoRefreshStartedRef.current = true;
+    void runRefresh({ silent: true });
+  }, [initialItems.length]);
 
   async function handleDelete(id: string) {
     closeMenu();
@@ -87,7 +106,7 @@ export function WatchlistItems({ initialItems, selectedSymbol, onSelectSymbol }:
         <div className="flex flex-col items-end gap-2">
           <button
             type="button"
-            onClick={() => void handleRefreshAll()}
+            onClick={() => void runRefresh()}
             disabled={refreshingAll || items.length === 0}
             className={buttonStyles({
               variant: "secondary",
@@ -97,8 +116,13 @@ export function WatchlistItems({ initialItems, selectedSymbol, onSelectSymbol }:
             aria-label="Refresh all prices"
           >
             <RefreshCw className={cn("h-3.5 w-3.5 shrink-0", refreshingAll && "animate-spin")} />
-            {refreshingAll ? "Refreshing…" : "Refresh prices"}
+            {refreshingAll ? "Refreshing..." : "Refresh prices"}
           </button>
+          {refreshMode === "auto" ? (
+            <div className="w-full text-right text-[10px] font-medium normal-case tracking-normal text-slate-500">
+              Auto-refreshing...
+            </div>
+          ) : null}
           <div className="w-full text-right">STATUS</div>
         </div>
       </div>
@@ -187,7 +211,7 @@ function WatchlistRow({
           <p className="text-[15px] font-bold text-white">{item.company || item.symbol}</p>
           <p className="mt-0.5 text-[11px] font-bold uppercase tracking-widest text-slate-600">
             {item.symbol}
-            {item.exchange ? ` · ${item.exchange}` : ""}
+            {item.exchange ? ` - ${item.exchange}` : ""}
           </p>
         </div>
       </div>
@@ -197,7 +221,7 @@ function WatchlistRow({
           {item.price != null && item.price > 0 ? (
             `$${item.price.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
           ) : (
-            <span className="text-slate-500">—</span>
+            <span className="text-slate-500">-</span>
           )}
         </p>
         {item.dayChange != null ? (
@@ -216,7 +240,7 @@ function WatchlistRow({
             {item.dayChange}%
           </p>
         ) : (
-          <p className="mt-0.5 text-[13px] font-medium text-slate-600">—</p>
+          <p className="mt-0.5 text-[13px] font-medium text-slate-600">-</p>
         )}
       </div>
 

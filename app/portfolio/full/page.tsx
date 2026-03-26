@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Suspense, use } from "react";
 import {
   BarChart3,
   Cpu,
@@ -23,12 +24,23 @@ import {
   getPortfolioOverview,
   getUserPortfolios,
 } from "@/lib/actions/portfolio";
+import { loadFreshFullPortfolioAfterPriceSync } from "@/lib/server/portfolio-refresh-loaders";
 import type {
   Holding,
   PortfolioFeedHighlight,
   PortfolioInsight,
 } from "@/lib/types";
 import { categoryLabel, formatCurrency } from "@/lib/utils";
+
+const FULL_OVERVIEW_FALLBACK = {
+  totalValue: 0,
+  dayChange: 0,
+  monthlyChange: 0,
+  lastSyncedAt: "Not synced",
+  lastAnalyzedAt: "Never",
+  coverage: "0 stories",
+  primaryGoal: "Add holdings and run analysis.",
+};
 
 interface SectorCard {
   label: string;
@@ -306,20 +318,13 @@ export default async function FullPortfolioPage() {
     ]);
 
   const holdings = portfolioResult.data?.holdings ?? [];
-  const portfolioOverview = overviewResult.data ?? {
-    totalValue: 0,
-    dayChange: 0,
-    monthlyChange: 0,
-    lastSyncedAt: "Not synced",
-    lastAnalyzedAt: "Never",
-    coverage: "0 stories",
-    primaryGoal: "Add holdings and run analysis.",
-  };
+  const portfolioOverview = overviewResult.data ?? FULL_OVERVIEW_FALLBACK;
   const insights = insightsResult.data ?? [];
   const feedHighlights = feedResult.data ?? [];
   const portfolioDayChange = portfolioOverview.dayChange ?? 0;
   const sectorCards = buildSectorCards(holdings);
   const insightSummary = buildInsightSummary(insights, feedHighlights, sectorCards);
+  const refreshedFullPortfolio = loadFreshFullPortfolioAfterPriceSync(portfolioId);
 
   return (
     <AppShell
@@ -332,11 +337,12 @@ export default async function FullPortfolioPage() {
       <div className="-mx-4 rounded-[2.5rem] bg-[#0a0f15] p-6 shadow-inner sm:mx-0 lg:p-10">
         {/* Performance chart hero */}
         <div className="mb-10">
-          <PortfolioPerformanceChart
-            totalValue={portfolioOverview.totalValue}
-            dayChange={portfolioDayChange}
-            portfolioCreatedAt={portfolios[0]?.createdAt ?? new Date().toISOString()}
-          />
+          <Suspense fallback={<PortfolioHeroFallback />}>
+            <RefreshedPortfolioHero
+              refreshedFullPortfolio={refreshedFullPortfolio}
+              portfolioCreatedAt={portfolios[0]?.createdAt ?? new Date().toISOString()}
+            />
+          </Suspense>
         </div>
 
         <div className="flex flex-col gap-10 lg:flex-row">
@@ -384,48 +390,12 @@ export default async function FullPortfolioPage() {
               </div>
             </div>
 
-            <div>
-              <div className="mb-6 flex items-end justify-between gap-4">
-                <div>
-                  <h2 className="text-[22px] font-bold tracking-tight text-white">
-                    Active Holdings
-                  </h2>
-                  <p className="mt-1 text-sm text-slate-500">
-                    Synced {portfolioOverview.lastSyncedAt}
-                  </p>
-                </div>
-                <div className="flex shrink-0 items-center gap-3">
-                  <p className="text-[12px] font-bold uppercase tracking-widest text-brand">
-                    {holdings.length} positions
-                  </p>
-                  <RefreshPricesButton
-                    portfolioId={portfolioId}
-                    className="h-9 gap-1.5 px-3 text-[11px] font-bold uppercase tracking-wider"
-                  />
-                </div>
-              </div>
-
-              <AddPositionForm portfolioId={portfolioId} />
-              <div className="mt-4">
-                <PortfolioCsvImportFlow
-                  portfolioId={portfolioId}
-                  saveBehavior="refresh"
-                  title="Bulk import holdings"
-                  description="Upload a broker CSV, review the parsed holdings, then choose whether to merge into this portfolio or replace it."
-                  showEntryButton
-                  entryLabel="Import CSV"
-                  defaultOpen={false}
-                />
-              </div>
-
-              {holdings.length > 0 ? (
-                <PortfolioHoldingsTable holdings={holdings} portfolioId={portfolioId} />
-              ) : (
-                <div className="rounded-[1.5rem] border border-white/[0.06] bg-surface-raised px-6 py-8 text-center text-sm text-slate-500 shadow-sm">
-                  No holdings available yet.
-                </div>
-              )}
-            </div>
+            <Suspense fallback={<HoldingsBlockFallback />}>
+              <RefreshedHoldingsBlock
+                portfolioId={portfolioId}
+                refreshedFullPortfolio={refreshedFullPortfolio}
+              />
+            </Suspense>
           </div>
 
           <div className="w-full shrink-0 space-y-4 lg:w-[340px]">
@@ -533,5 +503,102 @@ export default async function FullPortfolioPage() {
         </div>
       </div>
     </AppShell>
+  );
+}
+
+function RefreshedPortfolioHero({
+  refreshedFullPortfolio,
+  portfolioCreatedAt,
+}: {
+  refreshedFullPortfolio: ReturnType<typeof loadFreshFullPortfolioAfterPriceSync>;
+  portfolioCreatedAt: string;
+}) {
+  const { overviewResult } = use(refreshedFullPortfolio);
+  const overview = overviewResult.data ?? FULL_OVERVIEW_FALLBACK;
+
+  return (
+    <PortfolioPerformanceChart
+      totalValue={overview.totalValue}
+      dayChange={overview.dayChange ?? 0}
+      portfolioCreatedAt={portfolioCreatedAt}
+    />
+  );
+}
+
+function PortfolioHeroFallback() {
+  return (
+    <div className="rounded-[2rem] border border-white/[0.06] bg-surface-raised px-6 py-8 text-slate-500">
+      Refreshing performance chart...
+    </div>
+  );
+}
+
+function RefreshedHoldingsBlock({
+  portfolioId,
+  refreshedFullPortfolio,
+}: {
+  portfolioId: string;
+  refreshedFullPortfolio: ReturnType<typeof loadFreshFullPortfolioAfterPriceSync>;
+}) {
+  const { portfolioResult, overviewResult } = use(refreshedFullPortfolio);
+
+  const holdings = portfolioResult.data?.holdings ?? [];
+  const overview = overviewResult.data ?? FULL_OVERVIEW_FALLBACK;
+
+  return (
+    <div>
+      <div className="mb-6 flex items-end justify-between gap-4">
+        <div>
+          <h2 className="text-[22px] font-bold tracking-tight text-white">Active Holdings</h2>
+          <p className="mt-1 text-sm text-slate-500">Synced {overview.lastSyncedAt}</p>
+        </div>
+        <div className="flex shrink-0 items-center gap-3">
+          <p className="text-[12px] font-bold uppercase tracking-widest text-brand">
+            {holdings.length} positions
+          </p>
+          <RefreshPricesButton
+            portfolioId={portfolioId}
+            className="h-9 gap-1.5 px-3 text-[11px] font-bold uppercase tracking-wider"
+          />
+        </div>
+      </div>
+
+      <AddPositionForm portfolioId={portfolioId} />
+      <div className="mt-4">
+        <PortfolioCsvImportFlow
+          portfolioId={portfolioId}
+          saveBehavior="refresh"
+          title="Bulk import holdings"
+          description="Upload a broker CSV, review the parsed holdings, then choose whether to merge into this portfolio or replace it."
+          showEntryButton
+          entryLabel="Import CSV"
+          defaultOpen={false}
+        />
+      </div>
+
+      {holdings.length > 0 ? (
+        <PortfolioHoldingsTable holdings={holdings} portfolioId={portfolioId} />
+      ) : (
+        <div className="rounded-[1.5rem] border border-white/[0.06] bg-surface-raised px-6 py-8 text-center text-sm text-slate-500 shadow-sm">
+          No holdings available yet.
+        </div>
+      )}
+    </div>
+  );
+}
+
+function HoldingsBlockFallback() {
+  return (
+    <div>
+      <div className="mb-6 flex items-end justify-between gap-4">
+        <div>
+          <h2 className="text-[22px] font-bold tracking-tight text-white">Active Holdings</h2>
+          <p className="mt-1 text-sm text-slate-500">Refreshing holdings...</p>
+        </div>
+      </div>
+      <div className="rounded-[1.5rem] border border-white/[0.06] bg-surface-raised px-6 py-8 text-center text-sm text-slate-500 shadow-sm">
+        Loading synced holdings...
+      </div>
+    </div>
   );
 }

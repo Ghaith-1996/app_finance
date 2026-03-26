@@ -973,6 +973,8 @@ type SyncHoldingPricesResult = {
   shouldRevalidate: boolean;
 };
 
+const DEFAULT_PRICE_SYNC_MIN_AGE_MS = 60_000;
+
 /**
  * Update holding prices in the database from live quotes. Does not call revalidatePath —
  * safe to await from Server Components (e.g. /portfolio/full on each visit).
@@ -983,6 +985,70 @@ export async function syncHoldingPrices(portfolioId: string): Promise<{
 }> {
   const r = await syncHoldingPricesInternal(portfolioId);
   return { updated: r.updated, error: r.error };
+}
+
+export async function syncHoldingPricesIfStale(
+  portfolioId: string,
+  config?: { minAgeMs?: number },
+): Promise<{ updated: number; skipped: boolean; error: string | null }> {
+  const minAgeMs = Math.max(0, config?.minAgeMs ?? DEFAULT_PRICE_SYNC_MIN_AGE_MS);
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+  if (userError || !user) {
+    return { updated: 0, skipped: false, error: "Unauthorized" };
+  }
+
+  const { data: portfolio } = await supabase
+    .from("portfolios")
+    .select("id, last_synced_at")
+    .eq("id", portfolioId)
+    .eq("user_id", user.id)
+    .single();
+  if (!portfolio) {
+    return { updated: 0, skipped: false, error: "Portfolio not found" };
+  }
+
+  const { data: holdings } = await supabase
+    .from("holdings")
+    .select("id, quote_as_of")
+    .eq("portfolio_id", portfolioId);
+
+  if (!holdings || holdings.length === 0) {
+    return { updated: 0, skipped: true, error: null };
+  }
+
+  const lastSyncedMs = portfolio.last_synced_at
+    ? Date.parse(String(portfolio.last_synced_at))
+    : Number.NaN;
+
+  let latestQuoteAsOfMs = Number.NaN;
+  for (const holding of holdings) {
+    const quoteAsOfMs = holding.quote_as_of
+      ? Date.parse(String(holding.quote_as_of))
+      : Number.NaN;
+    if (
+      Number.isFinite(quoteAsOfMs) &&
+      (!Number.isFinite(latestQuoteAsOfMs) || quoteAsOfMs > latestQuoteAsOfMs)
+    ) {
+      latestQuoteAsOfMs = quoteAsOfMs;
+    }
+  }
+
+  const freshestKnownMs = Math.max(
+    Number.isFinite(lastSyncedMs) ? lastSyncedMs : -1,
+    Number.isFinite(latestQuoteAsOfMs) ? latestQuoteAsOfMs : -1,
+  );
+
+  if (freshestKnownMs > 0 && Date.now() - freshestKnownMs < minAgeMs) {
+    return { updated: 0, skipped: true, error: null };
+  }
+
+  const r = await syncHoldingPricesInternal(portfolioId);
+  return { updated: r.updated, skipped: false, error: r.error };
 }
 
 /**

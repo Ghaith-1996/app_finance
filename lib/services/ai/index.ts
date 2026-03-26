@@ -4,6 +4,8 @@ import { createAzureOpenAIProvider } from "./azure-openai-provider";
 import { createOpenAIProvider } from "./openai-provider";
 import { createOpenRouterProvider } from "./openrouter-provider";
 
+export type AIProviderId = "azure" | "anthropic" | "openai" | "openrouter";
+
 export type {
   IAIProvider,
   HoldingContext,
@@ -26,8 +28,7 @@ export { createAnthropicProvider } from "./anthropic-provider";
 export { createAzureOpenAIProvider } from "./azure-openai-provider";
 export { createOpenRouterProvider } from "./openrouter-provider";
 
-export function getAIProvider(): IAIProvider {
-  const id = (process.env.AI_PROVIDER ?? "openai").toLowerCase();
+export function getAIProviderById(id: AIProviderId): IAIProvider {
   if (id === "azure") {
     return createAzureOpenAIProvider();
   }
@@ -38,4 +39,9 @@ export function getAIProvider(): IAIProvider {
     return createOpenAIProvider();
   }
   return createOpenRouterProvider();
+}
+
+export function getAIProvider(): IAIProvider {
+  const id = (process.env.AI_PROVIDER ?? "openai").toLowerCase() as AIProviderId;
+  return getAIProviderById(id);
 }

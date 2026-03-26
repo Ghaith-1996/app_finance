@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Suspense, use } from "react";
 import { ArrowRight, Bookmark } from "lucide-react";
 
 import { AppShell } from "@/components/app/app-shell";
@@ -8,8 +9,19 @@ import {
   getPortfolioOverview,
   getUserPortfolios,
 } from "@/lib/actions/portfolio";
+import { loadFreshOverviewAfterPriceSync } from "@/lib/server/portfolio-refresh-loaders";
 import type { Holding, PortfolioFeedHighlight } from "@/lib/types";
 import { categoryLabel, formatCurrency } from "@/lib/utils";
+
+const PORTFOLIO_OVERVIEW_FALLBACK = {
+  totalValue: 17900,
+  dayChange: -1.92,
+  monthlyChange: 0,
+  lastSyncedAt: "2 mins ago",
+  lastAnalyzedAt: "21 hours ago",
+  coverage: "0 stories",
+  primaryGoal: "Add holdings and run analysis.",
+};
 
 function formatStoryTime(iso: string): string {
   const t = new Date(iso).getTime();
@@ -58,15 +70,7 @@ export default async function PortfolioPage() {
       getPortfolioFeedHighlights(portfolioId),
     ]);
 
-  const portfolioOverview = overview ?? {
-    totalValue: 17900,
-    dayChange: -1.92,
-    monthlyChange: 0,
-    lastSyncedAt: "2 mins ago",
-    lastAnalyzedAt: "21 hours ago",
-    coverage: "0 stories",
-    primaryGoal: "Add holdings and run analysis.",
-  };
+  const portfolioOverview = overview ?? PORTFOLIO_OVERVIEW_FALLBACK;
   const holdings = portfolioData?.holdings ?? [];
   const topStories = (feedHighlights ?? []).slice(0, 3);
 
@@ -89,24 +93,9 @@ export default async function PortfolioPage() {
       <div className="space-y-6">
         {/* Top row cards */}
         <div className="grid gap-4 md:grid-cols-[1.1fr_0.9fr_0.9fr]">
-          <div className="flex flex-col justify-between rounded-2xl bg-surface-raised p-8 min-h-[180px] border border-white/[0.06]">
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">
-                TOTAL VALUE
-              </p>
-              <div className="mt-4 flex items-baseline gap-3">
-                <p className="text-4xl font-bold tracking-tight text-white">
-                  {formatCurrency(portfolioOverview.totalValue || 17900).split('.')[0]}
-                </p>
-                <p className={`text-sm font-semibold flex items-center ${portfolioOverview.dayChange >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                  {portfolioOverview.dayChange >= 0 ? '+' : ''}{portfolioOverview.dayChange}%
-                </p>
-              </div>
-            </div>
-            <p className="text-[13px] text-slate-600">
-              Updated {portfolioOverview.lastSyncedAt || "2 mins ago"}
-            </p>
-          </div>
+          <Suspense fallback={<PortfolioValueCardFallback />}>
+            <RefreshedPortfolioValueCard portfolioId={portfolioId} />
+          </Suspense>
 
           <div className="flex flex-col justify-between rounded-2xl border border-white/[0.06] bg-surface-raised p-8 min-h-[180px]">
             <div>
@@ -241,6 +230,54 @@ export default async function PortfolioPage() {
         </div>
       </div>
     </AppShell>
+  );
+}
+
+function RefreshedPortfolioValueCard({ portfolioId }: { portfolioId: string }) {
+  const freshOverview =
+    use(loadFreshOverviewAfterPriceSync(portfolioId)).data ?? PORTFOLIO_OVERVIEW_FALLBACK;
+  return <PortfolioValueCard overview={freshOverview} loading={false} />;
+}
+
+function PortfolioValueCardFallback() {
+  return <PortfolioValueCard overview={PORTFOLIO_OVERVIEW_FALLBACK} loading />;
+}
+
+function PortfolioValueCard({
+  overview,
+  loading,
+}: {
+  overview: {
+    totalValue: number;
+    dayChange: number;
+    lastSyncedAt: string;
+  };
+  loading: boolean;
+}) {
+  return (
+    <div className="flex min-h-[180px] flex-col justify-between rounded-2xl border border-white/[0.06] bg-surface-raised p-8">
+      <div>
+        <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">
+          TOTAL VALUE
+        </p>
+        <div className="mt-4 flex items-baseline gap-3">
+          <p className="text-4xl font-bold tracking-tight text-white">
+            {formatCurrency(overview.totalValue || 17900).split(".")[0]}
+          </p>
+          <p
+            className={`flex items-center text-sm font-semibold ${
+              overview.dayChange >= 0 ? "text-emerald-400" : "text-red-400"
+            }`}
+          >
+            {overview.dayChange >= 0 ? "+" : ""}
+            {overview.dayChange}%
+          </p>
+        </div>
+      </div>
+      <p className={`text-[13px] ${loading ? "text-slate-500" : "text-slate-600"}`}>
+        {loading ? "Refreshing portfolio value..." : `Updated ${overview.lastSyncedAt || "2 mins ago"}`}
+      </p>
+    </div>
   );
 }
 

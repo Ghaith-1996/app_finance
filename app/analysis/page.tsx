@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Suspense, use } from "react";
 
 import { Activity, ArrowRight, BrainCircuit, RefreshCw } from "lucide-react";
 
@@ -12,7 +13,18 @@ import {
   getPortfolioOverview,
   getUserPortfolios,
 } from "@/lib/actions/portfolio";
+import { loadFreshOverviewAfterPriceSync } from "@/lib/server/portfolio-refresh-loaders";
 import { formatCurrency, formatPercent } from "@/lib/utils";
+
+const ANALYSIS_OVERVIEW_FALLBACK = {
+  totalValue: 0,
+  dayChange: 0,
+  monthlyChange: 0,
+  lastSyncedAt: "—",
+  lastAnalyzedAt: "Never",
+  coverage: "0 stories",
+  primaryGoal: "Add a portfolio and run analysis.",
+};
 
 export default async function AnalysisPage({
   searchParams,
@@ -28,15 +40,7 @@ export default async function AnalysisPage({
     portfolioId ? getPortfolioInsights(portfolioId) : { data: [], error: null },
   ]);
 
-  const portfolioOverview = overviewResult?.data ?? {
-    totalValue: 0,
-    dayChange: 0,
-    monthlyChange: 0,
-    lastSyncedAt: "—",
-    lastAnalyzedAt: "Never",
-    coverage: "0 stories",
-    primaryGoal: "Add a portfolio and run analysis.",
-  };
+  const portfolioOverview = overviewResult?.data ?? ANALYSIS_OVERVIEW_FALLBACK;
   const portfolioInsights = insightsResult?.data ?? [];
 
   return (
@@ -96,30 +100,9 @@ export default async function AnalysisPage({
         </div>
 
         <div className="space-y-6">
-          <Panel className="space-y-5">
-            <div className="flex items-center gap-3">
-              <div className="rounded-xl border border-white/[0.06] bg-white/5 p-3 text-brand">
-                <Activity className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="text-sm uppercase tracking-[0.18em] text-slate-500">
-                  Portfolio snapshot
-                </p>
-                <p className="text-lg font-semibold text-white">
-                  {formatCurrency(portfolioOverview.totalValue)}
-                </p>
-              </div>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Metric label="Day change" value={formatPercent(portfolioOverview.dayChange)} />
-              <Metric
-                label="30 day move"
-                value={formatPercent(portfolioOverview.monthlyChange)}
-              />
-              <Metric label="Last sync" value={portfolioOverview.lastSyncedAt} />
-              <Metric label="Coverage" value={portfolioOverview.coverage} />
-            </div>
-          </Panel>
+          <Suspense fallback={<PortfolioSnapshotPanelFallback />}>
+            <RefreshedPortfolioSnapshotPanel portfolioId={portfolioId} />
+          </Suspense>
 
           <Panel className="space-y-4">
             <div className="flex items-center gap-3">
@@ -163,6 +146,66 @@ export default async function AnalysisPage({
         </div>
       </div>
     </AppShell>
+  );
+}
+
+function RefreshedPortfolioSnapshotPanel({
+  portfolioId,
+}: {
+  portfolioId: string | null;
+}) {
+  if (!portfolioId) {
+    return <PortfolioSnapshotPanel overview={ANALYSIS_OVERVIEW_FALLBACK} loading={false} />;
+  }
+
+  const freshOverview =
+    use(loadFreshOverviewAfterPriceSync(portfolioId)).data ?? ANALYSIS_OVERVIEW_FALLBACK;
+
+  return <PortfolioSnapshotPanel overview={freshOverview} loading={false} />;
+}
+
+function PortfolioSnapshotPanelFallback() {
+  return <PortfolioSnapshotPanel overview={ANALYSIS_OVERVIEW_FALLBACK} loading />;
+}
+
+function PortfolioSnapshotPanel({
+  overview,
+  loading,
+}: {
+  overview: {
+    totalValue: number;
+    dayChange: number;
+    monthlyChange: number;
+    lastSyncedAt: string;
+    coverage: string;
+  };
+  loading: boolean;
+}) {
+  return (
+    <Panel className="space-y-5">
+      <div className="flex items-center gap-3">
+        <div className="rounded-xl border border-white/[0.06] bg-white/5 p-3 text-brand">
+          <Activity className="h-5 w-5" />
+        </div>
+        <div>
+          <p className="text-sm uppercase tracking-[0.18em] text-slate-500">
+            Portfolio snapshot
+          </p>
+          <p className="text-lg font-semibold text-white">
+            {formatCurrency(overview.totalValue)}
+          </p>
+        </div>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Metric label="Day change" value={formatPercent(overview.dayChange)} />
+        <Metric label="30 day move" value={formatPercent(overview.monthlyChange)} />
+        <Metric
+          label="Last sync"
+          value={loading ? "Refreshing snapshot..." : overview.lastSyncedAt}
+        />
+        <Metric label="Coverage" value={overview.coverage} />
+      </div>
+    </Panel>
   );
 }
 

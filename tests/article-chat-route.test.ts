@@ -3,15 +3,28 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AIChatError } from "@/lib/services/ai/ai-chat-errors";
 
 const mockAnswerArticleQuestion = vi.fn();
-const mockGetAIProvider = vi.fn(() => ({
+const mockAnswerPortfolioQuestion = vi.fn();
+const mockComputePortfolioOverview = vi.fn().mockResolvedValue({
+  totalValue: 125000,
+  dayChange: 1400,
+  lastAnalyzedAt: new Date().toISOString(),
+  coverage: "Balanced",
+  primaryGoal: "Compound capital",
+});
+const mockGetAIProviderById = vi.fn((_id: "azure" | "anthropic" | "openai" | "openrouter") => ({
   answerArticleQuestion: mockAnswerArticleQuestion,
+  answerPortfolioQuestion: mockAnswerPortfolioQuestion,
+}));
+
+vi.mock("@/lib/services/portfolio", () => ({
+  computePortfolioOverview: (...args: unknown[]) => mockComputePortfolioOverview(...args),
 }));
 
 vi.mock("@/lib/services/ai", async () => {
   const actual = await vi.importActual<typeof import("@/lib/services/ai")>("@/lib/services/ai");
   return {
     ...actual,
-    getAIProvider: () => mockGetAIProvider(),
+    getAIProviderById: (id: "azure" | "anthropic" | "openai" | "openrouter") => mockGetAIProviderById(id),
   };
 });
 
@@ -123,7 +136,10 @@ function createSupabaseMock(opts: { insertUserError?: Error | null }) {
       if (table === "holdings") {
         return {
           select: () => ({
-            eq: () => Promise.resolve({ data: [], error: null }),
+            eq: () => ({
+              order: async () => ({ data: [], error: null }),
+              then: undefined,
+            }),
           }),
         };
       }
@@ -154,8 +170,29 @@ function createSupabaseMock(opts: { insertUserError?: Error | null }) {
                     }),
                   }),
                 }),
+                order: () => ({
+                  order: () => ({
+                    limit: async () => ({ data: [], error: null }),
+                  }),
+                }),
               }),
             }),
+          }),
+        };
+      }
+      if (table === "portfolio_insights") {
+        return {
+          select: () => ({
+            eq: () => ({
+              order: async () => ({ data: [], error: null }),
+            }),
+          }),
+        };
+      }
+      if (table === "watchlist_items") {
+        return {
+          select: () => ({
+            eq: async () => ({ data: [{ symbol: "NVDA" }], error: null }),
           }),
         };
       }
@@ -178,7 +215,33 @@ describe("POST /api/article-chat", () => {
     insertUserCalls = 0;
     messageRows.length = 0;
     mockAnswerArticleQuestion.mockReset();
+    mockAnswerPortfolioQuestion.mockReset();
+    mockComputePortfolioOverview.mockClear();
+    mockGetAIProviderById.mockClear();
     currentSupabase = createSupabaseMock({});
+  });
+
+  it("answers a generic portfolio-level question when newsItemId is omitted", async () => {
+    mockAnswerPortfolioQuestion.mockResolvedValue("Generic market answer.");
+
+    const req = new Request("http://localhost/api/article-chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        portfolioId: "p1",
+        message: "How should I think about today?",
+        history: [{ role: "assistant", content: "Earlier context" }],
+      }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { messages?: Array<{ role: string; content: string }> };
+    expect(mockAnswerPortfolioQuestion).toHaveBeenCalledTimes(1);
+    expect(mockAnswerArticleQuestion).not.toHaveBeenCalled();
+    expect(body.messages?.some((message) => message.content === "Earlier context")).toBe(true);
+    expect(body.messages?.some((message) => message.role === "assistant" && message.content.includes("Generic market answer"))).toBe(true);
+    expect(mockGetAIProviderById).toHaveBeenCalledWith("openrouter");
   });
 
   it("returns 503 and does not insert assistant when AI throws AIChatError", async () => {
@@ -201,6 +264,61 @@ describe("POST /api/article-chat", () => {
     expect(body.code).toBe("provider_unavailable");
     expect(insertUserCalls).toBe(1);
     expect(insertAssistantCalls).toBe(0);
+    expect(mockGetAIProviderById).toHaveBeenCalledWith("openrouter");
+  });
+
+  it("defaults article chat to the free tier when modelTier is omitted", async () => {
+    mockAnswerArticleQuestion.mockResolvedValue("Default free-tier answer.");
+
+    const req = new Request("http://localhost/api/article-chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        portfolioId: "p1",
+        newsItemId: "n1",
+        message: "What matters here?",
+      }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    expect(mockGetAIProviderById).toHaveBeenCalledWith("openrouter");
+  });
+
+  it("uses the premium tier provider when modelTier is premium", async () => {
+    mockAnswerArticleQuestion.mockResolvedValue("Premium-tier answer.");
+
+    const req = new Request("http://localhost/api/article-chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        portfolioId: "p1",
+        newsItemId: "n1",
+        message: "What matters here?",
+        modelTier: "premium",
+      }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    expect(mockGetAIProviderById).toHaveBeenCalledWith("azure");
+  });
+
+  it("returns 400 for invalid model tiers", async () => {
+    const req = new Request("http://localhost/api/article-chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        portfolioId: "p1",
+        newsItemId: "n1",
+        message: "What matters here?",
+        modelTier: "enterprise",
+      }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+    expect(mockGetAIProviderById).not.toHaveBeenCalled();
   });
 
   it("returns provider_auth code and config-specific message for auth errors", async () => {

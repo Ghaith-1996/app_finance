@@ -72,6 +72,19 @@ These decisions were made in the current thread and are reflected in code/doc ch
 - FeedView now owns article chat state, including activity tracking and a guarded story-switch confirmation modal when the current chat has messages or a draft
 - ArticleChatPanel now reports activity via `onActivityChange` and supports headerless/styled reuse inside the sidebar/sheet
 - tests updated to cover the new chat panel placement, mobile sheet rendering, and story switch guard behavior (`tests/feed-view.test.tsx`, `tests/article-chat-panel.test.tsx`)
+- added `syncHoldingPricesIfStale(portfolioId, { minAgeMs? })` in `lib/actions/portfolio.ts` with a default 60-second freshness window and return shape `{ updated, skipped, error }`
+- `syncHoldingPricesIfStale` performs auth + ownership checks, skips when `portfolios.last_synced_at` or latest `holdings.quote_as_of` is fresh, delegates stale refreshes to the existing `syncHoldingPricesInternal` path, and remains server-safe (no `revalidatePath`)
+- manual refresh behavior remains unchanged: `refreshHoldingPrices(portfolioId)` still uses the same sync path and performs route revalidation for button-driven flows
+- portfolio-backed pages no longer block the full page render on top-level sync; they now stream only isolated value surfaces with `Suspense` while rendering snapshot content immediately
+- `/portfolio` streams only the total-value card; import method, last analyzed, and top stories render from snapshot
+- `/feed` streams only the Active portfolio value card; coverage, analysis pulse, and feed list render from snapshot
+- `/analysis` streams only the right-side Portfolio snapshot panel; analysis run and insight priorities render from snapshot
+- `/portfolio/full` streams only the performance hero/chart and holdings block; sector cards and right-rail insight/advisor/latest-analysis blocks remain snapshot-based
+- added request-scoped cached server loaders in `lib/server/portfolio-refresh-loaders.ts` (`loadFreshOverviewAfterPriceSync`, `loadFreshFullPortfolioAfterPriceSync`) to run stale-only sync then fetch fresh DB data for streamed regions
+- full-portfolio streamed regions share one cached in-flight refresh promise per request to avoid duplicate quote-provider work when both hero and holdings refresh concurrently
+- added focused sync primitive coverage in `tests/portfolio-price-sync.test.ts` for stale-skip rules, stale refresh, no-holdings non-fatal behavior, provider-failure swallowing, auth/ownership protection, repeated-call suppression, and manual refresh behavior
+- added render-focused streaming tests in `tests/streamed-price-refresh-pages.test.tsx` covering localized Suspense fallbacks on `/portfolio`, `/feed`, `/analysis`, and `/portfolio/full`
+- added loader dedupe coverage in `tests/portfolio-refresh-loaders.test.ts` to assert a single sync/read pass for concurrent full-portfolio loader calls
 
 Important runtime note:
 

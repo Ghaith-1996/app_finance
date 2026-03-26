@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Suspense, use } from "react";
 
 import { ArrowRight, TrendingDown, TrendingUp } from "lucide-react";
 
@@ -11,8 +12,19 @@ import {
   getPortfolioOverview,
   getUserPortfolios,
 } from "@/lib/actions/portfolio";
+import { loadFreshOverviewAfterPriceSync } from "@/lib/server/portfolio-refresh-loaders";
 import type { PortfolioInsight } from "@/lib/types";
 import { formatCurrency, formatPercent, formatPrice } from "@/lib/utils";
+
+const FEED_OVERVIEW_FALLBACK = {
+  totalValue: 0,
+  dayChange: 0,
+  monthlyChange: 0,
+  lastSyncedAt: "—",
+  lastAnalyzedAt: "Never",
+  coverage: "0 high-signal stories",
+  primaryGoal: "Add a portfolio and run analysis.",
+};
 
 function parseCoverageCount(coverage: string): number {
   const m = coverage.match(/^(\d+)/);
@@ -48,15 +60,7 @@ export default async function FeedPage({
     portfolioId ? getPortfolioInsights(portfolioId) : { data: [], error: null },
   ]);
 
-  const portfolioOverview = overviewResult?.data ?? {
-    totalValue: 0,
-    dayChange: 0,
-    monthlyChange: 0,
-    lastSyncedAt: "—",
-    lastAnalyzedAt: "Never",
-    coverage: "0 high-signal stories",
-    primaryGoal: "Add a portfolio and run analysis.",
-  };
+  const portfolioOverview = overviewResult?.data ?? FEED_OVERVIEW_FALLBACK;
   const portfolioInsights: PortfolioInsight[] = insightsResult?.data ?? [];
 
   const storyCount = parseCoverageCount(portfolioOverview.coverage);
@@ -99,34 +103,9 @@ export default async function FeedPage({
             </div>
           </Panel>
 
-          <div className="flex flex-col justify-between rounded-2xl border border-white/[0.06] bg-surface-raised p-6">
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
-                Active portfolio value
-              </p>
-              <p className="mt-2 text-3xl font-semibold tracking-tight text-white">
-                {formatPrice(portfolioOverview.totalValue)}
-              </p>
-            </div>
-            <div
-              className={`mt-4 flex flex-wrap items-center gap-2 text-sm font-semibold ${
-                dayPct < 0
-                  ? "text-red-400"
-                  : dayPct > 0
-                    ? "text-emerald-400"
-                    : "text-slate-500"
-              }`}
-            >
-              {dayPct < 0 ? (
-                <TrendingDown className="h-4 w-4 shrink-0" />
-              ) : dayPct > 0 ? (
-                <TrendingUp className="h-4 w-4 shrink-0" />
-              ) : null}
-              <span>
-                {formatPercent(dayPct)} ({formatCurrency(Math.abs(dayDollar))})
-              </span>
-            </div>
-          </div>
+          <Suspense fallback={<ActivePortfolioValueCardFallback />}>
+            <RefreshedActivePortfolioValueCard portfolioId={portfolioId} />
+          </Suspense>
 
           <Panel className="space-y-3 rounded-2xl p-6">
             <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
@@ -154,5 +133,64 @@ export default async function FeedPage({
         />
       </div>
     </AppShell>
+  );
+}
+
+function RefreshedActivePortfolioValueCard({
+  portfolioId,
+}: {
+  portfolioId: string | null;
+}) {
+  if (!portfolioId) {
+    return <ActivePortfolioValueCard overview={FEED_OVERVIEW_FALLBACK} loading={false} />;
+  }
+
+  const freshOverview =
+    use(loadFreshOverviewAfterPriceSync(portfolioId)).data ?? FEED_OVERVIEW_FALLBACK;
+
+  return <ActivePortfolioValueCard overview={freshOverview} loading={false} />;
+}
+
+function ActivePortfolioValueCardFallback() {
+  return <ActivePortfolioValueCard overview={FEED_OVERVIEW_FALLBACK} loading />;
+}
+
+function ActivePortfolioValueCard({
+  overview,
+  loading,
+}: {
+  overview: { totalValue: number; dayChange: number };
+  loading: boolean;
+}) {
+  const dayPct = overview.dayChange;
+  const dayDollar = Math.round(overview.totalValue * (dayPct / 100) * 100) / 100;
+
+  return (
+    <div className="flex flex-col justify-between rounded-2xl border border-white/[0.06] bg-surface-raised p-6">
+      <div>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
+          Active portfolio value
+        </p>
+        <p className="mt-2 text-3xl font-semibold tracking-tight text-white">
+          {formatPrice(overview.totalValue)}
+        </p>
+      </div>
+      <div
+        className={`mt-4 flex flex-wrap items-center gap-2 text-sm font-semibold ${
+          dayPct < 0 ? "text-red-400" : dayPct > 0 ? "text-emerald-400" : "text-slate-500"
+        }`}
+      >
+        {dayPct < 0 ? (
+          <TrendingDown className="h-4 w-4 shrink-0" />
+        ) : dayPct > 0 ? (
+          <TrendingUp className="h-4 w-4 shrink-0" />
+        ) : null}
+        <span>
+          {loading
+            ? "Refreshing portfolio value..."
+            : `${formatPercent(dayPct)} (${formatCurrency(Math.abs(dayDollar))})`}
+        </span>
+      </div>
+    </div>
   );
 }

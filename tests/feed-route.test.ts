@@ -8,12 +8,56 @@ vi.mock("@/lib/supabase/server", () => ({
 
 import { GET } from "@/app/api/feed/route";
 
+function createAwaitableBuilder<T>(rows: T[]) {
+  const builder = {
+    eq: () => builder,
+    contains: () => builder,
+    gte: () => builder,
+    order: () => builder,
+    limit: () => builder,
+    select: () => builder,
+    single: async () => ({
+      data: rows[0] ?? null,
+      error: rows[0] ? null : { message: "Not found" },
+    }),
+    maybeSingle: async () => ({ data: rows[0] ?? null, error: null }),
+    then: (
+      onFulfilled: (value: { data: T[]; error: { message: string } | null }) => unknown,
+    ) => Promise.resolve({ data: rows, error: null as { message: string } | null }).then(onFulfilled),
+  };
+
+  return builder;
+}
+
 function createSupabaseMock(
   matchReasonCodes: string[] | null,
   matchSources: string[] | null = ["portfolio"],
   marketMatchMode: "tag" | "impact" = "tag",
   watchlistSymbols: string[] = [],
+  marketRows?: Array<Record<string, unknown>>,
 ) {
+  const resolvedMarketRows = marketRows ?? [
+    {
+      id: "news-market-1",
+      headline: "Apple demand improves",
+      source: "Wire",
+      url: null,
+      published_at: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
+      angle: null,
+      category: "technology",
+      stock_tags: marketMatchMode === "tag" ? ["AAPL"] : [],
+      global_summary: "global summary",
+      overall_effect: "bullish",
+      ticker_impacts:
+        marketMatchMode === "impact"
+          ? [{ symbol: "AAPL", effect: "bullish" }]
+          : [],
+      source_type: "newsapi",
+      metadata: {},
+      raw_content: "content",
+    },
+  ];
+
   return {
     auth: {
       getUser: vi.fn().mockResolvedValue({
@@ -46,64 +90,45 @@ function createSupabaseMock(
 
       if (table === "analysis_runs") {
         return {
-          select: () => ({
-            eq: () => ({
-              eq: () => ({
-                order: () => ({
-                  limit: () => ({
-                    maybeSingle: async () => ({ data: { id: "run-1" }, error: null }),
-                  }),
-                }),
-              }),
-            }),
-          }),
+          select: () => createAwaitableBuilder([{ id: "run-1" }]),
         };
       }
 
       if (table === "feed_items") {
+        const feedRows = [
+          {
+            id: "feed-1",
+            relevance_score: 81,
+            sentiment: "neutral",
+            impact: "Medium",
+            holdings: ["AAPL"],
+            sectors: ["Technology"],
+            ai_summary: "summary",
+            why_it_matters: "Apple may benefit from stronger device demand.",
+            matched_stock_tags: ["AAPL"],
+            match_reason_codes: matchReasonCodes,
+            match_sources: matchSources,
+            display_effect: "bullish",
+            source_confidence: "standard",
+            news_items: {
+              id: "news-1",
+              headline: "Apple demand improves",
+              source: "Wire",
+              url: null,
+              published_at: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
+              angle: null,
+              category: "technology",
+              stock_tags: ["AAPL"],
+              global_summary: "global summary",
+              overall_effect: "bullish",
+              ticker_impacts: [{ symbol: "AAPL", effect: "bullish" }],
+              source_type: "newsapi",
+              metadata: {},
+            },
+          },
+        ];
         return {
-          select: () => ({
-            eq: () => ({
-              eq: () => ({
-                order: () =>
-                  Promise.resolve({
-                    data: [
-                      {
-                        id: "feed-1",
-                        relevance_score: 81,
-                        sentiment: "neutral",
-                        impact: "Medium",
-                        holdings: ["AAPL"],
-                        sectors: ["Technology"],
-                        ai_summary: "summary",
-                        why_it_matters: "Apple may benefit from stronger device demand.",
-                        matched_stock_tags: ["AAPL"],
-                        match_reason_codes: matchReasonCodes,
-                        match_sources: matchSources,
-                        display_effect: "bullish",
-                        source_confidence: "standard",
-                        news_items: {
-                          id: "news-1",
-                          headline: "Apple demand improves",
-                          source: "Wire",
-                          url: null,
-                          published_at: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
-                          angle: null,
-                          category: "technology",
-                          stock_tags: ["AAPL"],
-                          global_summary: "global summary",
-                          overall_effect: "bullish",
-                          ticker_impacts: [{ symbol: "AAPL", effect: "bullish" }],
-                          source_type: "newsapi",
-                          metadata: {},
-                        },
-                      },
-                    ],
-                    error: null,
-                  }),
-              }),
-            }),
-          }),
+          select: () => createAwaitableBuilder(feedRows),
         };
       }
 
@@ -131,36 +156,7 @@ function createSupabaseMock(
 
       if (table === "news_items") {
         return {
-          select: () => ({
-            gte: () => ({
-              order: () => ({
-                limit: async () => ({
-                  data: [
-                    {
-                      id: "news-market-1",
-                      headline: "Apple demand improves",
-                      source: "Wire",
-                      url: null,
-                      published_at: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
-                      angle: null,
-                      category: "technology",
-                      stock_tags: marketMatchMode === "tag" ? ["AAPL"] : [],
-                      global_summary: "global summary",
-                      overall_effect: "bullish",
-                      ticker_impacts:
-                        marketMatchMode === "impact"
-                          ? [{ symbol: "AAPL", effect: "bullish" }]
-                          : [],
-                      source_type: "newsapi",
-                      metadata: {},
-                      raw_content: "content",
-                    },
-                  ],
-                  error: null,
-                }),
-              }),
-            }),
-          }),
+          select: () => createAwaitableBuilder(resolvedMarketRows),
         };
       }
 
@@ -267,5 +263,109 @@ describe("GET /api/feed market mode", () => {
     const body = await res.json();
 
     expect(body.feed[0].isWatchlistMatch).toBe(true);
+  });
+
+  it("filters market stories by ticker across both stock tags and ticker impacts", async () => {
+    currentSupabaseMock = createSupabaseMock(
+      null,
+      null,
+      "tag",
+      [],
+      [
+        {
+          id: "news-market-1",
+          headline: "Apple tag story",
+          source: "Wire",
+          url: null,
+          published_at: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
+          angle: null,
+          category: "technology",
+          stock_tags: ["AAPL"],
+          global_summary: "global summary",
+          overall_effect: "bullish",
+          ticker_impacts: [],
+          source_type: "newsapi",
+          metadata: {},
+          raw_content: "content",
+        },
+        {
+          id: "news-market-2",
+          headline: "Apple impact story",
+          source: "Wire",
+          url: null,
+          published_at: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
+          angle: null,
+          category: "technology",
+          stock_tags: [],
+          global_summary: "global summary",
+          overall_effect: "neutral",
+          ticker_impacts: [{ symbol: "AAPL", effect: "bullish" }],
+          source_type: "gnews",
+          metadata: {},
+          raw_content: "content",
+        },
+        {
+          id: "news-market-3",
+          headline: "Microsoft story",
+          source: "Wire",
+          url: null,
+          published_at: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+          angle: null,
+          category: "technology",
+          stock_tags: ["MSFT"],
+          global_summary: "global summary",
+          overall_effect: "neutral",
+          ticker_impacts: [],
+          source_type: "newsapi",
+          metadata: {},
+          raw_content: "content",
+        },
+      ],
+    );
+
+    const res = await GET(
+      new Request("http://localhost/api/feed?mode=market&portfolioId=p1&ticker=aapl"),
+    );
+    const body = await res.json();
+
+    expect(body.feed).toHaveLength(2);
+    expect(body.feed.map((item: { headline: string }) => item.headline)).toEqual([
+      "Apple tag story",
+      "Apple impact story",
+    ]);
+    expect(body.totalCount).toBe(2);
+    expect(body.totalPages).toBe(1);
+  });
+
+  it("paginates the market feed after applying filters", async () => {
+    const pagedRows = Array.from({ length: 55 }, (_, index) => ({
+      id: `news-market-${index + 1}`,
+      headline: `Story ${index + 1}`,
+      source: "Wire",
+      url: null,
+      published_at: new Date(Date.now() - index * 60_000).toISOString(),
+      angle: null,
+      category: "technology",
+      stock_tags: index % 2 === 0 ? ["AAPL"] : [],
+      global_summary: "global summary",
+      overall_effect: "neutral",
+      ticker_impacts: [],
+      source_type: "newsapi",
+      metadata: {},
+      raw_content: "content",
+    }));
+    currentSupabaseMock = createSupabaseMock(null, null, "tag", [], pagedRows);
+
+    const res = await GET(
+      new Request("http://localhost/api/feed?mode=market&portfolioId=p1&page=2&pageSize=50"),
+    );
+    const body = await res.json();
+
+    expect(body.page).toBe(2);
+    expect(body.pageSize).toBe(50);
+    expect(body.totalCount).toBe(55);
+    expect(body.totalPages).toBe(2);
+    expect(body.feed).toHaveLength(5);
+    expect(body.feed[0].headline).toBe("Story 51");
   });
 });

@@ -5,7 +5,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
   ChevronDown,
-  FileText,
   MessageSquare,
   RefreshCw,
   ShieldCheck,
@@ -22,11 +21,16 @@ import { NewsFeedCard } from "@/components/app/news-feed-card";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonStyles } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
-import type { FeedMode, NewsItem, PortfolioInsight } from "@/lib/types";
+import {
+  NEWS_CATEGORIES,
+  type ArticleChatModelTier,
+  type FeedMode,
+  type NewsItem,
+  type PortfolioInsight,
+} from "@/lib/types";
 import {
   INGEST_SOURCE_KEYS,
   INGEST_SOURCE_LABELS,
-  isMarketHeadlineSource,
 } from "@/lib/services/news/source-config";
 import {
   categoryLabel,
@@ -60,10 +64,13 @@ const selectTriggerClass =
   "w-full min-w-0 appearance-none rounded-xl border border-white/10 bg-surface-raised py-2.5 pl-3 pr-9 text-sm font-medium text-slate-200 shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20";
 
 const DESKTOP_CHAT_BREAKPOINT = 1280;
+const MARKET_PAGE_SIZE = 50;
 const DEFAULT_CHAT_ACTIVITY: ArticleChatActivityState = {
   hasMessages: false,
   hasDraft: false,
 };
+const REALTIME_REFRESH_DEBOUNCE_MS = 800;
+type FeedChatContext = "story" | "general";
 
 export function FeedView({
   portfolioId,
@@ -77,8 +84,10 @@ export function FeedView({
 }) {
   const [mode, setMode] = useState<FeedMode>("personal");
   const [feed, setFeed] = useState<NewsItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [backgroundError, setBackgroundError] = useState<string | null>(null);
   const [visibleCount, setVisibleCount] = useState(8);
   const [portfolioSymbols, setPortfolioSymbols] = useState<string[]>([]);
   const [portfolioSectors, setPortfolioSectors] = useState<string[]>([]);
@@ -91,16 +100,22 @@ export function FeedView({
   const [selectedSourceType, setSelectedSourceType] = useState(
     sourceTypeOptions[0].label,
   );
+  const [tickerInput, setTickerInput] = useState("");
+  const [appliedTickerQuery, setAppliedTickerQuery] = useState("");
 
   // Shared filters
   const [selectedCategory, setSelectedCategory] = useState("All categories");
   const [selectedRecency, setSelectedRecency] = useState(recencyOptions[0].label);
+  const [page, setPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
   const [selectedStoryId, setSelectedStoryId] = useState<string | null>(null);
   const [lastIngestHint, setLastIngestHint] = useState<LastIngestSnapshot | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
+  const [chatContext, setChatContext] = useState<FeedChatContext>("story");
   const [chatActivity, setChatActivity] = useState<ArticleChatActivityState>(
     DEFAULT_CHAT_ACTIVITY,
   );
+  const [selectedChatTier, setSelectedChatTier] = useState<ArticleChatModelTier>("free");
   const [pendingStoryId, setPendingStoryId] = useState<string | null>(null);
   const [switchConfirmOpen, setSwitchConfirmOpen] = useState(false);
   const [isDesktopChatLayout, setIsDesktopChatLayout] = useState(
@@ -111,6 +126,9 @@ export function FeedView({
   );
 
   const loadingRef = useRef(false);
+  const queuedSilentRefreshRef = useRef(false);
+  const realtimeRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasLoadedFeedRef = useRef(false);
   const initialSymbolAppliedRef = useRef(false);
 
   useEffect(() => {
@@ -143,6 +161,7 @@ export function FeedView({
 
   useEffect(() => {
     setVisibleCount(8);
+    setPage(1);
   }, [
     mode,
     selectedHolding,
@@ -150,49 +169,147 @@ export function FeedView({
     selectedCategory,
     selectedRecency,
     selectedSourceType,
+    appliedTickerQuery,
   ]);
 
-  const fetchFeed = useCallback(async () => {
-    if (loadingRef.current) return;
-    loadingRef.current = true;
-    setLoading(true);
-    setError(null);
-    try {
-      const params = new URLSearchParams();
-      params.set("mode", mode);
-      if (portfolioId) params.set("portfolioId", portfolioId);
-      const res = await fetch(`/api/feed?${params.toString()}`);
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setError(data.error ?? "Failed to load feed");
-        setFeed([]);
+  const fetchFeed = useCallback(
+    async ({ silent = false }: { silent?: boolean } = {}) => {
+      if (loadingRef.current) {
+        if (silent && hasLoadedFeedRef.current) {
+          queuedSilentRefreshRef.current = true;
+        }
         return;
       }
-      const newFeed: NewsItem[] = data.feed ?? [];
-      setFeed(newFeed);
-      setPortfolioSymbols(
-        Array.isArray(data.portfolioSymbols)
-          ? data.portfolioSymbols.filter((symbol: unknown): symbol is string => typeof symbol === "string")
-          : [],
-      );
-      setPortfolioSectors(
-        Array.isArray(data.portfolioSectors)
-          ? data.portfolioSectors.filter((sector: unknown): sector is string => typeof sector === "string")
-          : [],
-      );
-      setSelectedStoryId((prev) => {
-        if (prev && newFeed.some((item) => item.id === prev)) return prev;
-        return null;
-      });
-    } finally {
-      setLoading(false);
-      loadingRef.current = false;
-    }
-  }, [portfolioId, mode]);
+
+      loadingRef.current = true;
+      const showInlineRefresh = silent || hasLoadedFeedRef.current;
+      if (showInlineRefresh) {
+        setIsRefreshing(true);
+      } else {
+        setIsInitialLoading(true);
+      }
+      if (!silent) {
+        setError(null);
+      }
+      setBackgroundError(null);
+
+      try {
+        const recencyMax =
+          recencyOptions.find((option) => option.label === selectedRecency)
+            ?.maxMinutes ?? FEED_HARD_CAP_MINUTES;
+        const params = new URLSearchParams();
+        params.set("mode", mode);
+        if (portfolioId) params.set("portfolioId", portfolioId);
+        params.set("maxMinutes", String(recencyMax));
+        if (mode === "market") {
+          params.set("page", String(page));
+          params.set("pageSize", String(MARKET_PAGE_SIZE));
+          if (selectedCategory !== "All categories") {
+            params.set("category", selectedCategory);
+          }
+          const sourceValue =
+            sourceTypeOptions.find((option) => option.label === selectedSourceType)?.value ?? "";
+          if (sourceValue) {
+            params.set("sourceType", sourceValue);
+          }
+          if (appliedTickerQuery.trim()) {
+            params.set("ticker", appliedTickerQuery.trim().toUpperCase());
+          }
+        }
+        const res = await fetch(`/api/feed?${params.toString()}`);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          const message = data.error ?? "Failed to load feed";
+          if (silent && hasLoadedFeedRef.current) {
+            setBackgroundError(message);
+            return;
+          }
+          setError(message);
+          setFeed([]);
+          setTotalCount(0);
+          hasLoadedFeedRef.current = false;
+          return;
+        }
+        const newFeed: NewsItem[] = data.feed ?? [];
+        setFeed(newFeed);
+        setTotalCount(
+          typeof data.totalCount === "number" ? data.totalCount : newFeed.length,
+        );
+        if (mode === "market" && typeof data.page === "number") {
+          setPage(data.page);
+        }
+        setPortfolioSymbols(
+          Array.isArray(data.portfolioSymbols)
+            ? data.portfolioSymbols.filter((symbol: unknown): symbol is string => typeof symbol === "string")
+            : [],
+        );
+        setPortfolioSectors(
+          Array.isArray(data.portfolioSectors)
+            ? data.portfolioSectors.filter((sector: unknown): sector is string => typeof sector === "string")
+            : [],
+        );
+        setSelectedStoryId((prev) => {
+          if (prev && newFeed.some((item) => item.id === prev)) return prev;
+          return null;
+        });
+        setError(null);
+        setBackgroundError(null);
+        hasLoadedFeedRef.current = true;
+      } catch (fetchError) {
+        const message =
+          fetchError instanceof Error ? fetchError.message : "Failed to load feed";
+        if (silent && hasLoadedFeedRef.current) {
+          setBackgroundError(message);
+          return;
+        }
+        setError(message);
+        setFeed([]);
+        setTotalCount(0);
+        hasLoadedFeedRef.current = false;
+      } finally {
+        if (showInlineRefresh) {
+          setIsRefreshing(false);
+        } else {
+          setIsInitialLoading(false);
+        }
+        loadingRef.current = false;
+        if (queuedSilentRefreshRef.current) {
+          queuedSilentRefreshRef.current = false;
+          void fetchFeed({ silent: true });
+        }
+      }
+    },
+    [
+      mode,
+      page,
+      portfolioId,
+      appliedTickerQuery,
+      selectedCategory,
+      selectedRecency,
+      selectedSourceType,
+    ],
+  );
 
   useEffect(() => {
-    fetchFeed();
+    void fetchFeed();
   }, [fetchFeed]);
+
+  const scheduleSilentRefresh = useCallback(() => {
+    if (realtimeRefreshTimerRef.current) return;
+    realtimeRefreshTimerRef.current = setTimeout(() => {
+      realtimeRefreshTimerRef.current = null;
+      void fetchFeed({ silent: true });
+    }, REALTIME_REFRESH_DEBOUNCE_MS);
+  }, [fetchFeed]);
+
+  useEffect(() => {
+    return () => {
+      if (realtimeRefreshTimerRef.current) {
+        clearTimeout(realtimeRefreshTimerRef.current);
+        realtimeRefreshTimerRef.current = null;
+      }
+    };
+  }, []);
 
   // Realtime subscription only matters in personal mode
   useEffect(() => {
@@ -209,23 +326,32 @@ export function FeedView({
           filter: `portfolio_id=eq.${portfolioId}`,
         },
         () => {
-          fetchFeed();
+          scheduleSilentRefresh();
         },
       )
       .subscribe();
     return () => {
+      if (realtimeRefreshTimerRef.current) {
+        clearTimeout(realtimeRefreshTimerRef.current);
+        realtimeRefreshTimerRef.current = null;
+      }
       supabase.removeChannel(channel);
     };
-  }, [portfolioId, mode, fetchFeed]);
+  }, [portfolioId, mode, scheduleSilentRefresh]);
 
   function handleModeChange(newMode: FeedMode) {
     setMode(newMode);
     setSelectedHolding("All holdings");
     setSelectedSector("All sectors");
     setSelectedSourceType(sourceTypeOptions[0].label);
+    setTickerInput("");
+    setAppliedTickerQuery("");
     setSelectedCategory("All categories");
     setSelectedRecency(recencyOptions[0].label);
+    setPage(1);
+    setTotalCount(0);
     setSelectedStoryId(null);
+    resetChatSurface();
   }
 
   // --- Derived filter options ---
@@ -245,11 +371,11 @@ export function FeedView({
     [portfolioSectors],
   );
   const categoryOptions = useMemo(
-    () => [
-      "All categories",
-      ...new Set(feed.map((s) => s.category).filter(Boolean)),
-    ],
-    [feed],
+    () =>
+      mode === "market"
+        ? ["All categories", ...NEWS_CATEGORIES]
+        : ["All categories", ...new Set(feed.map((s) => s.category).filter(Boolean))],
+    [feed, mode],
   );
 
   // --- Client-side filtering ---
@@ -278,16 +404,7 @@ export function FeedView({
         return matchesHolding && matchesSector && matchesCategory && matchesRecency;
       }
 
-      // Market mode
-      const sourceVal =
-        sourceTypeOptions.find((o) => o.label === selectedSourceType)?.value ??
-        "";
-      const matchesSource =
-        !sourceVal ||
-        (sourceVal === "headlines"
-          ? isMarketHeadlineSource(story.sourceType)
-          : story.sourceType === sourceVal);
-      return matchesSource && matchesCategory && matchesRecency;
+      return matchesCategory && matchesRecency;
     });
   }, [
     feed,
@@ -303,29 +420,44 @@ export function FeedView({
     if (portfolioSymbols.length === 0) return "All portfolio";
     return `All portfolio (${portfolioSymbols.length} holding${portfolioSymbols.length === 1 ? "" : "s"})`;
   }, [portfolioSymbols]);
-
-  const visibleStories = useMemo(
-    () => filteredStories.slice(0, visibleCount),
-    [filteredStories, visibleCount],
-  );
-  const remainingStories = Math.max(0, filteredStories.length - visibleCount);
+  const totalPages = Math.max(1, Math.ceil(totalCount / MARKET_PAGE_SIZE));
+  const visibleStories = useMemo(() => {
+    if (mode === "market") return filteredStories;
+    return filteredStories.slice(0, visibleCount);
+  }, [filteredStories, mode, visibleCount]);
+  const remainingStories = mode === "market"
+    ? 0
+    : Math.max(0, filteredStories.length - visibleCount);
+  const hasActiveMarketFilters =
+    mode === "market" &&
+    (selectedSourceType !== sourceTypeOptions[0].label ||
+      selectedCategory !== "All categories" ||
+      selectedRecency !== recencyOptions[0].label ||
+      appliedTickerQuery.trim().length > 0);
 
   const selectedStory = selectedStoryId
-    ? filteredStories.find((s) => s.id === selectedStoryId) ??
-      filteredStories[0] ??
+    ? visibleStories.find((s) => s.id === selectedStoryId) ??
+      visibleStories[0] ??
       null
     : null;
   const chatHasActivity = chatActivity.hasMessages || chatActivity.hasDraft;
-  const showDesktopChat = Boolean(chatOpen && selectedStory && isDesktopChatLayout);
-  const showMobileChat = Boolean(chatOpen && selectedStory && !isDesktopChatLayout);
+  const chatStory = chatContext === "story" ? selectedStory : null;
+  const isStoryChatOpen = Boolean(chatOpen && chatStory);
+  const showDesktopChat = Boolean(chatOpen && isDesktopChatLayout);
+  const showMobileChat = Boolean(chatOpen && !isDesktopChatLayout);
 
-  useEffect(() => {
-    if (selectedStory) return;
+  const resetChatSurface = useCallback(() => {
     setChatOpen(false);
+    setChatContext("story");
     setChatActivity(DEFAULT_CHAT_ACTIVITY);
     setPendingStoryId(null);
     setSwitchConfirmOpen(false);
-  }, [selectedStory]);
+  }, []);
+
+  useEffect(() => {
+    if (chatContext !== "story" || !chatOpen || selectedStory) return;
+    resetChatSurface();
+  }, [chatContext, chatOpen, resetChatSurface, selectedStory]);
 
   useEffect(() => {
     if (!showMobileChat || typeof document === "undefined") return undefined;
@@ -348,7 +480,7 @@ export function FeedView({
     (storyId: string) => {
       if (storyId === selectedStoryId) return;
 
-      if (chatOpen && chatHasActivity) {
+      if (chatOpen && chatContext === "story" && chatHasActivity) {
         setPendingStoryId(storyId);
         setSwitchConfirmOpen(true);
         return;
@@ -356,30 +488,36 @@ export function FeedView({
 
       setSelectedStoryId(storyId);
     },
-    [chatHasActivity, chatOpen, selectedStoryId],
+    [chatContext, chatHasActivity, chatOpen, selectedStoryId],
   );
 
   const handleCloseStory = useCallback(() => {
     setSelectedStoryId(null);
-    setChatOpen(false);
+    setPendingStoryId(null);
+    setSwitchConfirmOpen(false);
+    if (chatContext === "story") {
+      resetChatSurface();
+    }
+  }, [chatContext, resetChatSurface]);
+
+  const handleGlobalAskAiClick = useCallback(() => {
+    const nextContext: FeedChatContext = selectedStory ? "story" : "general";
+
+    if (chatOpen && chatContext === nextContext) {
+      resetChatSurface();
+      return;
+    }
+
+    setChatContext(nextContext);
+    setChatOpen(true);
     setChatActivity(DEFAULT_CHAT_ACTIVITY);
     setPendingStoryId(null);
     setSwitchConfirmOpen(false);
-  }, []);
+  }, [chatContext, chatOpen, resetChatSurface, selectedStory]);
 
   const handleToggleChat = useCallback(() => {
-    if (!selectedStory) return;
-
-    setChatOpen((open) => {
-      const next = !open;
-      if (!next) {
-        setChatActivity(DEFAULT_CHAT_ACTIVITY);
-        setPendingStoryId(null);
-        setSwitchConfirmOpen(false);
-      }
-      return next;
-    });
-  }, [selectedStory]);
+    handleGlobalAskAiClick();
+  }, [handleGlobalAskAiClick]);
 
   const handleCancelStorySwitch = useCallback(() => {
     setPendingStoryId(null);
@@ -397,13 +535,14 @@ export function FeedView({
     setSelectedHolding("All holdings");
     setSelectedSector("All sectors");
     setSelectedSourceType(sourceTypeOptions[0].label);
+    setTickerInput("");
+    setAppliedTickerQuery("");
     setSelectedCategory("All categories");
     setSelectedRecency(recencyOptions[0].label);
+    setPage(1);
+    setTotalCount(0);
     setSelectedStoryId(null);
-    setChatOpen(false);
-    setChatActivity(DEFAULT_CHAT_ACTIVITY);
-    setPendingStoryId(null);
-    setSwitchConfirmOpen(false);
+    resetChatSurface();
   }
 
   // --- Render ---
@@ -415,12 +554,12 @@ export function FeedView({
           Error
         </Badge>
         <p className="text-slate-400">{error}</p>
-        <Button onClick={fetchFeed}>Retry</Button>
+        <Button onClick={() => void fetchFeed()}>Retry</Button>
       </Panel>
     );
   }
 
-  if (loading) {
+  if (isInitialLoading) {
     return (
       <Panel className="space-y-4 border-white/[0.06] bg-surface-raised p-8 text-center">
         <p className="text-slate-400">Loading feed…</p>
@@ -482,7 +621,7 @@ export function FeedView({
                 </label>
               </div>
             ) : (
-              <div className="grid flex-1 gap-4 sm:grid-cols-3 lg:max-w-3xl lg:justify-self-end">
+              <div className="grid flex-1 gap-4 sm:grid-cols-2 lg:max-w-4xl lg:grid-cols-4 lg:justify-self-end">
                 <label className="block min-w-0 space-y-1.5">
                   <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
                     Source
@@ -540,6 +679,26 @@ export function FeedView({
                     <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
                   </div>
                 </label>
+                <label className="block min-w-0 space-y-1.5">
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                    Ticker
+                  </span>
+                  <input
+                    className="w-full rounded-xl border border-white/10 bg-surface-raised px-3 py-2.5 text-sm text-slate-200 shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+                    placeholder="e.g. NVDA"
+                    value={tickerInput}
+                    onChange={(e) => setTickerInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        const normalizedTicker = tickerInput.trim().toUpperCase();
+                        setTickerInput(normalizedTicker);
+                        setAppliedTickerQuery(normalizedTicker);
+                        setPage(1);
+                      }
+                    }}
+                  />
+                </label>
               </div>
             )}
           </div>
@@ -593,7 +752,10 @@ export function FeedView({
               </div>
             </details>
           ) : null}
-          <div className="mt-3 flex justify-end">
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-h-[1.25rem] text-xs font-medium text-slate-400" aria-live="polite">
+              {isRefreshing ? "Updating..." : backgroundError ? `Update paused: ${backgroundError}` : null}
+            </div>
             <button
               type="button"
               onClick={resetFilters}
@@ -605,10 +767,10 @@ export function FeedView({
           </div>
         </div>
 
-        {filteredStories.length === 0 ? (
+        {visibleStories.length === 0 ? (
           <FeedEmptyState
             mode={mode}
-            hasAnyData={feed.length > 0}
+            hasAnyData={mode === "market" ? hasActiveMarketFilters : feed.length > 0}
             onResetFilters={resetFilters}
             lastIngestHint={lastIngestHint}
           />
@@ -635,50 +797,82 @@ export function FeedView({
                 <ChevronDown className="h-4 w-4" />
               </button>
             ) : null}
+            {mode === "market" && totalPages > 1 ? (
+              <div className="flex items-center justify-between gap-3 text-sm text-slate-400">
+                <span>
+                  Page {page} of {totalPages} · Showing {feed.length} of {totalCount} articles
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={page <= 1}
+                    onClick={() => setPage((currentPage) => Math.max(1, currentPage - 1))}
+                    className={cn(
+                      buttonStyles({ variant: "ghost", className: "h-9 px-3" }),
+                      "disabled:opacity-40",
+                    )}
+                  >
+                    Previous
+                  </button>
+                  <button
+                    type="button"
+                    disabled={page >= totalPages}
+                    onClick={() =>
+                      setPage((currentPage) => Math.min(totalPages, currentPage + 1))
+                    }
+                    className={cn(
+                      buttonStyles({ variant: "ghost", className: "h-9 px-3" }),
+                      "disabled:opacity-40",
+                    )}
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </div>
         )}
       </div>
 
       <div className="flex flex-col gap-5">
+        <FeedMomentumCard insights={insights} />
+        <GlobalAskAiButton
+          hasSelectedStory={Boolean(selectedStory)}
+          isOpen={chatOpen}
+          onClick={handleGlobalAskAiClick}
+        />
         {selectedStory ? (
-          <>
-            <DetailPanel
-              story={selectedStory}
-              mode={mode}
-              isChatOpen={chatOpen}
-              onToggleChat={handleToggleChat}
-              onClose={handleCloseStory}
-            />
-            <FeedMomentumCard insights={insights} />
-          </>
-        ) : (
-          <>
-            <FeedMomentumCard insights={insights} />
-            <DetailPanel
-              story={selectedStory}
-              mode={mode}
-              isChatOpen={chatOpen}
-              onToggleChat={handleToggleChat}
-              onClose={handleCloseStory}
-            />
-          </>
-        )}
+          <DetailPanel
+            story={selectedStory}
+            mode={mode}
+            isChatOpen={isStoryChatOpen}
+            onToggleChat={handleToggleChat}
+            onClose={handleCloseStory}
+          />
+        ) : null}
       </div>
-      {showDesktopChat && selectedStory ? (
+      {showDesktopChat ? (
         <StoryChatSidebar
-          story={selectedStory}
+          context={chatContext}
+          story={chatStory}
           portfolioId={portfolioId}
-          onClose={() => setChatOpen(false)}
+          selectedTier={selectedChatTier}
+          onSelectedTierChange={setSelectedChatTier}
+          onClose={resetChatSurface}
           onActivityChange={handleChatActivityChange}
         />
       ) : null}
       </div>
 
-      {showMobileChat && selectedStory ? (
+
+      {showMobileChat ? (
         <StoryChatMobileSheet
-          story={selectedStory}
+          context={chatContext}
+          story={chatStory}
           portfolioId={portfolioId}
-          onClose={() => setChatOpen(false)}
+          selectedTier={selectedChatTier}
+          onSelectedTierChange={setSelectedChatTier}
+          onClose={resetChatSurface}
           onActivityChange={handleChatActivityChange}
         />
       ) : null}
@@ -793,28 +987,34 @@ function FeedMomentumCard({ insights }: { insights: PortfolioInsight[] }) {
 }
 
 function StoryChatHeader({
-  headline,
+  context,
+  story,
   onClose,
 }: {
-  headline: string;
+  context: FeedChatContext;
+  story: NewsItem | null;
   onClose: () => void;
 }) {
+  const isStoryContext = context === "story" && story;
+
   return (
     <div className="flex items-start justify-between gap-4">
       <div className="space-y-2">
         <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-brand">
-          Story chat
+          {isStoryContext ? "Story chat" : "Portfolio / market chat"}
         </p>
         <h2 className="text-lg font-semibold leading-snug tracking-tight text-white">
-          {headline}
+          {isStoryContext ? story.headline : "No active article"}
         </h2>
         <p className="text-sm leading-6 text-slate-400">
-          Ask follow-up questions without leaving the article detail view.
+          {isStoryContext
+            ? "Ask follow-up questions about the selected story without leaving the feed."
+            : "Ask about your portfolio, watchlist, or today's market, then select a story any time to switch into article context."}
         </p>
       </div>
       <button
         type="button"
-        aria-label="Close story chat"
+        aria-label="Close Ask AI chat"
         className="shrink-0 rounded-full border border-white/10 bg-white/5 p-2 text-slate-500 transition hover:bg-white/10 hover:text-slate-300"
         onClick={onClose}
       >
@@ -825,26 +1025,37 @@ function StoryChatHeader({
 }
 
 function StoryChatSidebar({
+  context,
   story,
   portfolioId,
+  selectedTier,
+  onSelectedTierChange,
   onClose,
   onActivityChange,
 }: {
-  story: NewsItem;
+  context: FeedChatContext;
+  story: NewsItem | null;
   portfolioId?: string | null;
+  selectedTier: ArticleChatModelTier;
+  onSelectedTierChange: (tier: ArticleChatModelTier) => void;
   onClose: () => void;
   onActivityChange: (state: ArticleChatActivityState) => void;
 }) {
+  const isStoryContext = context === "story" && story;
+
   return (
     <Panel
       data-testid="story-chat-sidebar"
       className="hidden h-fit space-y-5 rounded-2xl border-white/[0.06] bg-surface-raised p-6 shadow-sm xl:sticky xl:top-28 xl:block"
     >
-      <StoryChatHeader headline={story.headline} onClose={onClose} />
+      <StoryChatHeader context={context} story={story} onClose={onClose} />
       <ArticleChatPanel
         portfolioId={portfolioId}
-        newsItemId={story.newsItemId}
-        headline={story.headline}
+        newsItemId={isStoryContext ? story.newsItemId : undefined}
+        headline={isStoryContext ? story.headline : "No active article"}
+        contextMode={isStoryContext ? "story" : "general"}
+        selectedTier={selectedTier}
+        onSelectedTierChange={onSelectedTierChange}
         onActivityChange={onActivityChange}
         showHeader={false}
         className="border-0 bg-transparent p-0"
@@ -854,16 +1065,24 @@ function StoryChatSidebar({
 }
 
 function StoryChatMobileSheet({
+  context,
   story,
   portfolioId,
+  selectedTier,
+  onSelectedTierChange,
   onClose,
   onActivityChange,
 }: {
-  story: NewsItem;
+  context: FeedChatContext;
+  story: NewsItem | null;
   portfolioId?: string | null;
+  selectedTier: ArticleChatModelTier;
+  onSelectedTierChange: (tier: ArticleChatModelTier) => void;
   onClose: () => void;
   onActivityChange: (state: ArticleChatActivityState) => void;
 }) {
+  const isStoryContext = context === "story" && story;
+
   return (
     <div
       data-testid="story-chat-sheet"
@@ -871,24 +1090,27 @@ function StoryChatMobileSheet({
     >
       <button
         type="button"
-        aria-label="Close story chat"
+        aria-label="Close Ask AI chat"
         className="absolute inset-0 bg-black/55 backdrop-blur-sm"
         onClick={onClose}
       />
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="Story chat"
+        aria-label="Ask AI chat"
         className="absolute right-0 top-0 flex h-full w-full max-w-xl flex-col border-l border-white/10 bg-background shadow-2xl"
       >
         <div className="flex-1 overflow-y-auto px-5 py-6">
           <div className="rounded-2xl border border-white/[0.06] bg-surface-raised p-5 shadow-sm">
-            <StoryChatHeader headline={story.headline} onClose={onClose} />
+            <StoryChatHeader context={context} story={story} onClose={onClose} />
             <div className="mt-5">
               <ArticleChatPanel
                 portfolioId={portfolioId}
-                newsItemId={story.newsItemId}
-                headline={story.headline}
+                newsItemId={isStoryContext ? story.newsItemId : undefined}
+                headline={isStoryContext ? story.headline : "No active article"}
+                contextMode={isStoryContext ? "story" : "general"}
+                selectedTier={selectedTier}
+                onSelectedTierChange={onSelectedTierChange}
                 onActivityChange={onActivityChange}
                 showHeader={false}
                 className="border-0 bg-transparent p-0"
@@ -898,6 +1120,45 @@ function StoryChatMobileSheet({
         </div>
       </div>
     </div>
+  );
+}
+
+function GlobalAskAiButton({
+  hasSelectedStory,
+  isOpen,
+  onClick,
+}: {
+  hasSelectedStory: boolean;
+  isOpen: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <Panel className="border-white/[0.06] bg-surface-raised p-4 shadow-sm">
+      <button
+        type="button"
+        data-testid="global-ask-ai-button"
+        aria-label="Open Ask AI chat"
+        onClick={onClick}
+        className="flex w-full items-center justify-between gap-3 rounded-2xl border border-brand/25 bg-brand/10 px-4 py-4 text-left text-white transition hover:border-brand/40 hover:bg-brand/15"
+      >
+        <span className="flex items-center gap-3">
+          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-brand text-[#080c11] shadow-[0_0_20px_rgba(16,185,129,0.2)]">
+            <MessageSquare className="h-4 w-4" />
+          </span>
+          <span className="space-y-1">
+            <span className="block text-sm font-semibold uppercase tracking-[0.18em] text-brand">
+              Ask AI
+            </span>
+            <span className="block text-sm text-slate-300">
+              {hasSelectedStory ? "Use the selected story as context." : "Open a portfolio or market-wide conversation."}
+            </span>
+          </span>
+        </span>
+        <span className="text-sm font-semibold text-white/90">
+          {isOpen ? "Close" : hasSelectedStory ? "Selected story" : "No article selected"}
+        </span>
+      </button>
+    </Panel>
   );
 }
 
@@ -990,7 +1251,7 @@ function DetailPanel({
   onToggleChat,
   onClose,
 }: {
-  story: NewsItem | null;
+  story: NewsItem;
   mode: FeedMode;
   isChatOpen: boolean;
   onToggleChat: () => void;
@@ -998,25 +1259,8 @@ function DetailPanel({
 }) {
   const isMarket = mode === "market";
 
-  if (!story) {
-    return (
-      <div className="flex h-fit min-h-[320px] flex-col items-center justify-center rounded-2xl border-2 border-dashed border-white/10 bg-surface-raised/50 px-6 py-12 text-center xl:sticky xl:top-28">
-        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-white/5">
-          <FileText className="h-7 w-7 text-slate-500" />
-        </div>
-        <h2 className="mt-6 text-lg font-semibold text-white">
-          Pick a story to dive deep
-        </h2>
-        <p className="mt-3 max-w-xs text-sm leading-relaxed text-slate-500">
-          Selecting an article will reveal institutional-grade breakdown, relevance
-          summary, and why it&apos;s trending in your signal feed.
-        </p>
-      </div>
-    );
-  }
-
   return (
-    <Panel className="h-fit space-y-5 rounded-2xl border-white/[0.06] bg-surface-raised p-6 shadow-sm xl:sticky xl:top-28">
+    <Panel className="h-fit space-y-5 rounded-2xl border-white/[0.06] bg-surface-raised p-6 shadow-sm">
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-2">
           <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
@@ -1128,7 +1372,7 @@ function DetailPanel({
               onClick={onToggleChat}
             >
               <MessageSquare className="mr-2 h-4 w-4" />
-              {isChatOpen ? "Hide story chat" : "Ask AI about this story"}
+              {isChatOpen ? "Hide Ask AI" : "Ask AI about this story"}
             </Button>
           </div>
 

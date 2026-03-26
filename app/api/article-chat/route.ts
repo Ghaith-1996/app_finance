@@ -1,17 +1,30 @@
+import { computePortfolioOverview } from "@/lib/services/portfolio";
 import { createClient } from "@/lib/supabase/server";
 import {
   AIChatError,
-  getAIProvider,
+  getAIProviderById,
   toArticleChatError,
 } from "@/lib/services/ai";
 import type { AIChatErrorCode } from "@/lib/services/ai";
 import { createLogger } from "@/lib/logger";
-import type { ArticleChatMessage, NewsCategory, TickerImpact } from "@/lib/types";
+import type {
+  ArticleChatMessage,
+  ArticleChatModelTier,
+  NewsCategory,
+  TickerImpact,
+} from "@/lib/types";
 
 const log = createLogger("article-chat");
 
-function deploymentLabelForLogs(): string {
-  const id = (process.env.AI_PROVIDER ?? "openrouter").toLowerCase();
+type ArticleChatProviderId = "azure" | "openrouter";
+type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
+type ChatHistoryItem = Pick<ArticleChatMessage, "role" | "content">;
+
+function providerIdForTier(tier: ArticleChatModelTier): ArticleChatProviderId {
+  return tier === "premium" ? "azure" : "openrouter";
+}
+
+function deploymentLabelForLogs(id: ArticleChatProviderId): string {
   if (id === "azure") {
     return (
       process.env.AZURE_OPENAI_MODEL?.trim() ||
@@ -19,9 +32,37 @@ function deploymentLabelForLogs(): string {
       "azure"
     );
   }
-  if (id === "openai") return "gpt-4o-mini";
-  if (id === "anthropic") return "claude-3-5-haiku-20241022";
   return process.env.OPENROUTER_MODEL?.trim() || "openrouter-default";
+}
+
+function parseModelTier(value: unknown): ArticleChatModelTier | null {
+  if (value == null) return "free";
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "free" || normalized === "premium") {
+    return normalized;
+  }
+  return null;
+}
+
+function parseHistory(value: unknown): ChatHistoryItem[] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .filter(
+      (item): item is { role: "user" | "assistant"; content: string } =>
+        !!item &&
+        typeof item === "object" &&
+        (((item as { role?: unknown }).role === "user") ||
+          ((item as { role?: unknown }).role === "assistant")) &&
+        typeof (item as { content?: unknown }).content === "string" &&
+        (item as { content: string }).content.trim().length > 0,
+    )
+    .slice(-12)
+    .map((item) => ({
+      role: item.role,
+      content: item.content.trim(),
+    }));
 }
 
 function userFacingMessage(code: AIChatErrorCode): string {
@@ -36,6 +77,34 @@ function userFacingMessage(code: AIChatErrorCode): string {
     default:
       return "Article chat is temporarily unavailable. Please try again later.";
   }
+}
+
+function buildEphemeralMessages(
+  history: ChatHistoryItem[],
+  question: string,
+  answer: string,
+): ArticleChatMessage[] {
+  const createdAt = new Date().toISOString();
+  return [
+    ...history.map((item, index) => ({
+      id: `history-${index}-${item.role}`,
+      role: item.role,
+      content: item.content,
+      createdAt,
+    })),
+    {
+      id: `user-${Date.now()}`,
+      role: "user",
+      content: question,
+      createdAt,
+    },
+    {
+      id: `assistant-${Date.now() + 1}`,
+      role: "assistant",
+      content: answer,
+      createdAt,
+    },
+  ];
 }
 
 type ThreadRow = {
@@ -64,7 +133,7 @@ async function requireAuthedContext() {
 }
 
 async function verifyPortfolioOwnership(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: SupabaseClient,
   portfolioId: string,
   userId: string,
 ) {
@@ -79,7 +148,7 @@ async function verifyPortfolioOwnership(
 }
 
 async function getOrCreateThread(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: SupabaseClient,
   userId: string,
   portfolioId: string,
   newsItemId: string,
@@ -123,7 +192,7 @@ async function getOrCreateThread(
 }
 
 async function loadMessages(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: SupabaseClient,
   threadId: string,
 ): Promise<ArticleChatMessage[]> {
   const { data, error } = await supabase
@@ -144,8 +213,8 @@ async function loadMessages(
   }));
 }
 
-async function loadPromptContext(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+async function loadArticlePromptContext(
+  supabase: SupabaseClient,
   portfolioId: string,
   newsItemId: string,
 ) {
@@ -241,6 +310,161 @@ async function loadPromptContext(
   };
 }
 
+async function loadPortfolioQuestionContext(
+  supabase: SupabaseClient,
+  portfolioId: string,
+  userId: string,
+) {
+  const [{ data: portfolio, error: portfolioError }, overview, holdingsResult, runResult, watchlistResult] =
+    await Promise.all([
+      supabase
+        .from("portfolios")
+        .select("id, name")
+        .eq("id", portfolioId)
+        .eq("user_id", userId)
+        .single(),
+      computePortfolioOverview(supabase, portfolioId),
+      supabase
+        .from("holdings")
+        .select("symbol, company, sector, quantity, average_cost, allocation, current_price, price, daily_change")
+        .eq("portfolio_id", portfolioId)
+        .order("allocation", { ascending: false }),
+      supabase
+        .from("analysis_runs")
+        .select("id")
+        .eq("portfolio_id", portfolioId)
+        .eq("status", "complete")
+        .order("completed_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabase.from("watchlist_items").select("symbol").eq("user_id", userId),
+    ]);
+
+  if (portfolioError || !portfolio) {
+    throw new Error(portfolioError?.message ?? "Portfolio not found");
+  }
+  if (holdingsResult.error) {
+    throw new Error(holdingsResult.error.message);
+  }
+  if (watchlistResult.error) {
+    throw new Error(watchlistResult.error.message);
+  }
+
+  const latestRunId = runResult.data?.id ?? null;
+  let insightsRows:
+    | Array<{ title: string; value: string; detail: string }>
+    | null = null;
+  let feedRows:
+    | Array<{
+        relevance_score: number | null;
+        why_it_matters: string | null;
+        holdings: string[] | null;
+        sectors: string[] | null;
+        news_items:
+          | {
+              headline: string | null;
+              source: string | null;
+              published_at: string | null;
+              category: string | null;
+            }
+          | Array<{
+              headline: string | null;
+              source: string | null;
+              published_at: string | null;
+              category: string | null;
+            }>
+          | null;
+      }>
+    | null = null;
+
+  if (latestRunId) {
+    const [insightsResult, feedResult] = await Promise.all([
+      supabase
+        .from("portfolio_insights")
+        .select("title, value, detail")
+        .eq("analysis_run_id", latestRunId)
+        .order("created_at", { ascending: true }),
+      supabase
+        .from("feed_items")
+        .select(`
+          relevance_score,
+          why_it_matters,
+          holdings,
+          sectors,
+          news_items (
+            headline,
+            source,
+            published_at,
+            category
+          )
+        `)
+        .eq("analysis_run_id", latestRunId)
+        .eq("portfolio_id", portfolioId)
+        .order("relevance_score", { ascending: false })
+        .order("created_at", { ascending: false })
+        .limit(6),
+    ]);
+
+    if (insightsResult.error) {
+      throw new Error(insightsResult.error.message);
+    }
+    if (feedResult.error) {
+      throw new Error(feedResult.error.message);
+    }
+
+    insightsRows = insightsResult.data;
+    feedRows = feedResult.data;
+  }
+
+  return {
+    portfolio: {
+      name: (portfolio.name as string | null) ?? "My Portfolio",
+      totalValue: overview.totalValue,
+      dayChange: overview.dayChange,
+      lastAnalyzedAt: overview.lastAnalyzedAt,
+      coverage: overview.coverage,
+      primaryGoal: overview.primaryGoal,
+    },
+    holdings: (holdingsResult.data ?? []).map((holding) => ({
+      symbol: (holding.symbol as string) ?? "",
+      company: (holding.company as string) ?? "",
+      sector: (holding.sector as string) ?? "Other",
+      quantity: Number(holding.quantity ?? 0),
+      averageCost: Number(holding.average_cost ?? 0),
+      allocation: Number(holding.allocation ?? 0),
+      price: Number(holding.current_price ?? holding.price ?? 0),
+      dayChange: Number(holding.daily_change ?? 0),
+    })),
+    insights: (insightsRows ?? []).map((item) => ({
+      title: item.title,
+      value: item.value,
+      detail: item.detail,
+    })),
+    feed: (feedRows ?? [])
+      .map((item) => {
+        const news = Array.isArray(item.news_items) ? item.news_items[0] : item.news_items;
+        if (!news) return null;
+
+        return {
+          headline: (news.headline as string) ?? "Untitled story",
+          source: (news.source as string) ?? "Unknown source",
+          publishedAt: (news.published_at as string) ?? new Date().toISOString(),
+          category: ((news.category as string) ?? "other") as NewsCategory,
+          whyItMatters: item.why_it_matters ?? "",
+          relevanceScore: Number(item.relevance_score ?? 0),
+          holdings: (item.holdings ?? []).map((value) => value.toUpperCase()),
+          sectors: item.sectors ?? [],
+        };
+      })
+      .filter((item): item is NonNullable<typeof item> => item !== null),
+    watchlistSymbols: [...new Set(
+      (watchlistResult.data ?? [])
+        .map((row) => String(row.symbol ?? "").toUpperCase())
+        .filter(Boolean),
+    )],
+  };
+}
+
 export async function GET(request: Request) {
   const { supabase, user, response } = await requireAuthedContext();
   if (response) return response;
@@ -271,7 +495,13 @@ export async function POST(request: Request) {
   const { supabase, user, response } = await requireAuthedContext();
   if (response) return response;
 
-  let body: { portfolioId?: string; newsItemId?: string; message?: string } = {};
+  let body: {
+    portfolioId?: string;
+    newsItemId?: string;
+    message?: string;
+    modelTier?: string;
+    history?: unknown;
+  } = {};
   try {
     body = await request.json();
   } catch {
@@ -281,9 +511,14 @@ export async function POST(request: Request) {
   const portfolioId = body.portfolioId?.trim();
   const newsItemId = body.newsItemId?.trim();
   const message = body.message?.trim();
+  const modelTier = parseModelTier(body.modelTier);
+  const history = parseHistory(body.history);
 
-  if (!portfolioId || !newsItemId || !message) {
-    return json({ error: "portfolioId, newsItemId, and message are required" }, 400);
+  if (!portfolioId || !message) {
+    return json({ error: "portfolioId and message are required" }, 400);
+  }
+  if (!modelTier) {
+    return json({ error: "modelTier must be 'free' or 'premium'" }, 400);
   }
 
   const ownsPortfolio = await verifyPortfolioOwnership(supabase, portfolioId, user.id);
@@ -291,7 +526,44 @@ export async function POST(request: Request) {
     return json({ error: "Portfolio not found" }, 404);
   }
 
+  const providerId = providerIdForTier(modelTier);
+  const ai = getAIProviderById(providerId);
+
   try {
+    if (!newsItemId) {
+      const promptContext = await loadPortfolioQuestionContext(supabase, portfolioId, user.id);
+
+      let answer: string;
+      try {
+        answer = await ai.answerPortfolioQuestion({
+          ...promptContext,
+          history,
+          question: message,
+        });
+      } catch (err) {
+        const aiErr = err instanceof AIChatError ? err : toArticleChatError(err);
+        log.error("General article-chat generation failed", {
+          code: aiErr.code,
+          tier: modelTier,
+          provider: providerId,
+          deployment: deploymentLabelForLogs(providerId),
+          message: aiErr.message,
+        });
+        return json(
+          {
+            error: userFacingMessage(aiErr.code),
+            code: aiErr.code,
+          },
+          503,
+        );
+      }
+
+      return json({
+        threadId: null,
+        messages: buildEphemeralMessages(history, message, answer),
+      });
+    }
+
     const threadId = await getOrCreateThread(supabase, user.id, portfolioId, newsItemId);
 
     const { error: insertUserError } = await supabase
@@ -307,26 +579,25 @@ export async function POST(request: Request) {
     }
 
     const recentMessages = await loadMessages(supabase, threadId);
-    const history = recentMessages.slice(-12).map((msg) => ({
-      role: msg.role,
-      content: msg.content,
-    }));
-    const promptContext = await loadPromptContext(supabase, portfolioId, newsItemId);
+    const promptContext = await loadArticlePromptContext(supabase, portfolioId, newsItemId);
 
-    const ai = getAIProvider();
     let answer: string;
     try {
       answer = await ai.answerArticleQuestion({
         ...promptContext,
-        history,
+        history: recentMessages.slice(-12).map((msg) => ({
+          role: msg.role,
+          content: msg.content,
+        })),
         question: message,
       });
     } catch (err) {
       const aiErr = err instanceof AIChatError ? err : toArticleChatError(err);
       log.error("Article chat generation failed", {
         code: aiErr.code,
-        provider: process.env.AI_PROVIDER ?? "openrouter",
-        deployment: deploymentLabelForLogs(),
+        tier: modelTier,
+        provider: providerId,
+        deployment: deploymentLabelForLogs(providerId),
         message: aiErr.message,
       });
       return json(

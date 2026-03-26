@@ -7,15 +7,47 @@ import type {
   TickerImpact,
 } from "@/lib/types";
 import { resolveDirectStockMatch } from "@/lib/services/news/direct-match";
+import { isMarketHeadlineSource } from "@/lib/services/news/source-config";
 
 /** Hard cap: only articles from the last 24 hours appear in either feed mode. */
 const FEED_MAX_AGE_MINUTES = 24 * 60;
+const DEFAULT_PAGE_SIZE = 50;
+const MIN_PAGE_SIZE = 10;
+const MAX_PAGE_SIZE = 100;
 
 function effectiveRecencyCap(maxMinutesParam: string | null): number {
   if (!maxMinutesParam) return FEED_MAX_AGE_MINUTES;
   const parsed = parseInt(maxMinutesParam, 10);
   if (Number.isNaN(parsed) || parsed < 0) return FEED_MAX_AGE_MINUTES;
   return Math.min(parsed, FEED_MAX_AGE_MINUTES);
+}
+
+function parsePage(pageParam: string | null): number {
+  const parsed = parseInt(pageParam ?? "", 10);
+  if (Number.isNaN(parsed) || parsed < 1) return 1;
+  return parsed;
+}
+
+function parsePageSize(pageSizeParam: string | null): number {
+  const parsed = parseInt(pageSizeParam ?? "", 10);
+  if (Number.isNaN(parsed) || parsed < 1) return DEFAULT_PAGE_SIZE;
+  return Math.min(MAX_PAGE_SIZE, Math.max(MIN_PAGE_SIZE, parsed));
+}
+
+function paginateRows<T>(rows: T[], page: number, pageSize: number) {
+  const totalCount = rows.length;
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  const currentPage = totalCount > 0 ? Math.min(page, totalPages) : 1;
+  const start = (currentPage - 1) * pageSize;
+  const end = start + pageSize;
+
+  return {
+    pageRows: rows.slice(start, end),
+    page: currentPage,
+    pageSize,
+    totalCount,
+    totalPages,
+  };
 }
 
 function minutesAgo(iso: string): number {
@@ -57,6 +89,9 @@ export async function GET(request: Request) {
     searchParams.get("mode") === "market" ? "market" : "personal";
   const category = searchParams.get("category");
   const maxMinutes = searchParams.get("maxMinutes");
+  const ticker = searchParams.get("ticker");
+  const page = parsePage(searchParams.get("page"));
+  const pageSize = parsePageSize(searchParams.get("pageSize"));
 
   // --- Resolve portfolio (needed by both modes for context) ---
   let portfolioId = searchParams.get("portfolioId");
@@ -123,6 +158,9 @@ export async function GET(request: Request) {
       category,
       maxMinutes,
       sourceType: searchParams.get("sourceType"),
+      ticker,
+      page,
+      pageSize,
     });
   }
 
@@ -137,6 +175,8 @@ export async function GET(request: Request) {
       sector: searchParams.get("sector"),
       category,
       maxMinutes,
+      page,
+      pageSize,
     });
   }
 
@@ -146,10 +186,20 @@ export async function GET(request: Request) {
       watchlistSymbols,
       category,
       maxMinutes,
+      page,
+      pageSize,
     });
   }
 
-  return json({ feed: [], portfolioId: null, mode });
+  return json({
+    feed: [],
+    portfolioId: null,
+    mode,
+    page: 1,
+    pageSize,
+    totalCount: 0,
+    totalPages: 1,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -167,6 +217,8 @@ async function handlePersonalMode(
     sector: string | null;
     category: string | null;
     maxMinutes: string | null;
+    page: number;
+    pageSize: number;
   },
 ) {
   const { data: latestRun } = await supabase
@@ -186,6 +238,10 @@ async function handlePersonalMode(
       portfolioSymbols: opts.portfolioSymbols,
       portfolioSectors: opts.portfolioSectors,
       watchlistSymbols: opts.watchlistSymbols,
+      page: 1,
+      pageSize: opts.pageSize,
+      totalCount: 0,
+      totalPages: 1,
     });
   }
 
@@ -309,15 +365,20 @@ async function handlePersonalMode(
     feed = feed.filter((item) => item.category === opts.category);
   }
   const cap = effectiveRecencyCap(opts.maxMinutes);
-  feed = feed.filter((item) => item.publishedMinutesAgo <= cap);
+  const filteredFeed = feed.filter((item) => item.publishedMinutesAgo <= cap);
+  const paginated = paginateRows(filteredFeed, opts.page, opts.pageSize);
 
   return json({
-    feed,
+    feed: paginated.pageRows,
     portfolioId: opts.portfolioId,
     mode: "personal" as const,
     portfolioSymbols: opts.portfolioSymbols,
     portfolioSectors: opts.portfolioSectors,
     watchlistSymbols: opts.watchlistSymbols,
+    page: paginated.page,
+    pageSize: paginated.pageSize,
+    totalCount: paginated.totalCount,
+    totalPages: paginated.totalPages,
   });
 }
 
@@ -331,6 +392,8 @@ async function handleWatchlistOnlyMode(
     watchlistSymbols: string[];
     category: string | null;
     maxMinutes: string | null;
+    page: number;
+    pageSize: number;
   },
 ) {
   const wlSet = new Set(opts.watchlistSymbols.map((s) => s.toUpperCase()));
@@ -346,12 +409,7 @@ async function handleWatchlistOnlyMode(
       "global_summary, overall_effect, ticker_impacts, source_type, metadata, raw_content",
     )
     .gte("published_at", publishedSince)
-    .order("published_at", { ascending: false })
-    .limit(100);
-
-  if (opts.category) {
-    query = query.eq("category", opts.category);
-  }
+    .order("published_at", { ascending: false });
 
   const { data: rows, error } = await query;
   if (error) {
@@ -375,7 +433,10 @@ async function handleWatchlistOnlyMode(
   };
 
   const rawRows = (rows ?? []) as unknown as NewsRow[];
-  const mappedRows: Array<NewsItem | null> = rawRows.map((row) => {
+  const categoryFilteredRows = opts.category
+    ? rawRows.filter((row) => row.category === opts.category)
+    : rawRows;
+  const mappedRows: Array<NewsItem | null> = categoryFilteredRows.map((row) => {
       const publishedAt = row.published_at ?? new Date().toISOString();
       const directMatch = resolveDirectStockMatch(
         row.stock_tags ?? [],
@@ -413,20 +474,27 @@ async function handleWatchlistOnlyMode(
       } satisfies NewsItem;
     });
 
-  let feed: NewsItem[] = mappedRows.filter(
+  const filteredFeed: NewsItem[] = mappedRows.filter(
     (item): item is NewsItem => item !== null,
   );
 
   const cap = effectiveRecencyCap(opts.maxMinutes);
-  feed = feed.filter((item) => item.publishedMinutesAgo <= cap);
+  const recencyFilteredFeed = filteredFeed.filter(
+    (item) => item.publishedMinutesAgo <= cap,
+  );
+  const paginated = paginateRows(recencyFilteredFeed, opts.page, opts.pageSize);
 
   return json({
-    feed,
+    feed: paginated.pageRows,
     portfolioId: null,
     mode: "personal" as const,
     portfolioSymbols: [],
     portfolioSectors: [],
     watchlistSymbols: opts.watchlistSymbols,
+    page: paginated.page,
+    pageSize: paginated.pageSize,
+    totalCount: paginated.totalCount,
+    totalPages: paginated.totalPages,
   });
 }
 
@@ -444,10 +512,14 @@ async function handleMarketMode(
     category: string | null;
     maxMinutes: string | null;
     sourceType: string | null;
+    ticker?: string | null;
+    page: number;
+    pageSize: number;
   },
 ) {
   const holdingSymbols = new Set(opts.portfolioSymbols.map((symbol) => symbol.toUpperCase()));
   const wlSymbols = new Set(opts.watchlistSymbols.map((symbol) => symbol.toUpperCase()));
+  const ticker = opts.ticker?.trim().toUpperCase() || null;
 
   const publishedSince = new Date(
     Date.now() - FEED_MAX_AGE_MINUTES * 60 * 1000,
@@ -460,13 +532,12 @@ async function handleMarketMode(
       "global_summary, overall_effect, ticker_impacts, source_type, metadata, raw_content",
     )
     .gte("published_at", publishedSince)
-    .order("published_at", { ascending: false })
-    .limit(60);
+    .order("published_at", { ascending: false });
 
   if (opts.category) {
     query = query.eq("category", opts.category);
   }
-  if (opts.sourceType) {
+  if (opts.sourceType && opts.sourceType !== "headlines") {
     query = query.eq("source_type", opts.sourceType);
   }
 
@@ -494,7 +565,28 @@ async function handleMarketMode(
   };
 
   const rawRows = (rows ?? []) as unknown as NewsRow[];
-  let feed = rawRows.map((row) => {
+  const sourceFilteredRows = !opts.sourceType
+    ? rawRows
+    : opts.sourceType === "headlines"
+      ? rawRows.filter((row) => isMarketHeadlineSource(row.source_type))
+      : rawRows.filter((row) => row.source_type === opts.sourceType);
+  const tickerFilteredRows = !ticker
+    ? sourceFilteredRows
+    : sourceFilteredRows.filter((row) => {
+        const tags = (row.stock_tags ?? []).map((symbol) => symbol.toUpperCase());
+        const impacts = (row.ticker_impacts ?? []).map((impact) =>
+          impact.symbol.toUpperCase(),
+        );
+        return tags.includes(ticker) || impacts.includes(ticker);
+      });
+  const cap = effectiveRecencyCap(opts.maxMinutes);
+  const recencyFilteredRows = tickerFilteredRows.filter((row) => {
+    const publishedAt = row.published_at ?? new Date().toISOString();
+    return minutesAgo(publishedAt) <= cap;
+  });
+  const paginated = paginateRows(recencyFilteredRows, opts.page, opts.pageSize);
+
+  const feed = paginated.pageRows.map((row) => {
     const publishedAt = row.published_at ?? new Date().toISOString();
     const portfolioDirectMatch = resolveDirectStockMatch(
       row.stock_tags ?? [],
@@ -538,9 +630,6 @@ async function handleMarketMode(
     };
   });
 
-  const cap = effectiveRecencyCap(opts.maxMinutes);
-  feed = feed.filter((item) => item.publishedMinutesAgo <= cap);
-
   return json({
     feed,
     portfolioId: opts.portfolioId,
@@ -548,5 +637,9 @@ async function handleMarketMode(
     portfolioSymbols: opts.portfolioSymbols,
     portfolioSectors: opts.portfolioSectors,
     watchlistSymbols: opts.watchlistSymbols,
+    page: paginated.page,
+    pageSize: paginated.pageSize,
+    totalCount: paginated.totalCount,
+    totalPages: paginated.totalPages,
   });
 }

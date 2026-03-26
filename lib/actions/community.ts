@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { FinnhubError, searchSymbols } from "@/lib/services/finnhub";
+import { verifyTurnstileToken } from "@/lib/security/turnstile";
 import type {
   CommunityPost,
   CommunityComment,
@@ -144,9 +145,12 @@ export async function getHomeFeed(cursor?: string): Promise<{
   return { posts, nextCursor };
 }
 
-export async function createPost(body: string): Promise<CreatePostResult> {
+export async function createPost(body: string, turnstileToken?: string): Promise<CreatePostResult> {
   const validationError = validatePostBody(body);
   if (validationError) return { ok: false, error: validationError };
+
+  const turnstile = await verifyTurnstileToken({ token: turnstileToken });
+  if (!turnstile.success) return { ok: false, error: turnstile.message };
 
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -232,9 +236,12 @@ export async function getPostComments(postId: string): Promise<CommunityComment[
   });
 }
 
-export async function createComment(postId: string, body: string): Promise<CreateCommentResult> {
+export async function createComment(postId: string, body: string, turnstileToken?: string): Promise<CreateCommentResult> {
   const validationError = validateCommentBody(body);
   if (validationError) return { ok: false, error: validationError };
+
+  const turnstile = await verifyTurnstileToken({ token: turnstileToken });
+  if (!turnstile.success) return { ok: false, error: turnstile.message };
 
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

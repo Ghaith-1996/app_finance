@@ -49,6 +49,17 @@ export function hasKey(name: string): boolean {
 export function checkOptionalProviders(): void {
   warnOnce("FINNHUB_API_KEY", "Watchlist search and Finnhub news");
   warnOnce("TWELVE_DATA_API_KEY", "Watchlist detail dashboard");
+  warnOnce("TURNSTILE_SECRET_KEY", "Turnstile bot protection on write endpoints");
+}
+
+/** True when TURNSTILE_SECRET_KEY is set (non-empty). */
+export function hasTurnstileSecret(): boolean {
+  return !!process.env.TURNSTILE_SECRET_KEY?.trim();
+}
+
+/** True when the client-side site key is set. */
+export function hasTurnstileSiteKey(): boolean {
+  return !!process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim();
 }
 
 const PLACEHOLDER_RE = /^your[- _]|^placeholder|^changeme|^sk-xxx|^xxx/i;

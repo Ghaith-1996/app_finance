@@ -6,6 +6,7 @@ import { ArrowLeft, Loader2, Send } from "lucide-react";
 import { getPostComments, createComment } from "@/lib/actions/community";
 import { validateCommentBody } from "@/lib/community/types";
 import type { CommunityComment } from "@/lib/community/types";
+import { TurnstileBlock, useTurnstile } from "@/components/security/turnstile-widget";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -29,6 +30,7 @@ export function PostCommentsPanel({ postId, onClose }: Props) {
   const [body, setBody] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const turnstile = useTurnstile();
 
   useEffect(() => {
     setLoading(true);
@@ -38,19 +40,20 @@ export function PostCommentsPanel({ postId, onClose }: Props) {
   }, [postId]);
 
   const validation = validateCommentBody(body);
-  const canSubmit = !isPending && body.trim().length > 0 && !validation;
+  const canSubmit = !isPending && body.trim().length > 0 && !validation && turnstile.canSubmit;
 
   function handleSubmit() {
     if (!canSubmit) return;
     setError(null);
     startTransition(async () => {
-      const result = await createComment(postId, body);
+      const result = await createComment(postId, body, turnstile.token ?? undefined);
       if (result.ok && result.comment) {
         setComments((prev) => [...prev, result.comment!]);
         setBody("");
       } else {
         setError(result.error ?? "Failed to post comment.");
       }
+      turnstile.reset();
     });
   }
 
@@ -104,6 +107,7 @@ export function PostCommentsPanel({ postId, onClose }: Props) {
       {/* Composer */}
       <div className="border-t border-white/[0.06] p-3">
         {error && <p className="mb-2 text-[11px] text-red-400">{error}</p>}
+        <TurnstileBlock turnstile={turnstile} action="community-comment" />
         <div className="flex gap-2">
           <input
             type="text"

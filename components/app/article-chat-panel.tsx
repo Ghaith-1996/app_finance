@@ -6,6 +6,7 @@ import { Loader2, SendHorizonal, Sparkles } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { TurnstileBlock, useTurnstile } from "@/components/security/turnstile-widget";
 import type { ArticleChatMessage, ArticleChatModelTier } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -61,6 +62,7 @@ export function ArticleChatPanel({
   const [error, setError] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
+  const turnstile = useTurnstile();
 
   const disabled = !portfolioId;
   const isGeneralContext = contextMode === "general" || !newsItemId;
@@ -141,11 +143,13 @@ export function ArticleChatPanel({
         message: string;
         modelTier: ArticleChatModelTier;
         newsItemId?: string;
+        turnstileToken?: string;
         history: Array<Pick<ArticleChatMessage, "role" | "content">>;
       } = {
         portfolioId,
         message: trimmed,
         modelTier: selectedTier,
+        turnstileToken: turnstile.token ?? undefined,
         history: messages.map((entry) => ({ role: entry.role, content: entry.content })),
       };
       if (newsItemId) {
@@ -164,12 +168,17 @@ export function ArticleChatPanel({
       };
       if (!res.ok) {
         setErrorCode(data.code ?? null);
+        if (data.code === "turnstile_failed") {
+          turnstile.reset();
+        }
         throw new Error(data.error ?? "Failed to send message");
       }
       setMessages((data.messages ?? []) as ArticleChatMessage[]);
       setDraft("");
+      turnstile.reset();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to send message");
+      turnstile.reset();
     } finally {
       setSending(false);
     }
@@ -283,7 +292,7 @@ export function ArticleChatPanel({
                       key={question}
                       type="button"
                       onClick={() => void sendMessage(question)}
-                      disabled={sending}
+                      disabled={sending || !turnstile.canSubmit}
                       className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-slate-400 transition hover:border-brand/30 hover:text-slate-200"
                     >
                       {question}
@@ -306,10 +315,14 @@ export function ArticleChatPanel({
               placeholder={textareaPlaceholder}
               className="w-full rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-slate-200 outline-none transition focus:border-brand/40"
             />
+            <TurnstileBlock turnstile={turnstile} action="article-chat" />
             <div className="flex items-center justify-between gap-3">
               {error ? (
                 <div className="min-w-0 flex-1 space-y-1">
                   <p className="text-sm text-red-400">{error}</p>
+                  {errorCode === "turnstile_failed" && (
+                    <p className="text-xs text-slate-500">Your verification expired. Wait for it to refresh, then re-send.</p>
+                  )}
                   {errorCode === "provider_auth" && (
                     <p className="text-xs text-slate-500">Check that the selected AI tier is configured correctly in the server environment.</p>
                   )}
@@ -324,7 +337,7 @@ export function ArticleChatPanel({
               <Button
                 type="button"
                 onClick={() => void sendMessage(draft)}
-                disabled={sending || !draft.trim() || disabled}
+                disabled={sending || !draft.trim() || disabled || !turnstile.canSubmit}
               >
                 {sending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <SendHorizonal className="mr-2 h-4 w-4" />}
                 Send

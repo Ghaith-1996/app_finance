@@ -7,6 +7,25 @@ const supabaseMockState = vi.hoisted(() => ({
   removeChannel: vi.fn(),
 }));
 
+vi.mock("@/components/security/turnstile-widget", () => ({
+  TurnstileWidget: () => null,
+  TurnstileBlock: () => null,
+  useTurnstile: () => ({
+    status: "verified",
+    token: "test-token",
+    canSubmit: true,
+    statusMessage: null,
+    reset: vi.fn(),
+    widgetRef: { current: null },
+    widgetProps: {
+      onSuccess: vi.fn(),
+      onExpire: vi.fn(),
+      onError: vi.fn(),
+      onReady: vi.fn(),
+    },
+  }),
+}));
+
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
   useSearchParams: () => new URLSearchParams(),

@@ -1,6 +1,7 @@
 import { getAIProvider } from "@/lib/services/ai";
 import { computePortfolioOverview } from "@/lib/services/portfolio";
 import { createClient } from "@/lib/supabase/server";
+import { verifyTurnstileToken, getClientIp } from "@/lib/security/turnstile";
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -30,12 +31,21 @@ export async function POST(request: Request) {
     message?: string;
     history?: ChatHistoryItem[];
     watchlistSymbols?: string[];
+    turnstileToken?: string;
   } = {};
 
   try {
     body = await request.json();
   } catch {
     return json({ error: "Invalid JSON body" }, 400);
+  }
+
+  const turnstileResult = await verifyTurnstileToken({
+    token: body.turnstileToken,
+    remoteIp: getClientIp(request),
+  });
+  if (!turnstileResult.success) {
+    return json({ error: turnstileResult.message, code: "turnstile_failed" }, 403);
   }
 
   const portfolioId = body.portfolioId?.trim();

@@ -2,6 +2,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AIChatError } from "@/lib/services/ai/ai-chat-errors";
 
+// Always-pass Turnstile mock for route tests
+vi.mock("@/lib/security/turnstile", () => ({
+  verifyTurnstileToken: vi.fn().mockResolvedValue({ success: true }),
+  getClientIp: () => "127.0.0.1",
+}));
+
 const mockAnswerArticleQuestion = vi.fn();
 const mockAnswerPortfolioQuestion = vi.fn();
 const mockComputePortfolioOverview = vi.fn().mockResolvedValue({

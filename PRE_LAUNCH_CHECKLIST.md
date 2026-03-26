@@ -11,6 +11,8 @@
 - [ ] `EDGAR_IDENTITY` — required for SEC EDGAR fetcher
 - [ ] At least one AI provider key (`AI_PROVIDER` + matching key)
 - [ ] `CRON_SECRET` — if using unattended ingestion via `/api/news/cron`
+- [ ] `NEXT_PUBLIC_TURNSTILE_SITE_KEY` — Cloudflare Turnstile widget site key (client-side)
+- [ ] `TURNSTILE_SECRET_KEY` — Cloudflare Turnstile secret key (server-side only)
 - [ ] Vercel Project Settings includes all cron route env vars in the **Production** environment
 - [ ] GitHub repository secrets include `CRON_ENDPOINT`, `CRON_SECRET`, `NEXT_PUBLIC_SUPABASE_URL`, and `SUPABASE_SERVICE_ROLE_KEY`
 - [ ] GitHub repository secrets include any enabled source creds (`NEWSAPI_KEY`, `EDGAR_IDENTITY`, `FINNHUB_API_KEY`)
@@ -75,6 +77,8 @@ After deploy, verify each flow manually:
 - [ ] Clicking a watchlist item loads Twelve Data detail dashboard
 - [ ] Feed page loads personal and market feeds
 - [ ] Article chat creates thread and returns AI response
+- [ ] Turnstile widget renders on article chat, copilot, community post, and comment surfaces
+- [ ] Submitting without completing Turnstile challenge returns a clear error
 - [ ] Analysis pipeline completes: ingest → enrich → analyze
 - [ ] `workflow_dispatch` successfully runs `python -m workers.news_ingestion.cron_runner` in GitHub Actions
 - [ ] The workflow successfully `POST`s the generated payload to `/api/news/cron`

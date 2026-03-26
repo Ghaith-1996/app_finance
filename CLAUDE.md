@@ -1507,6 +1507,49 @@ Important implication:
 
 - service-role key is required for ingestion/upserts that bypass normal user ownership constraints
 
+## Bot Protection (Cloudflare Turnstile)
+
+Files:
+
+- `lib/security/turnstile.ts` — server-side Siteverify verification helper
+- `components/security/turnstile-widget.tsx` — reusable client widget + `useTurnstile` hook
+
+Protected surfaces:
+
+- `POST /api/article-chat` — AI chat generation (expensive, spammable)
+- `POST /api/portfolio-copilot` — AI portfolio Q&A (expensive, spammable)
+- `createPost()` server action — community post creation
+- `createComment()` server action — community comment creation
+
+Unprotected by design:
+
+- `POST /api/news/cron` — machine-to-machine, secured by `CRON_SECRET`
+- `POST /api/news/refresh`, `POST /api/news/ingest` — deprecated admin routes
+- `POST /api/analysis/run` — authenticated, low abuse risk
+- All GET/read-only routes
+- Portfolio import/save, profile completion — authenticated one-off workflows
+
+How it works:
+
+- client renders `<TurnstileWidget>` which loads Cloudflare's challenge script
+- on challenge completion, client receives a single-use token
+- client includes `turnstileToken` in the POST body (API routes) or as an argument (server actions)
+- server calls `verifyTurnstileToken()` before executing any side-effects
+- on failure: returns 403 (routes) or `{ ok: false, error }` (actions) without executing the action
+- tokens expire quickly and are single-use; the widget is reset after each submission
+
+Environment:
+
+- `NEXT_PUBLIC_TURNSTILE_SITE_KEY` — client widget
+- `TURNSTILE_SECRET_KEY` — server Siteverify
+- if secret is missing, verification fails closed (action blocked)
+- for local dev use Cloudflare always-pass test keys (see `.env.example`)
+
+Tests:
+
+- `tests/turnstile-verify.test.ts` — 17 tests for the verification helper
+- `tests/turnstile-protected-routes.test.ts` — 8 tests proving protected routes/actions reject without valid token
+
 ## Python Worker
 
 Location:
@@ -1588,6 +1631,16 @@ Common requirements:
 - `NEWS_PROVIDER`
 - `MARKETAUX_API_KEY`
 
+### Bot protection (Cloudflare Turnstile)
+
+- `NEXT_PUBLIC_TURNSTILE_SITE_KEY` — widget site key, client-side only
+- `TURNSTILE_SECRET_KEY` — Siteverify secret, server-side only
+
+For local dev / testing use Cloudflare's always-pass test keys:
+
+- site key: `1x00000000000000000000AA`
+- secret: `1x0000000000000000000000000000000AA`
+
 Reference:
 
 - `.env.example` is the current documented env template
@@ -1628,6 +1681,8 @@ Current files:
 - `profile-utils.test.ts`
 - `auth-callback-route.test.ts`
 - `user-menu.test.tsx`
+- `turnstile-verify.test.ts`
+- `turnstile-protected-routes.test.ts`
 
 Coverage themes:
 
@@ -1646,6 +1701,8 @@ Coverage themes:
 - structured logger (info/warn/error, scoped, data serialization)
 - env validation (require/missing, hasKey)
 - profile validation/completeness helpers, callback redirect gating, and avatar dropdown behavior
+- Turnstile server-side verification (success, failure, timeout/duplicate, network error, missing token/secret, action/hostname mismatch, idempotency key, client IP extraction)
+- Turnstile route/action protection gating (article-chat, portfolio-copilot, community post/comment reject without valid token)
 
 Known testing limitation:
 

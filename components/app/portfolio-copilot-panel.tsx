@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { Loader2, SendHorizonal, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { TurnstileBlock, useTurnstile } from "@/components/security/turnstile-widget";
 
 type ChatMessage = {
   id: string;
@@ -29,6 +30,8 @@ export function PortfolioCopilotPanel({
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
+  const turnstile = useTurnstile();
 
   const starterQuestions = useMemo(() => STARTER_QUESTIONS, []);
 
@@ -46,6 +49,7 @@ export function PortfolioCopilotPanel({
     setDraft("");
     setSending(true);
     setError(null);
+    setErrorCode(null);
 
     try {
       const res = await fetch("/api/portfolio-copilot", {
@@ -55,6 +59,7 @@ export function PortfolioCopilotPanel({
           portfolioId,
           message: trimmed,
           watchlistSymbols,
+          turnstileToken: turnstile.token ?? undefined,
           history: messages
             .concat(nextUserMessage)
             .slice(-10)
@@ -65,9 +70,14 @@ export function PortfolioCopilotPanel({
       const data = (await res.json().catch(() => ({}))) as {
         answer?: string;
         error?: string;
+        code?: string;
       };
 
       if (!res.ok || !data.answer) {
+        setErrorCode(data.code ?? null);
+        if (data.code === "turnstile_failed") {
+          turnstile.reset();
+        }
         throw new Error(data.error ?? "Failed to get copilot answer");
       }
 
@@ -79,10 +89,12 @@ export function PortfolioCopilotPanel({
           content: data.answer ?? "",
         },
       ]);
+      turnstile.reset();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to get copilot answer");
       setMessages((current) => current.filter((item) => item.id !== nextUserMessage.id));
       setDraft(trimmed);
+      turnstile.reset();
     } finally {
       setSending(false);
     }
@@ -130,7 +142,7 @@ export function PortfolioCopilotPanel({
                   key={question}
                   type="button"
                   onClick={() => void sendMessage(question)}
-                  disabled={sending}
+                  disabled={sending || !turnstile.canSubmit}
                   className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-2 text-left text-sm text-slate-400 transition hover:border-brand/30 hover:text-slate-200"
                 >
                   {question}
@@ -149,12 +161,20 @@ export function PortfolioCopilotPanel({
           placeholder="Ask anything about your portfolio or watchlist."
           className="w-full rounded-[1.5rem] border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-slate-200 outline-none transition focus:border-brand/40"
         />
+        <TurnstileBlock turnstile={turnstile} action="portfolio-copilot" />
         <div className="flex items-center justify-between gap-3">
-          {error ? <p className="text-sm text-red-400">{error}</p> : <span />}
+          {error ? (
+            <div className="min-w-0 flex-1 space-y-1">
+              <p className="text-sm text-red-400">{error}</p>
+              {errorCode === "turnstile_failed" && (
+                <p className="text-xs text-slate-500">Your verification expired. Wait for it to refresh, then re-send.</p>
+              )}
+            </div>
+          ) : <span />}
           <Button
             type="button"
             onClick={() => void sendMessage(draft)}
-            disabled={sending || !draft.trim()}
+            disabled={sending || !draft.trim() || !turnstile.canSubmit}
           >
             {sending ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />

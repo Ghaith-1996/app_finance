@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { Send } from "lucide-react";
 
 import { createPost } from "@/lib/actions/community";
+import { TurnstileBlock, useTurnstile } from "@/components/security/turnstile-widget";
 import {
   extractHashtags,
   extractTickerHashtags,
@@ -21,24 +22,26 @@ export function PostComposer({ onPostCreated }: Props) {
   const [body, setBody] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const turnstile = useTurnstile();
 
   const tickers = [...new Set([...extractTickers(body), ...extractTickerHashtags(body)])];
   const hashtags = extractHashtags(body);
   const charCount = body.trim().length;
   const validationError = validatePostBody(body);
-  const canSubmit = !isPending && charCount > 0 && !validationError;
+  const canSubmit = !isPending && charCount > 0 && !validationError && turnstile.canSubmit;
 
   function handleSubmit() {
     if (!canSubmit) return;
     setError(null);
     startTransition(async () => {
-      const result = await createPost(body);
+      const result = await createPost(body, turnstile.token ?? undefined);
       if (result.ok && result.post) {
         onPostCreated(result.post);
         setBody("");
       } else {
         setError(result.error ?? "Failed to post.");
       }
+      turnstile.reset();
     });
   }
 
@@ -73,6 +76,8 @@ export function PostComposer({ onPostCreated }: Props) {
           ))}
         </div>
       )}
+
+      <TurnstileBlock turnstile={turnstile} action="community-post" />
 
       <div className="mt-3 flex items-center justify-between">
         <span className={cn("text-[11px]", charCount > 1800 ? "text-amber-400" : "text-slate-600")}>

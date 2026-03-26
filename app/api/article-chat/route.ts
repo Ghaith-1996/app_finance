@@ -7,6 +7,7 @@ import {
 } from "@/lib/services/ai";
 import type { AIChatErrorCode } from "@/lib/services/ai";
 import { createLogger } from "@/lib/logger";
+import { verifyTurnstileToken, getClientIp } from "@/lib/security/turnstile";
 import type {
   ArticleChatMessage,
   ArticleChatModelTier,
@@ -506,11 +507,20 @@ export async function POST(request: Request) {
     message?: string;
     modelTier?: string;
     history?: unknown;
+    turnstileToken?: string;
   } = {};
   try {
     body = await request.json();
   } catch {
     return json({ error: "Invalid JSON body" }, 400);
+  }
+
+  const turnstileResult = await verifyTurnstileToken({
+    token: body.turnstileToken,
+    remoteIp: getClientIp(request),
+  });
+  if (!turnstileResult.success) {
+    return json({ error: turnstileResult.message, code: "turnstile_failed" }, 403);
   }
 
   const portfolioId = body.portfolioId?.trim();

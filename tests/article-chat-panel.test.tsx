@@ -2,6 +2,25 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { type ComponentProps, useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("@/components/security/turnstile-widget", () => ({
+  TurnstileWidget: () => null,
+  TurnstileBlock: () => null,
+  useTurnstile: () => ({
+    status: "verified",
+    token: "test-token",
+    canSubmit: true,
+    statusMessage: null,
+    reset: vi.fn(),
+    widgetRef: { current: null },
+    widgetProps: {
+      onSuccess: vi.fn(),
+      onExpire: vi.fn(),
+      onError: vi.fn(),
+      onReady: vi.fn(),
+    },
+  }),
+}));
+
 import { ArticleChatPanel } from "@/components/app/article-chat-panel";
 import type { ArticleChatModelTier } from "@/lib/types";
 

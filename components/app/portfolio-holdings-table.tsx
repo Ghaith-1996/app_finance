@@ -13,10 +13,12 @@ type SortKey =
   | "symbol"
   | "quantity"
   | "averageCost"
+  | "costBasis"
   | "price"
   | "dailyChange"
   | "value"
-  | "gainLoss";
+  | "gainLoss"
+  | "gainLossPercent";
 
 type SortDir = "asc" | "desc";
 
@@ -24,10 +26,12 @@ const COLUMNS: Array<{ key: SortKey; label: string; align?: "left" | "right" }> 
   { key: "symbol", label: "Holding" },
   { key: "quantity", label: "Shares" },
   { key: "averageCost", label: "Avg Cost" },
+  { key: "costBasis", label: "Cost Basis", align: "right" },
   { key: "price", label: "Price" },
   { key: "dailyChange", label: "Day %" },
   { key: "value", label: "Value", align: "right" },
   { key: "gainLoss", label: "Gain/Loss", align: "right" },
+  { key: "gainLossPercent", label: "Gain/Loss %", align: "right" },
 ];
 
 const inputClass =
@@ -52,6 +56,18 @@ function getHoldingGainLoss(holding: Holding) {
   return value - costBasis;
 }
 
+function getHoldingCostBasis(holding: Holding) {
+  return holding.costBasis > 0 ? holding.costBasis : holding.averageCost * holding.quantity;
+}
+
+function getHoldingGainLossPercent(holding: Holding) {
+  const value = getHoldingValue(holding);
+  const costBasis =
+    holding.costBasis > 0 ? holding.costBasis : holding.averageCost * holding.quantity;
+  if (costBasis <= 0) return 0;
+  return ((value - costBasis) / costBasis) * 100;
+}
+
 function getSortValue(holding: Holding, key: SortKey): number | string {
   switch (key) {
     case "symbol":
@@ -60,6 +76,8 @@ function getSortValue(holding: Holding, key: SortKey): number | string {
       return holding.quantity;
     case "averageCost":
       return holding.averageCost;
+    case "costBasis":
+      return getHoldingCostBasis(holding);
     case "price":
       return getHoldingPrice(holding);
     case "dailyChange":
@@ -68,6 +86,8 @@ function getSortValue(holding: Holding, key: SortKey): number | string {
       return getHoldingValue(holding);
     case "gainLoss":
       return getHoldingGainLoss(holding);
+    case "gainLossPercent":
+      return getHoldingGainLossPercent(holding);
   }
 }
 
@@ -294,7 +314,7 @@ export function PortfolioHoldingsTable({
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-[1.5fr_1fr_1fr_1fr_1fr_1.2fr_1.2fr] items-center px-6 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-600">
+      <div className="grid grid-cols-[1.5fr_1fr_1fr_1.2fr_1fr_1fr_1.2fr_1.1fr_1.1fr] items-center gap-x-4 px-6 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-600">
         {COLUMNS.map((column) => (
           <div
             key={column.key}
@@ -326,7 +346,9 @@ export function PortfolioHoldingsTable({
         {sortedHoldings.map((holding) => {
           const price = getHoldingPrice(holding);
           const value = getHoldingValue(holding);
+          const costBasis = getHoldingCostBasis(holding);
           const gainLoss = getHoldingGainLoss(holding);
+          const gainLossPercent = getHoldingGainLossPercent(holding);
           const dayChange = holding.dailyChange ?? 0;
           const isPositiveDay = dayChange >= 0;
           const isPositiveTotal = gainLoss >= 0;
@@ -338,7 +360,7 @@ export function PortfolioHoldingsTable({
                 type="button"
                 onClick={() => setOpenId((id) => (id === holding.id ? null : holding.id))}
                 className={cn(
-                  "grid w-full grid-cols-[1.5fr_1fr_1fr_1fr_1fr_1.2fr_1.2fr] items-center rounded-2xl border px-6 py-5 text-left transition-transform duration-200",
+                  "grid w-full grid-cols-[1.5fr_1fr_1fr_1.2fr_1fr_1fr_1.2fr_1.1fr_1.1fr] items-center gap-x-4 rounded-2xl border px-6 py-5 text-left transition-transform duration-200",
                   isOpen
                     ? "border-brand/40 bg-surface-raised shadow-[0_0_0_1px_rgba(34,197,94,0.12)]"
                     : "border-white/[0.06] bg-surface-raised hover:-translate-y-0.5 hover:border-white/10",
@@ -357,33 +379,44 @@ export function PortfolioHoldingsTable({
                     </p>
                   </div>
                 </div>
-                <div className="text-[14px] font-medium text-slate-400">
+                <div className="whitespace-nowrap text-[14px] font-medium text-slate-400">
                   {holding.quantity.toFixed(2)}
                 </div>
-                <div className="text-[14px] font-medium text-slate-400">
+                <div className="whitespace-nowrap text-[14px] font-medium text-slate-400">
                   {formatPrice(holding.averageCost)}
                 </div>
-                <div className="text-[14px] font-bold text-white">
+                <div className="whitespace-nowrap text-right text-[14px] font-bold text-slate-300">
+                  {formatPrice(costBasis)}
+                </div>
+                <div className="whitespace-nowrap text-[14px] font-bold text-white">
                   {formatPrice(price)}
                 </div>
                 <div
-                  className={`text-[14px] font-bold ${
+                  className={`whitespace-nowrap text-[14px] font-bold ${
                     isPositiveDay ? "text-emerald-400" : "text-red-400"
                   }`}
                 >
                   {isPositiveDay ? "+" : ""}
                   {dayChange.toFixed(2)}%
                 </div>
-                <div className="text-right text-[15px] font-bold text-white">
+                <div className="whitespace-nowrap text-right text-[15px] font-bold text-white">
                   {formatPrice(value)}
                 </div>
                 <div
-                  className={`text-right text-[15px] font-bold ${
+                  className={`whitespace-nowrap text-right text-[15px] font-bold ${
                     isPositiveTotal ? "text-emerald-400" : "text-red-400"
                   }`}
                 >
                   {isPositiveTotal ? "+" : ""}
                   {formatPrice(gainLoss)}
+                </div>
+                <div
+                  className={`whitespace-nowrap text-right text-[15px] font-bold ${
+                    isPositiveTotal ? "text-emerald-400" : "text-red-400"
+                  }`}
+                >
+                  {isPositiveTotal ? "+" : ""}
+                  {gainLossPercent.toFixed(2)}%
                 </div>
               </button>
 

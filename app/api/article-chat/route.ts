@@ -1,3 +1,8 @@
+import { PLAN_LABELS } from "@/lib/billing/plans";
+import {
+  BillingAccessError,
+  assertUserCanUseModelTier,
+} from "@/lib/billing/subscriptions";
 import { computePortfolioOverview } from "@/lib/services/portfolio";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -534,6 +539,24 @@ export async function POST(request: Request) {
   }
   if (!modelTier) {
     return json({ error: "modelTier must be 'free', 'premium', or 'ultimate'" }, 400);
+  }
+
+  try {
+    await assertUserCanUseModelTier(user.id, modelTier, supabase);
+  } catch (error) {
+    if (error instanceof BillingAccessError) {
+      return json(
+        {
+          error: `The ${modelTier} tier requires the ${PLAN_LABELS[error.requiredPlan]} plan.`,
+          code: error.code,
+          currentPlan: error.currentPlan,
+          requiredPlan: error.requiredPlan,
+          requestedTier: error.requestedTier,
+        },
+        403,
+      );
+    }
+    throw error;
   }
 
   const ownsPortfolio = await verifyPortfolioOwnership(supabase, portfolioId, user.id);

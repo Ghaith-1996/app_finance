@@ -6,8 +6,10 @@ import { ActivePortfolioValueCard } from "@/components/app/active-portfolio-valu
 import { AppShell } from "@/components/app/app-shell";
 import { FeedView } from "@/components/app/feed-view";
 import { buttonStyles } from "@/components/ui/button";
+import { getBillingSummaryForUser } from "@/lib/billing/subscriptions";
 import { Panel } from "@/components/ui/panel";
 import { loadFeedPageData } from "@/lib/server/page-loaders";
+import { createClient } from "@/lib/supabase/server";
 
 function parseCoverageCount(coverage: string): number {
   const match = coverage.match(/^(\d+)/);
@@ -42,6 +44,11 @@ export default async function FeedPage({
     portfolioInsights,
     initialFeedPayload,
   } = await loadFeedPageData();
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const billingSummary = user ? await getBillingSummaryForUser(user.id, supabase) : null;
 
   const storyCount = parseCoverageCount(portfolioOverview.coverage);
   const pulsePct = analysisPulseFill(portfolioOverview.lastAnalyzedAt);
@@ -107,6 +114,8 @@ export default async function FeedPage({
           insights={portfolioInsights}
           initialSymbol={initialSymbol}
           initialFeedPayload={initialFeedPayload}
+          allowedModelTiers={billingSummary?.allowedModelTiers}
+          defaultModelTier={billingSummary?.defaultModelTier}
         />
       </div>
     </AppShell>

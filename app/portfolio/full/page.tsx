@@ -12,6 +12,7 @@ import { PortfolioCopilotPanel } from "@/components/app/portfolio-copilot-panel"
 import { PortfolioPricingSection } from "@/components/app/portfolio-pricing-section";
 import { AppShell } from "@/components/app/app-shell";
 import { buttonStyles } from "@/components/ui/button";
+import { getCurrentUserBillingSummary } from "@/lib/billing/subscriptions";
 import { loadFullPortfolioPageData } from "@/lib/server/page-loaders";
 import type {
   Holding,
@@ -253,6 +254,7 @@ function buildInsightSummary(
 }
 
 export default async function FullPortfolioPage() {
+  const billingSummary = await getCurrentUserBillingSummary();
   const {
     showOnboardingNav,
     portfolioId,
@@ -426,7 +428,11 @@ export default async function FullPortfolioPage() {
               </div>
             </div>
 
-            <PortfolioCopilotPanel portfolioId={portfolioId} />
+            <PortfolioCopilotPanel
+              portfolioId={portfolioId}
+              allowedTiers={billingSummary.allowedModelTiers}
+              defaultModelTier={billingSummary.defaultModelTier}
+            />
 
             <div className="rounded-[2.5rem] border border-brand/15 bg-brand/10 p-8 shadow-sm">
               <p className="mb-3 text-[13px] font-bold text-brand">Emerald Advisor</p>

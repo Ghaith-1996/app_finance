@@ -38,8 +38,38 @@ let insertAssistantCalls = 0;
 let insertUserCalls = 0;
 const messageRows: Array<{ id: string; role: string; content: string; created_at: string }> = [];
 
-function createSupabaseMock(opts: { insertUserError?: Error | null }) {
+function createSupabaseMock(opts: {
+  insertUserError?: Error | null;
+  currentPlan?: "free" | "premium" | "ultimate";
+  currentStatus?: string;
+  hasUsedTrial?: boolean;
+}) {
   const threadId = "thread-1";
+  const currentPeriodEnd = new Date(Date.now() + 86_400_000).toISOString();
+  const subscriptionRows =
+    opts.currentPlan && opts.currentPlan !== "free"
+      ? [
+          {
+            id: "sub-row-1",
+            user_id: "user-1",
+            stripe_subscription_id: "sub_123",
+            stripe_customer_id: "cus_123",
+            stripe_price_id: opts.currentPlan === "premium" ? "price_premium" : "price_ultimate",
+            stripe_product_id: opts.currentPlan === "premium" ? "prod_premium" : "prod_ultimate",
+            plan_key: opts.currentPlan,
+            status: opts.currentStatus ?? "active",
+            current_period_start: new Date().toISOString(),
+            current_period_end: currentPeriodEnd,
+            cancel_at_period_end: false,
+            canceled_at: null,
+            trial_start: opts.hasUsedTrial ? new Date().toISOString() : null,
+            trial_end: opts.hasUsedTrial ? currentPeriodEnd : null,
+            raw: {},
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+        ]
+      : [];
   return {
     auth: {
       getUser: vi.fn().mockResolvedValue({
@@ -54,6 +84,32 @@ function createSupabaseMock(opts: { insertUserError?: Error | null }) {
             eq: () => ({
               eq: () => ({
                 single: async () => ({ data: { id: "p1" }, error: null }),
+              }),
+            }),
+          }),
+        };
+      }
+      if (table === "billing_customers") {
+        return {
+          select: () => ({
+            eq: () => ({
+              maybeSingle: async () => ({
+                data:
+                  subscriptionRows.length > 0
+                    ? { user_id: "user-1", stripe_customer_id: "cus_123" }
+                    : null,
+                error: null,
+              }),
+            }),
+          }),
+        };
+      }
+      if (table === "subscriptions") {
+        return {
+          select: () => ({
+            eq: () => ({
+              order: () => ({
+                order: async () => ({ data: subscriptionRows, error: null }),
               }),
             }),
           }),
@@ -291,7 +347,28 @@ describe("POST /api/article-chat", () => {
     expect(mockGetAIProviderById).toHaveBeenCalledWith("openrouter");
   });
 
+  it("returns 403 when a free user requests the premium tier", async () => {
+    const req = new Request("http://localhost/api/article-chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        portfolioId: "p1",
+        newsItemId: "n1",
+        message: "What matters here?",
+        modelTier: "premium",
+      }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(403);
+    const body = (await res.json()) as { code?: string; requiredPlan?: string };
+    expect(body.code).toBe("plan_upgrade_required");
+    expect(body.requiredPlan).toBe("premium");
+    expect(mockGetAIProviderById).not.toHaveBeenCalled();
+  });
+
   it("uses the premium tier provider when modelTier is premium", async () => {
+    currentSupabase = createSupabaseMock({ currentPlan: "premium" });
     mockAnswerArticleQuestion.mockResolvedValue("Premium-tier answer.");
 
     const req = new Request("http://localhost/api/article-chat", {
@@ -311,6 +388,7 @@ describe("POST /api/article-chat", () => {
   });
 
   it("uses the ultimate tier provider when modelTier is ultimate", async () => {
+    currentSupabase = createSupabaseMock({ currentPlan: "ultimate" });
     mockAnswerArticleQuestion.mockResolvedValue("Ultimate-tier answer.");
 
     const req = new Request("http://localhost/api/article-chat", {

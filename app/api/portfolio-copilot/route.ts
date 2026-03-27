@@ -1,4 +1,18 @@
-import { getAIProvider } from "@/lib/services/ai";
+import {
+  PLAN_LABELS,
+  parseModelTier,
+  providerIdForTier,
+} from "@/lib/billing/plans";
+import {
+  BillingAccessError,
+  assertUserCanUseModelTier,
+} from "@/lib/billing/subscriptions";
+import {
+  AIChatError,
+  getAIProviderById,
+  toArticleChatError,
+} from "@/lib/services/ai";
+import type { AIChatErrorCode } from "@/lib/services/ai";
 import { computePortfolioOverview } from "@/lib/services/portfolio";
 import { createClient } from "@/lib/supabase/server";
 import { verifyTurnstileToken, getClientIp } from "@/lib/security/turnstile";
@@ -15,6 +29,20 @@ type ChatHistoryItem = {
   content?: string;
 };
 
+function userFacingMessage(code: AIChatErrorCode): string {
+  switch (code) {
+    case "provider_auth":
+      return "AI provider credentials are invalid or missing. An admin needs to check the API key and deployment configuration.";
+    case "provider_timeout":
+      return "The AI provider took too long to respond. Please try again in a moment.";
+    case "provider_bad_response":
+      return "The AI provider returned an unusable response. Please try again or rephrase your question.";
+    case "provider_unavailable":
+    default:
+      return "Portfolio copilot is temporarily unavailable. Please try again later.";
+  }
+}
+
 export async function POST(request: Request) {
   const supabase = await createClient();
   const {
@@ -29,6 +57,7 @@ export async function POST(request: Request) {
   let body: {
     portfolioId?: string;
     message?: string;
+    modelTier?: unknown;
     history?: ChatHistoryItem[];
     watchlistSymbols?: string[];
     turnstileToken?: string;
@@ -50,6 +79,7 @@ export async function POST(request: Request) {
 
   const portfolioId = body.portfolioId?.trim();
   const message = body.message?.trim();
+  const modelTier = parseModelTier(body.modelTier);
   const watchlistSymbols = Array.isArray(body.watchlistSymbols)
     ? body.watchlistSymbols
         .map((symbol) => String(symbol).trim().toUpperCase())
@@ -73,6 +103,27 @@ export async function POST(request: Request) {
 
   if (!portfolioId || !message) {
     return json({ error: "portfolioId and message are required" }, 400);
+  }
+  if (!modelTier) {
+    return json({ error: "modelTier must be 'free', 'premium', or 'ultimate'" }, 400);
+  }
+
+  try {
+    await assertUserCanUseModelTier(user.id, modelTier, supabase);
+  } catch (error) {
+    if (error instanceof BillingAccessError) {
+      return json(
+        {
+          error: `The ${modelTier} tier requires the ${PLAN_LABELS[error.requiredPlan]} plan.`,
+          code: error.code,
+          currentPlan: error.currentPlan,
+          requiredPlan: error.requiredPlan,
+          requestedTier: error.requestedTier,
+        },
+        403,
+      );
+    }
+    throw error;
   }
 
   const { data: portfolio } = await supabase
@@ -174,65 +225,79 @@ export async function POST(request: Request) {
       feedRows = feedResult.data;
     }
 
-    const ai = getAIProvider();
-    const answer = await ai.answerPortfolioQuestion({
-      portfolio: {
-        name: (portfolio.name as string) ?? "My Portfolio",
-        totalValue: overview.totalValue,
-        dayChange: overview.dayChange,
-        lastAnalyzedAt: overview.lastAnalyzedAt,
-        coverage: overview.coverage,
-        primaryGoal: overview.primaryGoal,
-      },
-      holdings: (holdingsResult.data ?? []).map((holding) => ({
-        symbol: (holding.symbol as string) ?? "",
-        company: (holding.company as string) ?? "",
-        sector: (holding.sector as string) ?? "Other",
-        quantity: Number(holding.quantity ?? 0),
-        averageCost: Number(holding.average_cost ?? 0),
-        allocation: Number(holding.allocation ?? 0),
-        price: Number(holding.current_price ?? holding.price ?? 0),
-        dayChange: Number(holding.daily_change ?? 0),
-      })),
-      insights: (insightsRows ?? []).map((item) => ({
-        title: item.title,
-        value: item.value,
-        detail: item.detail,
-      })),
-      feed: (feedRows ?? [])
-        .map((item) => {
-          const news = Array.isArray(item.news_items) ? item.news_items[0] : item.news_items;
-          if (!news) return null;
+    const providerId = providerIdForTier(modelTier);
+    const ai = getAIProviderById(providerId);
 
-          return {
-            headline: (news.headline as string) ?? "Untitled story",
-            source: (news.source as string) ?? "Unknown source",
-            publishedAt: (news.published_at as string) ?? new Date().toISOString(),
-            category: ((news.category as string) ?? "other") as
-              | "technology"
-              | "minerals"
-              | "energy"
-              | "healthcare"
-              | "financials"
-              | "consumer"
-              | "industrials"
-              | "macro"
-              | "regulation"
-              | "earnings"
-              | "deals"
-              | "geopolitics"
-              | "other",
-            whyItMatters: item.why_it_matters ?? "",
-            relevanceScore: Number(item.relevance_score ?? 0),
-            holdings: (item.holdings ?? []).map((value) => value.toUpperCase()),
-            sectors: item.sectors ?? [],
-          };
-        })
-        .filter((item): item is NonNullable<typeof item> => item !== null),
-      watchlistSymbols,
-      history,
-      question: message,
-    });
+    let answer: string;
+    try {
+      answer = await ai.answerPortfolioQuestion({
+        portfolio: {
+          name: (portfolio.name as string) ?? "My Portfolio",
+          totalValue: overview.totalValue,
+          dayChange: overview.dayChange,
+          lastAnalyzedAt: overview.lastAnalyzedAt,
+          coverage: overview.coverage,
+          primaryGoal: overview.primaryGoal,
+        },
+        holdings: (holdingsResult.data ?? []).map((holding) => ({
+          symbol: (holding.symbol as string) ?? "",
+          company: (holding.company as string) ?? "",
+          sector: (holding.sector as string) ?? "Other",
+          quantity: Number(holding.quantity ?? 0),
+          averageCost: Number(holding.average_cost ?? 0),
+          allocation: Number(holding.allocation ?? 0),
+          price: Number(holding.current_price ?? holding.price ?? 0),
+          dayChange: Number(holding.daily_change ?? 0),
+        })),
+        insights: (insightsRows ?? []).map((item) => ({
+          title: item.title,
+          value: item.value,
+          detail: item.detail,
+        })),
+        feed: (feedRows ?? [])
+          .map((item) => {
+            const news = Array.isArray(item.news_items) ? item.news_items[0] : item.news_items;
+            if (!news) return null;
+
+            return {
+              headline: (news.headline as string) ?? "Untitled story",
+              source: (news.source as string) ?? "Unknown source",
+              publishedAt: (news.published_at as string) ?? new Date().toISOString(),
+              category: ((news.category as string) ?? "other") as
+                | "technology"
+                | "minerals"
+                | "energy"
+                | "healthcare"
+                | "financials"
+                | "consumer"
+                | "industrials"
+                | "macro"
+                | "regulation"
+                | "earnings"
+                | "deals"
+                | "geopolitics"
+                | "other",
+              whyItMatters: item.why_it_matters ?? "",
+              relevanceScore: Number(item.relevance_score ?? 0),
+              holdings: (item.holdings ?? []).map((value) => value.toUpperCase()),
+              sectors: item.sectors ?? [],
+            };
+          })
+          .filter((item): item is NonNullable<typeof item> => item !== null),
+        watchlistSymbols,
+        history,
+        question: message,
+      });
+    } catch (error) {
+      const aiErr = error instanceof AIChatError ? error : toArticleChatError(error);
+      return json(
+        {
+          error: userFacingMessage(aiErr.code),
+          code: aiErr.code,
+        },
+        503,
+      );
+    }
 
     return json({ answer });
   } catch (error) {

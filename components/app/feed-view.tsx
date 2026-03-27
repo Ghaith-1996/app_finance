@@ -78,12 +78,16 @@ export function FeedView({
   insights = [],
   initialSymbol,
   initialFeedPayload,
+  allowedModelTiers = ["free", "premium", "ultimate"],
+  defaultModelTier = "free",
 }: {
   portfolioId?: string | null;
   insights?: PortfolioInsight[];
   /** When set (e.g. from `/feed?symbol=AAPL`), pre-select that holding in personal mode if it appears in the feed. */
   initialSymbol?: string;
   initialFeedPayload?: FeedResponsePayload | null;
+  allowedModelTiers?: ArticleChatModelTier[];
+  defaultModelTier?: ArticleChatModelTier;
 }) {
   const [mode, setMode] = useState<FeedMode>("personal");
   const [feed, setFeed] = useState<NewsItem[]>(() => initialFeedPayload?.feed ?? []);
@@ -124,7 +128,9 @@ export function FeedView({
   const [chatActivity, setChatActivity] = useState<ArticleChatActivityState>(
     DEFAULT_CHAT_ACTIVITY,
   );
-  const [selectedChatTier, setSelectedChatTier] = useState<ArticleChatModelTier>("free");
+  const [selectedChatTier, setSelectedChatTier] = useState<ArticleChatModelTier>(
+    defaultModelTier,
+  );
   const [pendingStoryId, setPendingStoryId] = useState<string | null>(null);
   const [switchConfirmOpen, setSwitchConfirmOpen] = useState(false);
   const [isDesktopChatLayout, setIsDesktopChatLayout] = useState(
@@ -168,6 +174,12 @@ export function FeedView({
       initialSymbolAppliedRef.current = true;
     }
   }, [initialSymbol, portfolioSymbols]);
+
+  useEffect(() => {
+    if (!allowedModelTiers.includes(selectedChatTier)) {
+      setSelectedChatTier(defaultModelTier);
+    }
+  }, [allowedModelTiers, defaultModelTier, selectedChatTier]);
 
   useEffect(() => {
     setVisibleCount(8);
@@ -929,6 +941,7 @@ export function FeedView({
           context={chatContext}
           story={chatStory}
           portfolioId={portfolioId}
+          allowedTiers={allowedModelTiers}
           selectedTier={selectedChatTier}
           onSelectedTierChange={setSelectedChatTier}
           onClose={resetChatSurface}
@@ -943,6 +956,7 @@ export function FeedView({
           context={chatContext}
           story={chatStory}
           portfolioId={portfolioId}
+          allowedTiers={allowedModelTiers}
           selectedTier={selectedChatTier}
           onSelectedTierChange={setSelectedChatTier}
           onClose={resetChatSurface}
@@ -1101,6 +1115,7 @@ function StoryChatSidebar({
   context,
   story,
   portfolioId,
+  allowedTiers,
   selectedTier,
   onSelectedTierChange,
   onClose,
@@ -1109,6 +1124,7 @@ function StoryChatSidebar({
   context: FeedChatContext;
   story: NewsItem | null;
   portfolioId?: string | null;
+  allowedTiers: ArticleChatModelTier[];
   selectedTier: ArticleChatModelTier;
   onSelectedTierChange: (tier: ArticleChatModelTier) => void;
   onClose: () => void;
@@ -1127,6 +1143,7 @@ function StoryChatSidebar({
         newsItemId={isStoryContext ? story.newsItemId : undefined}
         headline={isStoryContext ? story.headline : "No active article"}
         contextMode={isStoryContext ? "story" : "general"}
+        allowedTiers={allowedTiers}
         selectedTier={selectedTier}
         onSelectedTierChange={onSelectedTierChange}
         onActivityChange={onActivityChange}
@@ -1141,6 +1158,7 @@ function StoryChatMobileSheet({
   context,
   story,
   portfolioId,
+  allowedTiers,
   selectedTier,
   onSelectedTierChange,
   onClose,
@@ -1149,6 +1167,7 @@ function StoryChatMobileSheet({
   context: FeedChatContext;
   story: NewsItem | null;
   portfolioId?: string | null;
+  allowedTiers: ArticleChatModelTier[];
   selectedTier: ArticleChatModelTier;
   onSelectedTierChange: (tier: ArticleChatModelTier) => void;
   onClose: () => void;
@@ -1182,6 +1201,7 @@ function StoryChatMobileSheet({
                 newsItemId={isStoryContext ? story.newsItemId : undefined}
                 headline={isStoryContext ? story.headline : "No active article"}
                 contextMode={isStoryContext ? "story" : "general"}
+                allowedTiers={allowedTiers}
                 selectedTier={selectedTier}
                 onSelectedTierChange={onSelectedTierChange}
                 onActivityChange={onActivityChange}

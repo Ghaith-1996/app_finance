@@ -1,11 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Loader2, SendHorizonal, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { TurnstileBlock, useTurnstile } from "@/components/security/turnstile-widget";
+import type { ArticleChatModelTier } from "@/lib/types";
 
 type ChatMessage = {
   id: string;
@@ -22,18 +23,36 @@ const STARTER_QUESTIONS = [
 export function PortfolioCopilotPanel({
   portfolioId,
   watchlistSymbols,
+  allowedTiers = ["free", "premium", "ultimate"],
+  defaultModelTier = "free",
 }: {
   portfolioId: string;
   watchlistSymbols?: string[];
+  allowedTiers?: ArticleChatModelTier[];
+  defaultModelTier?: ArticleChatModelTier;
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
+  const [selectedTier, setSelectedTier] = useState<ArticleChatModelTier>(defaultModelTier);
   const turnstile = useTurnstile();
 
   const starterQuestions = useMemo(() => STARTER_QUESTIONS, []);
+  const planAccessCopy = useMemo(
+    () =>
+      `Current plan access: ${allowedTiers
+        .map((tier) => tier[0].toUpperCase() + tier.slice(1))
+        .join(", ")}.`,
+    [allowedTiers],
+  );
+
+  useEffect(() => {
+    if (!allowedTiers.includes(selectedTier)) {
+      setSelectedTier(defaultModelTier);
+    }
+  }, [allowedTiers, defaultModelTier, selectedTier]);
 
   async function sendMessage(message: string) {
     const trimmed = message.trim();
@@ -58,6 +77,7 @@ export function PortfolioCopilotPanel({
         body: JSON.stringify({
           portfolioId,
           message: trimmed,
+          modelTier: selectedTier,
           watchlistSymbols,
           turnstileToken: turnstile.token ?? undefined,
           history: messages
@@ -111,6 +131,43 @@ export function PortfolioCopilotPanel({
           <p className="text-sm text-slate-400">
             Ask about holdings, exposure, catalysts, or your watchlist.
           </p>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 py-2.5">
+        <div className="min-w-0 space-y-1">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+            Model
+          </p>
+          <p className="text-xs text-slate-500">{planAccessCopy}</p>
+        </div>
+        <div
+          role="group"
+          aria-label="Model tier"
+          className="inline-flex rounded-full border border-white/10 bg-white/[0.04] p-1"
+        >
+          {(["free", "premium", "ultimate"] as const).map((tier) => {
+            const locked = !allowedTiers.includes(tier);
+            const selected = selectedTier === tier;
+
+            return (
+              <button
+                key={tier}
+                type="button"
+                aria-pressed={selected}
+                disabled={sending || locked}
+                onClick={() => setSelectedTier(tier)}
+                className={[
+                  "rounded-full px-3 py-1.5 text-sm font-medium transition",
+                  selected ? "bg-brand text-white shadow-sm" : "text-slate-400 hover:text-slate-200",
+                  sending || locked ? "cursor-not-allowed opacity-60" : "",
+                ].join(" ")}
+              >
+                {tier[0].toUpperCase() + tier.slice(1)}
+                {locked ? " Locked" : ""}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -168,6 +225,9 @@ export function PortfolioCopilotPanel({
               <p className="text-sm text-red-400">{error}</p>
               {errorCode === "turnstile_failed" && (
                 <p className="text-xs text-slate-500">Your verification expired. Wait for it to refresh, then re-send.</p>
+              )}
+              {errorCode === "plan_upgrade_required" && (
+                <p className="text-xs text-slate-500">Upgrade your plan in Billing to unlock that model tier.</p>
               )}
             </div>
           ) : <span />}

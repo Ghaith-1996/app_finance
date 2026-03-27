@@ -39,6 +39,7 @@ export function ArticleChatPanel({
   portfolioId,
   newsItemId,
   headline,
+  allowedTiers = ["free", "premium", "ultimate"],
   selectedTier,
   onSelectedTierChange,
   onActivityChange,
@@ -49,6 +50,7 @@ export function ArticleChatPanel({
   portfolioId?: string | null;
   newsItemId?: string;
   headline?: string;
+  allowedTiers?: ArticleChatModelTier[];
   selectedTier: ArticleChatModelTier;
   onSelectedTierChange: (tier: ArticleChatModelTier) => void;
   onActivityChange?: (state: ArticleChatActivityState) => void;
@@ -187,6 +189,7 @@ export function ArticleChatPanel({
   const helperCopy = isGeneralContext
     ? "No article selected. Ask about your portfolio, watchlist, or today's market."
     : "Ask follow-up questions about this article in the context of the portfolio.";
+  const planAccessCopy = `Current plan access: ${allowedTiers.map((tier) => tier[0].toUpperCase() + tier.slice(1)).join(", ")}.`;
   const emptyStateCopy = isGeneralContext
     ? "No article selected - start with a portfolio or market question."
     : "Start a conversation about this story.";
@@ -223,7 +226,7 @@ export function ArticleChatPanel({
             Model
           </p>
           <p className="text-xs text-slate-500">
-            Choose the response tier for the next answer.
+            Choose the response tier for the next answer. {planAccessCopy}
           </p>
         </div>
         <div
@@ -233,22 +236,24 @@ export function ArticleChatPanel({
         >
           {TIER_OPTIONS.map((option) => {
             const selected = selectedTier === option.tier;
+            const locked = !allowedTiers.includes(option.tier);
             return (
               <button
                 key={option.tier}
                 type="button"
                 aria-pressed={selected}
-                disabled={sending}
+                disabled={sending || locked}
                 onClick={() => onSelectedTierChange(option.tier)}
                 className={cn(
                   "rounded-full px-3 py-1.5 text-sm font-medium transition",
                   selected
                     ? "bg-brand text-white shadow-sm"
                     : "text-slate-400 hover:text-slate-200",
-                  sending && "cursor-not-allowed opacity-60",
+                  (sending || locked) && "cursor-not-allowed opacity-60",
                 )}
               >
                 {option.label}
+                {locked ? " Locked" : ""}
               </button>
             );
           })}
@@ -331,6 +336,9 @@ export function ArticleChatPanel({
                   )}
                   {errorCode === "provider_bad_response" && (
                     <p className="text-xs text-slate-500">Try rephrasing your question or try again shortly.</p>
+                  )}
+                  {errorCode === "plan_upgrade_required" && (
+                    <p className="text-xs text-slate-500">Upgrade your plan in Billing to unlock that model tier.</p>
                   )}
                 </div>
               ) : <span />}

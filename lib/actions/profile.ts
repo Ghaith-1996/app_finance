@@ -9,6 +9,7 @@ import {
   type UserProfileFormData,
   validateProfileInput,
 } from "@/lib/profile/utils";
+import { sanitizeRedirect } from "@/lib/security/redirect";
 
 type UserProfileRow = {
   user_id: string;
@@ -69,10 +70,23 @@ export async function saveCurrentUserProfile(input: {
 
   const { firstName, lastName, handle, displayName } = validation.value;
   const meta = (user.user_metadata ?? {}) as Record<string, unknown>;
-  const avatarUrl =
+  const rawAvatarUrl =
     (meta.avatar_url as string | undefined) ||
     (meta.picture as string | undefined) ||
     null;
+
+  // Validate avatar URL — only allow https: origins
+  let avatarUrl: string | null = null;
+  if (rawAvatarUrl) {
+    try {
+      const parsed = new URL(rawAvatarUrl);
+      if (parsed.protocol === "https:") {
+        avatarUrl = rawAvatarUrl;
+      }
+    } catch {
+      // Malformed URL — discard
+    }
+  }
 
   const { data: existingHandle } = await supabase
     .from("user_profiles")
@@ -128,5 +142,5 @@ export async function completeProfileAction(input: {
 }): Promise<{ ok: false; error: string } | never> {
   const result = await saveCurrentUserProfile(input);
   if (!result.ok) return result;
-  redirect(input.redirectTo?.trim() || "/portfolio");
+  redirect(sanitizeRedirect(input.redirectTo?.trim(), "/portfolio"));
 }

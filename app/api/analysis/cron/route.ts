@@ -27,8 +27,9 @@ async function authorizeCron(request: Request) {
     return { errorResponse: json({ error: "CRON_SECRET not configured" }, 500) };
   }
 
-  const auth = request.headers.get("authorization");
-  if (auth !== `Bearer ${secret}`) {
+  const auth = request.headers.get("authorization") ?? "";
+  const { isTimingSafeEqual } = await import("@/lib/security/timing");
+  if (!isTimingSafeEqual(auth, `Bearer ${secret}`)) {
     return { errorResponse: json({ error: "Unauthorized" }, 401) };
   }
 
@@ -61,16 +62,19 @@ async function getLatestCompletedRun(
 
 async function getEligiblePortfolioIds(
   supabase: ReturnType<typeof createServiceClient>,
+  opts?: { force?: boolean },
 ) {
   const portfolios = await getPortfolios(supabase);
   const portfolioIds: string[] = [];
   let skippedCount = 0;
 
   for (const portfolio of portfolios) {
-    const latestRun = await getLatestCompletedRun(supabase, portfolio.id);
-    if (isInCooldown(latestRun?.completed_at)) {
-      skippedCount++;
-      continue;
+    if (!opts?.force) {
+      const latestRun = await getLatestCompletedRun(supabase, portfolio.id);
+      if (isInCooldown(latestRun?.completed_at)) {
+        skippedCount++;
+        continue;
+      }
     }
     portfolioIds.push(portfolio.id);
   }
@@ -82,12 +86,16 @@ async function runListEligiblePortfolios(request: Request) {
   const auth = await authorizeCron(request);
   if (auth.errorResponse) return auth.errorResponse;
 
+  const url = new URL(request.url);
+  const force = url.searchParams.get("force") === "true";
+
   const supabase = createServiceClient();
-  const { portfolioIds, skippedCount } = await getEligiblePortfolioIds(supabase);
+  const { portfolioIds, skippedCount } = await getEligiblePortfolioIds(supabase, { force });
 
   log.info("Analysis cron eligible portfolios computed", {
     eligible: portfolioIds.length,
     skippedCount,
+    force,
   });
 
   return json({
@@ -107,11 +115,17 @@ async function runAnalysisCron(request: Request) {
     return json({ error: "Invalid JSON body" }, 400);
   }
 
-  if (!body || typeof body !== "object" || typeof (body as Record<string, unknown>).portfolioId !== "string") {
+  if (!body || typeof body !== "object") {
+    return json({ error: "Invalid body" }, 400);
+  }
+
+  const parsed = body as Record<string, unknown>;
+  if (typeof parsed.portfolioId !== "string") {
     return json({ error: "portfolioId required" }, 400);
   }
 
-  const portfolioId = String((body as { portfolioId: string }).portfolioId).trim();
+  const portfolioId = String(parsed.portfolioId).trim();
+  const force = parsed.force === true;
   if (!portfolioId) {
     return json({ error: "portfolioId required" }, 400);
   }
@@ -125,8 +139,8 @@ async function runAnalysisCron(request: Request) {
   }
 
   const latestRun = await getLatestCompletedRun(supabase, portfolioId);
-  if (isInCooldown(latestRun?.completed_at)) {
-    log.info("Analysis cron skipped portfolio in cooldown", { portfolioId });
+  if (!force && isInCooldown(latestRun?.completed_at)) {
+    log.info("Analysis cron skipped portfolio in cooldown", { portfolioId, force });
     return json({
       portfolioId,
       skipped: true,

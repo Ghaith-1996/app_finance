@@ -16,6 +16,7 @@ import type { AIChatErrorCode } from "@/lib/services/ai";
 import { computePortfolioOverview } from "@/lib/services/portfolio";
 import { createClient } from "@/lib/supabase/server";
 import { verifyTurnstileToken, getClientIp } from "@/lib/security/turnstile";
+import { aiChatLimiter } from "@/lib/security/rate-limit";
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -77,6 +78,15 @@ export async function POST(request: Request) {
     return json({ error: turnstileResult.message, code: "turnstile_failed" }, 403);
   }
 
+  // Per-user rate limiting
+  const rateCheck = aiChatLimiter.check(user.id);
+  if (!rateCheck.allowed) {
+    return json(
+      { error: "Too many requests. Please wait a moment.", code: "rate_limited" },
+      429,
+    );
+  }
+
   const portfolioId = body.portfolioId?.trim();
   const message = body.message?.trim();
   const modelTier = parseModelTier(body.modelTier);
@@ -97,7 +107,7 @@ export async function POST(request: Request) {
         .slice(-12)
         .map((item) => ({
           role: item.role,
-          content: item.content.trim(),
+          content: item.content.trim().slice(0, 4000),
         }))
     : [];
 

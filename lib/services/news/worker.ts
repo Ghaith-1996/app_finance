@@ -46,12 +46,19 @@ function emptyWorkerResult(error?: string, checks?: WorkerResult["checks"]): Wor
   };
 }
 
+const TICKER_RE = /^[A-Z0-9.\-]{1,10}$/;
+
 export function runPythonWorker(
   tickers: string[],
   lookbackHours: number,
   maxArticles: number,
   options?: { sources?: string[]; gnewsQueries?: string[] },
 ): Promise<WorkerResult> {
+  // Validate ticker format before spawning a child process
+  if (!tickers.every((t) => TICKER_RE.test(t))) {
+    return Promise.resolve(emptyWorkerResult("Invalid ticker format"));
+  }
+
   return new Promise((resolve) => {
     const args = [
       "-m", "workers.news_ingestion.main",

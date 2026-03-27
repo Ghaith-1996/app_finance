@@ -13,6 +13,7 @@ import {
 import type { AIChatErrorCode } from "@/lib/services/ai";
 import { createLogger } from "@/lib/logger";
 import { verifyTurnstileToken, getClientIp } from "@/lib/security/turnstile";
+import { aiChatLimiter } from "@/lib/security/rate-limit";
 import type {
   ArticleChatMessage,
   ArticleChatModelTier,
@@ -72,7 +73,7 @@ function parseHistory(value: unknown): ChatHistoryItem[] {
     .slice(-12)
     .map((item) => ({
       role: item.role,
-      content: item.content.trim(),
+      content: item.content.trim().slice(0, 4000),
     }));
 }
 
@@ -493,6 +494,17 @@ export async function GET(request: Request) {
     return json({ error: "Portfolio not found" }, 404);
   }
 
+  // Validate that the news item actually exists (IDOR prevention)
+  const { data: newsItemRow } = await supabase
+    .from("news_items")
+    .select("id")
+    .eq("id", newsItemId)
+    .maybeSingle();
+
+  if (!newsItemRow) {
+    return json({ error: "Article not found" }, 404);
+  }
+
   try {
     const threadId = await getOrCreateThread(supabase, user.id, portfolioId, newsItemId);
     const messages = await loadMessages(supabase, threadId);
@@ -526,6 +538,15 @@ export async function POST(request: Request) {
   });
   if (!turnstileResult.success) {
     return json({ error: turnstileResult.message, code: "turnstile_failed" }, 403);
+  }
+
+  // Per-user rate limiting
+  const rateCheck = aiChatLimiter.check(user.id);
+  if (!rateCheck.allowed) {
+    return json(
+      { error: "Too many requests. Please wait a moment.", code: "rate_limited" },
+      429,
+    );
   }
 
   const portfolioId = body.portfolioId?.trim();

@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { runAnalysis } from "@/lib/services/analysis";
+import { analysisRunLimiter } from "@/lib/security/rate-limit";
 
 /**
  * POST /api/analysis/run
@@ -17,6 +18,15 @@ export async function POST(request: Request) {
       status: 401,
       headers: { "Content-Type": "application/json" },
     });
+  }
+
+  // Per-user rate limiting
+  const rateCheck = analysisRunLimiter.check(user.id);
+  if (!rateCheck.allowed) {
+    return new Response(
+      JSON.stringify({ error: "Too many requests. Please wait a moment.", code: "rate_limited" }),
+      { status: 429, headers: { "Content-Type": "application/json" } },
+    );
   }
 
   let body: { portfolioId?: string };

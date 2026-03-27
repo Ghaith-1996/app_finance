@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { FinnhubError, searchSymbols } from "@/lib/services/finnhub";
 import { verifyTurnstileToken } from "@/lib/security/turnstile";
+import { communityPostLimiter, communityCommentLimiter } from "@/lib/security/rate-limit";
 import type {
   CommunityPost,
   CommunityComment,
@@ -156,6 +157,10 @@ export async function createPost(body: string, turnstileToken?: string): Promise
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "Unauthorized" };
 
+  // Per-user rate limiting
+  const rateCheck = communityPostLimiter.check(user.id);
+  if (!rateCheck.allowed) return { ok: false, error: "Too many posts. Please wait a moment." };
+
   const trimmed = body.trim();
   const cashtagTickers = extractTickers(trimmed);
   const hashtagTickers = extractTickerHashtags(trimmed);
@@ -246,6 +251,10 @@ export async function createComment(postId: string, body: string, turnstileToken
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "Unauthorized" };
+
+  // Per-user rate limiting
+  const rateCheck = communityCommentLimiter.check(user.id);
+  if (!rateCheck.allowed) return { ok: false, error: "Too many comments. Please wait a moment." };
 
   const trimmed = body.trim();
 

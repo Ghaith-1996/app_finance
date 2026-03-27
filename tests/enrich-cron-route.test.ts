@@ -16,6 +16,10 @@ vi.mock("@/lib/supabase/service", () => ({
   createServiceClient: () => ({}),
 }));
 
+vi.mock("@/lib/security/timing", () => ({
+  isTimingSafeEqual: (a: string, b: string) => a === b,
+}));
+
 vi.mock("@/lib/services/news", () => ({
   ingestNewsToSupabase: (...args: unknown[]) => mockIngestNewsToSupabase(...args),
 }));

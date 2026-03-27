@@ -18,6 +18,10 @@ vi.mock("@/lib/supabase/service", () => ({
   createServiceClient: () => mockSupabase,
 }));
 
+vi.mock("@/lib/security/timing", () => ({
+  isTimingSafeEqual: (a: string, b: string) => a === b,
+}));
+
 vi.mock("@/lib/services/analysis", () => ({
   runAnalysis: (...args: unknown[]) => mockRunAnalysis(...args),
 }));
@@ -85,10 +89,11 @@ function buildMockSupabase({
   };
 }
 
-function makeGetRequest(secret?: string): Request {
+function makeGetRequest(secret?: string, opts?: { force?: boolean }): Request {
   const headers = new Headers();
   if (secret) headers.set("Authorization", `Bearer ${secret}`);
-  return new Request("http://localhost/api/analysis/cron", {
+  const qs = opts?.force ? "?force=true" : "";
+  return new Request(`http://localhost/api/analysis/cron${qs}`, {
     method: "GET",
     headers,
   });
@@ -148,6 +153,27 @@ describe("GET /api/analysis/cron", () => {
     expect(body.skippedCount).toBe(1);
     expect(mockRunAnalysis).not.toHaveBeenCalled();
   });
+
+  it("returns all portfolios when force=true, ignoring cooldown", async () => {
+    const recentlyCompleted = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    mockSupabase = buildMockSupabase({
+      portfolios: [
+        { id: "p1", user_id: "u1" },
+        { id: "p2", user_id: "u2" },
+      ],
+      latestRunsByPortfolio: {
+        p1: recentlyCompleted,
+        p2: recentlyCompleted,
+      },
+    });
+
+    const res = await GET(makeGetRequest("test-secret", { force: true }));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+
+    expect(body.portfolioIds).toEqual(["p1", "p2"]);
+    expect(body.skippedCount).toBe(0);
+  });
 });
 
 describe("POST /api/analysis/cron", () => {
@@ -191,6 +217,22 @@ describe("POST /api/analysis/cron", () => {
       error: null,
       meta: null,
     });
+  });
+
+  it("bypasses cooldown when force=true", async () => {
+    const recentlyCompleted = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    mockSupabase = buildMockSupabase({
+      portfolios: [{ id: "p1", user_id: "u1" }],
+      latestRunsByPortfolio: { p1: recentlyCompleted },
+    });
+
+    const res = await POST(makePostRequest("test-secret", { portfolioId: "p1", force: true }));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+
+    expect(mockRunAnalysis).toHaveBeenCalledWith(mockSupabase, "p1");
+    expect(body.skipped).toBe(false);
+    expect(body.runId).toBe("run-1");
   });
 
   it("processes a single eligible portfolio", async () => {

@@ -1,11 +1,12 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { validateProfileInput } from "@/lib/profile/utils";
+import { sanitizeRedirect } from "@/lib/security/redirect";
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
-  const redirectTo = searchParams.get("redirectTo") ?? "/portfolio";
+  const redirectTo = sanitizeRedirect(searchParams.get("redirectTo"), "/portfolio");
 
   if (code) {
     const supabase = await createClient();

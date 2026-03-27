@@ -1,7 +1,8 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { sanitizeRedirect } from "@/lib/security/redirect";
 
-const protectedPaths = ["/onboarding", "/analysis", "/feed", "/portfolio"];
+const protectedPaths = ["/onboarding", "/analysis", "/feed", "/portfolio", "/home", "/watchlist", "/settings", "/complete-profile"];
 
 function isProtectedPath(pathname: string) {
   return protectedPaths.some((path) => pathname === path || pathname.startsWith(path + "/"));
@@ -50,7 +51,7 @@ export async function middleware(request: NextRequest) {
   }
 
   if (user && request.nextUrl.pathname === "/login") {
-    const redirectTo = request.nextUrl.searchParams.get("redirectTo") || "/portfolio";
+    const redirectTo = sanitizeRedirect(request.nextUrl.searchParams.get("redirectTo"), "/portfolio");
     const redirectResponse = NextResponse.redirect(new URL(redirectTo, request.url));
     response.cookies.getAll().forEach((cookie) => {
       redirectResponse.cookies.set(cookie.name, cookie.value);

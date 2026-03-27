@@ -22,6 +22,12 @@ export function normalizeHandle(input: string): string {
   return input.trim().replace(/^@+/, "").toLowerCase();
 }
 
+const RESERVED_HANDLES = new Set([
+  "admin", "root", "api", "system", "billing", "stripe",
+  "support", "help", "mod", "moderator", "staff", "official",
+  "null", "undefined", "test", "user", "settings", "home",
+]);
+
 export function validateProfileInput(input: {
   firstName?: string;
   lastName?: string;
@@ -40,6 +46,12 @@ export function validateProfileInput(input: {
       error:
         "Username must be 3-20 characters and use only lowercase letters, numbers, or underscores.",
     };
+  }
+  if (RESERVED_HANDLES.has(handle)) {
+    return { ok: false, error: "Username not available." };
+  }
+  if (/^_+$/.test(handle) || /^(.)\1+$/.test(handle)) {
+    return { ok: false, error: "Username must contain a mix of characters." };
   }
 
   return {

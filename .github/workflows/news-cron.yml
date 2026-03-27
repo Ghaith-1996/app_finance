@@ -164,6 +164,28 @@ jobs:
           print('All enrich batches completed successfully')
           "
 
+      - name: Extract full text for new articles
+        if: steps.ingest.outputs.should_enrich == 'true'
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          set -euo pipefail
+
+          ARTICLE_IDS='${{ steps.ingest.outputs.article_ids }}'
+          ID_COUNT="$(echo "${ARTICLE_IDS}" | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))')"
+
+          if [ "${ID_COUNT}" -eq 0 ]; then
+            echo "No article IDs to extract"
+            exit 0
+          fi
+
+          echo "Extracting full text for ${ID_COUNT} article(s)"
+
+          ID_CSV="$(echo "${ARTICLE_IDS}" | python3 -c 'import json,sys; print(",".join(json.load(sys.stdin)))')"
+          python -m workers.news_ingestion.extract_full_text --ids "${ID_CSV}"
+          echo "Full text extraction completed"
+
       - name: Fetch eligible portfolio ids
         if: steps.ingest.outputs.should_enrich == 'true'
         id: analysis_targets
@@ -187,7 +209,7 @@ jobs:
               -H "Accept: application/json" \
               -o "${response_file}" \
               -w "%{http_code}" \
-              "${ANALYSIS_URL}"
+              "${ANALYSIS_URL}?force=true"
           )"
 
           echo "HTTP ${http_code}"
@@ -221,7 +243,7 @@ jobs:
           echo "has_portfolios=${has_portfolios}" >> "$GITHUB_OUTPUT"
 
       - name: Run portfolio analysis per portfolio
-        if: steps.ingest.outputs.should_enrich == 'true' && steps.analysis_targets.outputs.has_portfolios == 'true'
+        if: steps.ingest.outputs.should_enrich == 'true'
         env:
           CRON_ENDPOINT: ${{ secrets.CRON_ENDPOINT }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
@@ -242,7 +264,7 @@ jobs:
 
           for i, portfolio_id in enumerate(portfolio_ids):
               print(f'--- Portfolio {i+1}/{len(portfolio_ids)}: {portfolio_id} ---')
-              payload = json.dumps({'portfolioId': portfolio_id})
+              payload = json.dumps({'portfolioId': portfolio_id, 'force': True})
 
               result = subprocess.run([
                   'curl', '-sS',

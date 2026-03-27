@@ -38,9 +38,14 @@ function isPayload(value: unknown): value is CronFinalizePayload {
   const body = value as Record<string, unknown>;
   return Array.isArray(body.tickers)
     && typeof body.lookbackHours === "number"
+    && body.lookbackHours >= 1 && body.lookbackHours <= 168
+    && Number.isFinite(body.lookbackHours)
     && typeof body.maxArticles === "number"
+    && body.maxArticles >= 1 && body.maxArticles <= 500
+    && Number.isFinite(body.maxArticles)
     && typeof body.total_inserted === "number"
     && Array.isArray(body.inserted_article_ids)
+    && (body.tickers as unknown[]).every(t => typeof t === "string" && /^[A-Z0-9.\-]{1,10}$/.test(t))
     && isSourceRow(body.edgar)
     && isSourceRow(body.newsapi)
     && isSourceRow(body.gnews)
@@ -58,8 +63,9 @@ async function runFinalize(request: Request) {
     return json({ error: "CRON_SECRET not configured" }, 500);
   }
 
-  const auth = request.headers.get("authorization");
-  if (auth !== `Bearer ${secret}`) {
+  const auth = request.headers.get("authorization") ?? "";
+  const { isTimingSafeEqual } = await import("@/lib/security/timing");
+  if (!isTimingSafeEqual(auth, `Bearer ${secret}`)) {
     return json({ error: "Unauthorized" }, 401);
   }
 

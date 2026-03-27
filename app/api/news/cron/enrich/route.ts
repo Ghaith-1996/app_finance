@@ -16,8 +16,9 @@ async function runEnrich(request: Request) {
     return json({ error: "CRON_SECRET not configured" }, 500);
   }
 
-  const auth = request.headers.get("authorization");
-  if (auth !== `Bearer ${secret}`) {
+  const auth = request.headers.get("authorization") ?? "";
+  const { isTimingSafeEqual } = await import("@/lib/security/timing");
+  if (!isTimingSafeEqual(auth, `Bearer ${secret}`)) {
     return json({ error: "Unauthorized" }, 401);
   }
 

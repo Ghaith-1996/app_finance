@@ -19,6 +19,14 @@ import { createServiceClient } from "@/lib/supabase/service";
 export const runtime = "nodejs";
 
 const log = createLogger("stripe-webhook");
+const HANDLED_STRIPE_EVENT_TYPES = new Set<Stripe.Event.Type>([
+  "checkout.session.completed",
+  "customer.subscription.created",
+  "customer.subscription.updated",
+  "customer.subscription.deleted",
+  "invoice.paid",
+  "invoice.payment_failed",
+]);
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -27,8 +35,40 @@ function json(body: unknown, status = 200) {
   });
 }
 
-function toPlainObject<T>(value: T): Record<string, unknown> {
-  return JSON.parse(JSON.stringify(value)) as Record<string, unknown>;
+function extractStripeObjectId(value: unknown): string | null {
+  if (typeof value === "string") return value;
+  if (
+    value &&
+    typeof value === "object" &&
+    "id" in value &&
+    typeof (value as { id?: unknown }).id === "string"
+  ) {
+    return (value as { id: string }).id;
+  }
+  return null;
+}
+
+function buildEventAuditPayload(event: Stripe.Event): Record<string, unknown> {
+  const object = event.data.object as unknown as Record<string, unknown>;
+  const invoiceSubscription =
+    object.parent && typeof object.parent === "object"
+      ? ((object.parent as { subscription_details?: { subscription?: unknown } })
+          .subscription_details?.subscription ?? null)
+      : null;
+  const subscriptionRef =
+    (object as { subscription?: unknown }).subscription ?? invoiceSubscription;
+
+  return {
+    id: event.id,
+    type: event.type,
+    created: event.created,
+    livemode: event.livemode,
+    api_version: event.api_version ?? null,
+    object: typeof object.object === "string" ? object.object : null,
+    object_id: extractStripeObjectId(object),
+    customer_id: extractStripeObjectId((object as { customer?: unknown }).customer),
+    subscription_id: extractStripeObjectId(subscriptionRef),
+  };
 }
 
 async function handleStripeEvent(event: Stripe.Event) {
@@ -121,6 +161,10 @@ export async function POST(request: Request) {
     );
   }
 
+  if (!HANDLED_STRIPE_EVENT_TYPES.has(event.type)) {
+    return json({ received: true, ignored: true });
+  }
+
   const serviceSupabase = createServiceClient();
   if (await hasProcessedStripeEvent(serviceSupabase, event.id)) {
     return json({ received: true, duplicate: true });
@@ -131,7 +175,7 @@ export async function POST(request: Request) {
     await insertProcessedStripeEvent(serviceSupabase, {
       stripeEventId: event.id,
       eventType: event.type,
-      payload: toPlainObject(event),
+      payload: buildEventAuditPayload(event),
     });
   } catch (error) {
     log.error("Stripe webhook processing failed", {

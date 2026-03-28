@@ -165,6 +165,10 @@ vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => currentSupabase,
 }));
 
+vi.mock("@/lib/supabase/service", () => ({
+  createServiceClient: () => currentSupabase,
+}));
+
 import { POST } from "@/app/api/portfolio-copilot/route";
 
 describe("POST /api/portfolio-copilot", () => {

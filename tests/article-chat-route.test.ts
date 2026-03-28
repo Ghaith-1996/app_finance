@@ -269,6 +269,10 @@ vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => currentSupabase,
 }));
 
+vi.mock("@/lib/supabase/service", () => ({
+  createServiceClient: () => currentSupabase,
+}));
+
 import { POST } from "@/app/api/article-chat/route";
 
 describe("POST /api/article-chat", () => {

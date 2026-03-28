@@ -24,7 +24,7 @@ export default async function SettingsPage({
 
   const profile = await getCurrentUserProfile();
   const showOnboardingNav = await loadOnboardingNavState();
-  const billingSummary = await getBillingSummaryForUser(user.id, supabase);
+  const billingSummary = await getBillingSummaryForUser(user.id);
   const sp = searchParams ? await searchParams : {};
   const billingMessage =
     typeof sp.billing === "string" ? sp.billing : Array.isArray(sp.billing) ? sp.billing[0] : null;

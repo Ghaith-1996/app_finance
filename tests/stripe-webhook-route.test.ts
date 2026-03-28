@@ -71,6 +71,19 @@ describe("POST /api/stripe/webhook", () => {
     expect(mockSyncStripeCustomerRecord).toHaveBeenCalledWith("user-1", "cus_123");
     expect(mockSyncSubscriptionById).toHaveBeenCalledWith("sub_123");
     expect(mockInsertProcessedStripeEvent).toHaveBeenCalledTimes(1);
+    expect(mockInsertProcessedStripeEvent).toHaveBeenCalledWith(
+      { kind: "service-client" },
+      expect.objectContaining({
+        stripeEventId: "evt_123",
+        eventType: "checkout.session.completed",
+        payload: expect.objectContaining({
+          id: "evt_123",
+          type: "checkout.session.completed",
+          customer_id: "cus_123",
+          subscription_id: "sub_123",
+        }),
+      }),
+    );
   });
 
   it("returns early for duplicate events", async () => {
@@ -94,5 +107,27 @@ describe("POST /api/stripe/webhook", () => {
     expect(res.status).toBe(200);
     expect(mockSyncSubscriptionById).not.toHaveBeenCalled();
     expect(mockInsertProcessedStripeEvent).not.toHaveBeenCalled();
+  });
+  it("ignores unhandled Stripe event types without storing payloads", async () => {
+    mockConstructEvent.mockReturnValue({
+      id: "evt_misc",
+      type: "charge.succeeded",
+      created: 1,
+      data: { object: { id: "ch_123", object: "charge" } },
+    });
+
+    const req = new Request("http://localhost/api/stripe/webhook", {
+      method: "POST",
+      headers: {
+        "stripe-signature": "sig",
+      },
+      body: "payload",
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    expect(mockHasProcessedStripeEvent).not.toHaveBeenCalled();
+    expect(mockInsertProcessedStripeEvent).not.toHaveBeenCalled();
+    expect(mockSyncSubscriptionById).not.toHaveBeenCalled();
   });
 });

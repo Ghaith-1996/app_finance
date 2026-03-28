@@ -45,6 +45,7 @@ import {
   type LastIngestSnapshot,
 } from "@/lib/ingest-hint";
 import type { FeedResponsePayload } from "@/lib/server/feed";
+import { sanitizeExternalUrl } from "@/lib/security/external-url";
 
 /** UI recency choices; API and ingestion cap visibility at 24 hours. */
 const FEED_HARD_CAP_MINUTES = 24 * 60;
@@ -65,7 +66,7 @@ const selectTriggerClass =
   "w-full min-w-0 appearance-none rounded-xl border border-white/10 bg-surface-raised py-2.5 pl-3 pr-9 text-sm font-medium text-slate-200 shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20";
 
 const DESKTOP_CHAT_BREAKPOINT = 1280;
-const MARKET_PAGE_SIZE = 50;
+const FEED_PAGE_SIZE = 50;
 const DEFAULT_CHAT_ACTIVITY: ArticleChatActivityState = {
   hasMessages: false,
   hasDraft: false,
@@ -95,7 +96,7 @@ export function FeedView({
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [backgroundError, setBackgroundError] = useState<string | null>(null);
-  const [visibleCount, setVisibleCount] = useState(8);
+
   const [portfolioSymbols, setPortfolioSymbols] = useState<string[]>(
     () => initialFeedPayload?.portfolioSymbols ?? [],
   );
@@ -182,7 +183,6 @@ export function FeedView({
   }, [allowedModelTiers, defaultModelTier, selectedChatTier]);
 
   useEffect(() => {
-    setVisibleCount(8);
     setPage(1);
   }, [
     mode,
@@ -223,6 +223,8 @@ export function FeedView({
         params.set("mode", mode);
         if (portfolioId) params.set("portfolioId", portfolioId);
         params.set("maxMinutes", String(recencyMax));
+        params.set("page", String(page));
+        params.set("pageSize", String(FEED_PAGE_SIZE));
         if (mode === "personal") {
           if (selectedHolding !== "All holdings") {
             params.set("holding", selectedHolding);
@@ -235,8 +237,6 @@ export function FeedView({
           }
         }
         if (mode === "market") {
-          params.set("page", String(page));
-          params.set("pageSize", String(MARKET_PAGE_SIZE));
           if (selectedCategory !== "All categories") {
             params.set("category", selectedCategory);
           }
@@ -268,7 +268,7 @@ export function FeedView({
         setTotalCount(
           typeof data.totalCount === "number" ? data.totalCount : newFeed.length,
         );
-        if (mode === "market" && typeof data.page === "number") {
+        if (typeof data.page === "number") {
           setPage(data.page);
         }
         setPortfolioSymbols(
@@ -425,7 +425,7 @@ export function FeedView({
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
 
-  const handleMarketPageChange = useCallback(
+  const handlePageChange = useCallback(
     (updater: (currentPage: number) => number) => {
       setPage((currentPage) => updater(currentPage));
       scrollToTopAfterPageChange();
@@ -499,14 +499,8 @@ export function FeedView({
     if (portfolioSymbols.length === 0) return "All portfolio";
     return `All portfolio (${portfolioSymbols.length} holding${portfolioSymbols.length === 1 ? "" : "s"})`;
   }, [portfolioSymbols]);
-  const totalPages = Math.max(1, Math.ceil(totalCount / MARKET_PAGE_SIZE));
-  const visibleStories = useMemo(() => {
-    if (mode === "market") return filteredStories;
-    return filteredStories.slice(0, visibleCount);
-  }, [filteredStories, mode, visibleCount]);
-  const remainingStories = mode === "market"
-    ? 0
-    : Math.max(0, filteredStories.length - visibleCount);
+  const totalPages = Math.max(1, Math.ceil(totalCount / FEED_PAGE_SIZE));
+  const visibleStories = filteredStories;
   const hasActiveMarketFilters =
     mode === "market" &&
     (selectedSourceType !== sourceTypeOptions[0].label ||
@@ -866,17 +860,7 @@ export function FeedView({
                 />
               ))}
             </div>
-            {remainingStories > 0 ? (
-              <button
-                type="button"
-                onClick={() => setVisibleCount((c) => c + 10)}
-                className="flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-white/10 bg-white/5 py-4 text-sm font-semibold text-slate-300 shadow-sm transition hover:border-white/16 hover:bg-surface-hover"
-              >
-                View {remainingStories} more intelligence reports
-                <ChevronDown className="h-4 w-4" />
-              </button>
-            ) : null}
-            {mode === "market" && totalPages > 1 ? (
+            {totalPages > 1 ? (
               <div className="flex items-center justify-between gap-3 text-sm text-slate-400">
                 <span>
                   Page {page} of {totalPages} · Showing {feed.length} of {totalCount} articles
@@ -886,7 +870,7 @@ export function FeedView({
                     type="button"
                     disabled={page <= 1}
                     onClick={() =>
-                      handleMarketPageChange((currentPage) =>
+                      handlePageChange((currentPage) =>
                         Math.max(1, currentPage - 1),
                       )
                     }
@@ -901,7 +885,7 @@ export function FeedView({
                     type="button"
                     disabled={page >= totalPages}
                     onClick={() =>
-                      handleMarketPageChange((currentPage) =>
+                      handlePageChange((currentPage) =>
                         Math.min(totalPages, currentPage + 1),
                       )
                     }
@@ -919,7 +903,7 @@ export function FeedView({
         )}
       </div>
 
-      <div className="flex flex-col gap-5">
+      <div className="flex flex-col gap-5 xl:sticky xl:top-28 xl:self-start xl:max-h-[calc(100vh-8rem)] xl:overflow-y-auto">
         <FeedMomentumCard insights={insights} />
         <GlobalAskAiButton
           hasSelectedStory={Boolean(selectedStory)}
@@ -1351,6 +1335,7 @@ function DetailPanel({
   onClose: () => void;
 }) {
   const isMarket = mode === "market";
+  const safeStoryUrl = sanitizeExternalUrl(story.url);
 
   return (
     <Panel className="h-fit space-y-5 rounded-2xl border-white/[0.06] bg-surface-raised p-6 shadow-sm">
@@ -1522,9 +1507,9 @@ function DetailPanel({
               </div>
             )}
 
-          {story.url && (
+          {safeStoryUrl && (
             <a
-              href={story.url}
+              href={safeStoryUrl}
               target="_blank"
               rel="noopener noreferrer"
               className={buttonStyles({ variant: "secondary" })}

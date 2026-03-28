@@ -4,6 +4,7 @@ import Link from "next/link";
 import { MessageCircle } from "lucide-react";
 
 import type { CommunityPost } from "@/lib/community/types";
+import { sanitizeExternalUrl } from "@/lib/security/external-url";
 
 interface Props {
   post: CommunityPost;
@@ -54,14 +55,15 @@ export function CommunityPostCard({ post, onOpenComments }: Props) {
     .join("")
     .slice(0, 2)
     .toUpperCase();
+  const safeAvatarUrl = sanitizeExternalUrl(post.author.avatarUrl);
 
   return (
     <div className="rounded-2xl border border-white/[0.06] bg-surface-raised p-4 transition hover:border-white/10">
       {/* Author row */}
       <div className="flex items-center gap-3">
-        {post.author.avatarUrl ? (
+        {safeAvatarUrl ? (
           <img
-            src={post.author.avatarUrl}
+            src={safeAvatarUrl}
             alt=""
             className="h-8 w-8 shrink-0 rounded-full object-cover"
           />

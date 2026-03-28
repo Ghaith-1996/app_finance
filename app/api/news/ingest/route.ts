@@ -1,9 +1,9 @@
-import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { ingestNewsToSupabase, extractPublisherContent } from "@/lib/services/news";
 import { ENRICHABLE_SOURCE_TYPES } from "@/lib/services/news/source-config";
 import { runPythonWorker, type WorkerResult } from "@/lib/services/news/worker";
 import { resolveGlobalTickers } from "@/lib/services/ticker-resolver";
+import { requireAdminRouteAccess } from "@/lib/security/admin";
 
 /**
  * POST /api/news/ingest
@@ -16,15 +16,8 @@ import { resolveGlobalTickers } from "@/lib/services/ticker-resolver";
  * Uses the global ticker universe plus global headline sources via the Python worker, then AI enrichment.
  */
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-
-  if (authError || !user) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const { supabase, errorResponse } = await requireAdminRouteAccess();
+  if (errorResponse) return errorResponse;
 
   let body: { lookbackHours?: number; maxArticles?: number } = {};
   try {

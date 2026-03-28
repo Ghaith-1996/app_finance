@@ -116,4 +116,20 @@ describe("UserMenu", () => {
       expect(refresh).toHaveBeenCalledTimes(1);
     });
   });
+
+  it("falls back to initials when the avatar URL is unsafe", async () => {
+    maybeSingle.mockResolvedValue({
+      data: {
+        display_name: "Ada Lovelace",
+        avatar_url: "javascript:alert(1)",
+        handle: "adal",
+      },
+    });
+
+    render(<UserMenu />);
+
+    await screen.findByText("Ada Lovelace");
+    expect(document.querySelector("img")).toBeNull();
+    expect(screen.getByText("A")).toBeTruthy();
+  });
 });

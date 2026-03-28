@@ -1,5 +1,6 @@
 import "server-only";
 
+import { isAdminUser } from "@/lib/security/admin";
 import { createClient } from "@/lib/supabase/server";
 import {
   DEFAULT_FEED_PAGE_SIZE,
@@ -51,6 +52,7 @@ type AuthenticatedPageContext = {
   supabase: ServerSupabase;
   userId: string | null;
   showOnboardingNav: boolean;
+  showAdminLink: boolean;
   portfolios: PortfolioSummary[];
   primaryPortfolioId: string | null;
 };
@@ -172,6 +174,7 @@ async function resolveAuthenticatedPageContext(
       supabase,
       userId: null,
       showOnboardingNav: true,
+      showAdminLink: false,
       portfolios: [],
       primaryPortfolioId: null,
     };
@@ -198,6 +201,7 @@ async function resolveAuthenticatedPageContext(
     supabase,
     userId: user.id,
     showOnboardingNav: portfolios.length === 0,
+    showAdminLink: isAdminUser(user),
     portfolios,
     primaryPortfolioId: portfolios[0]?.id ?? null,
   };
@@ -384,8 +388,20 @@ export async function loadOnboardingNavState(): Promise<boolean> {
   return context.showOnboardingNav;
 }
 
+export async function loadShellChromeState(): Promise<{
+  showOnboardingNav: boolean;
+  showAdminLink: boolean;
+}> {
+  const context = await resolveAuthenticatedPageContext("shell-chrome");
+  return {
+    showOnboardingNav: context.showOnboardingNav,
+    showAdminLink: context.showAdminLink,
+  };
+}
+
 export async function loadFeedPageData(): Promise<{
   showOnboardingNav: boolean;
+  showAdminLink: boolean;
   portfolioId: string | null;
   portfolioOverview: PortfolioOverview;
   portfolioInsights: PortfolioInsight[];
@@ -399,6 +415,7 @@ export async function loadFeedPageData(): Promise<{
     timer.done();
     return {
       showOnboardingNav: true,
+      showAdminLink: false,
       portfolioId: null,
       portfolioOverview: FEED_OVERVIEW_FALLBACK,
       portfolioInsights: [],
@@ -420,6 +437,7 @@ export async function loadFeedPageData(): Promise<{
     timer.done();
     return {
       showOnboardingNav: context.showOnboardingNav,
+      showAdminLink: context.showAdminLink,
       portfolioId: null,
       portfolioOverview: FEED_OVERVIEW_FALLBACK,
       portfolioInsights: [],
@@ -470,6 +488,7 @@ export async function loadFeedPageData(): Promise<{
   timer.done();
   return {
     showOnboardingNav: context.showOnboardingNav,
+    showAdminLink: context.showAdminLink,
     portfolioId,
     portfolioOverview: buildPortfolioOverview(holdings, {
       lastSyncedAt: portfolio.lastSyncedAt,
@@ -484,6 +503,7 @@ export async function loadFeedPageData(): Promise<{
 
 export async function loadPortfolioPageData(): Promise<{
   showOnboardingNav: boolean;
+  showAdminLink: boolean;
   portfolioId: string | null;
   portfolioData: { sourceType: string; holdings: Holding[] } | null;
   portfolioOverview: PortfolioOverview;
@@ -498,6 +518,7 @@ export async function loadPortfolioPageData(): Promise<{
     timer.done();
     return {
       showOnboardingNav: context.showOnboardingNav,
+      showAdminLink: context.showAdminLink,
       portfolioId: null,
       portfolioData: null,
       portfolioOverview: PORTFOLIO_OVERVIEW_FALLBACK,
@@ -522,6 +543,7 @@ export async function loadPortfolioPageData(): Promise<{
 
   return {
     showOnboardingNav: context.showOnboardingNav,
+    showAdminLink: context.showAdminLink,
     portfolioId,
     portfolioData: {
       sourceType: portfolio.sourceType,
@@ -542,6 +564,7 @@ export async function loadAnalysisPageData(
   requestedPortfolioId?: string | null,
 ): Promise<{
   showOnboardingNav: boolean;
+  showAdminLink: boolean;
   portfolioId: string | null;
   portfolioOverview: PortfolioOverview;
   portfolioInsights: PortfolioInsight[];
@@ -558,6 +581,7 @@ export async function loadAnalysisPageData(
     timer.done();
     return {
       showOnboardingNav: context.showOnboardingNav,
+      showAdminLink: context.showAdminLink,
       portfolioId: null,
       portfolioOverview: ANALYSIS_OVERVIEW_FALLBACK,
       portfolioInsights: [],
@@ -582,6 +606,7 @@ export async function loadAnalysisPageData(
 
   return {
     showOnboardingNav: context.showOnboardingNav,
+    showAdminLink: context.showAdminLink,
     portfolioId,
     portfolioOverview: buildPortfolioOverview(holdings, {
       lastSyncedAt: portfolio.lastSyncedAt,
@@ -595,6 +620,7 @@ export async function loadAnalysisPageData(
 
 export async function loadFullPortfolioPageData(): Promise<{
   showOnboardingNav: boolean;
+  showAdminLink: boolean;
   portfolioId: string | null;
   portfolioCreatedAt: string | null;
   holdings: Holding[];
@@ -612,6 +638,7 @@ export async function loadFullPortfolioPageData(): Promise<{
     timer.done();
     return {
       showOnboardingNav: context.showOnboardingNav,
+      showAdminLink: context.showAdminLink,
       portfolioId: null,
       portfolioCreatedAt: null,
       holdings: [],
@@ -640,6 +667,7 @@ export async function loadFullPortfolioPageData(): Promise<{
 
   return {
     showOnboardingNav: context.showOnboardingNav,
+    showAdminLink: context.showAdminLink,
     portfolioId,
     portfolioCreatedAt: portfolio.createdAt,
     holdings,

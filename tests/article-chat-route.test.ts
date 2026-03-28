@@ -285,6 +285,8 @@ describe("POST /api/article-chat", () => {
     mockComputePortfolioOverview.mockClear();
     mockGetAIProviderById.mockClear();
     currentSupabase = createSupabaseMock({});
+    delete process.env.ADMIN_USER_IDS;
+    delete process.env.ADMIN_USER_EMAILS;
   });
 
   it("answers a generic portfolio-level question when newsItemId is omitted", async () => {
@@ -402,6 +404,26 @@ describe("POST /api/article-chat", () => {
         portfolioId: "p1",
         newsItemId: "n1",
         message: "What matters here?",
+        modelTier: "ultimate",
+      }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    expect(mockGetAIProviderById).toHaveBeenCalledWith("azure");
+  });
+
+  it("allows admin users to request the ultimate tier without a paid plan", async () => {
+    process.env.ADMIN_USER_IDS = "user-1";
+    mockAnswerArticleQuestion.mockResolvedValue("Admin answer.");
+
+    const req = new Request("http://localhost/api/article-chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        portfolioId: "p1",
+        newsItemId: "n1",
+        message: "Use the best model.",
         modelTier: "ultimate",
       }),
     });

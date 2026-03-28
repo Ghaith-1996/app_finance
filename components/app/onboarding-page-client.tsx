@@ -29,7 +29,7 @@ import { cn, formatPrice } from "@/lib/utils";
 type Method = "csv" | "manual";
 type Step = "method" | "intake" | "review";
 
-export function OnboardingPageClient() {
+export function OnboardingPageClient({ showAdminLink = false }: { showAdminLink?: boolean }) {
   const router = useRouter();
   const [method, setMethod] = useState<Method>("csv");
   const [step, setStep] = useState<Step>("method");
@@ -205,6 +205,7 @@ export function OnboardingPageClient() {
       title="Bring your portfolio into one intelligent home"
       description="Import a CSV from your broker or create holdings manually. Review and confirm before saving."
       activePath="/onboarding"
+      showAdminLink={showAdminLink}
       actions={
         step === "review" ? (
           <>

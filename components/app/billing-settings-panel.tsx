@@ -48,6 +48,12 @@ export function BillingSettingsPanel({
         </Badge>
       </div>
 
+      {billingSummary.hasAdminModelAccess ? (
+        <Badge tone="brand" className="w-fit">
+          Admin override active: all AI model tiers unlocked
+        </Badge>
+      ) : null}
+
       <div className="grid gap-4 md:grid-cols-3">
         <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-4">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">

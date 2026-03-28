@@ -39,6 +39,7 @@ export default async function FeedPage({
 
   const {
     showOnboardingNav,
+    showAdminLink,
     portfolioId,
     portfolioOverview,
     portfolioInsights,
@@ -48,7 +49,7 @@ export default async function FeedPage({
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  const billingSummary = user ? await getBillingSummaryForUser(user.id) : null;
+  const billingSummary = user ? await getBillingSummaryForUser(user.id, user.email) : null;
 
   const storyCount = parseCoverageCount(portfolioOverview.coverage);
   const pulsePct = analysisPulseFill(portfolioOverview.lastAnalyzedAt);
@@ -60,6 +61,7 @@ export default async function FeedPage({
       description="Leveraging compound analysis to distill 14,000+ daily data points into your critical performance drivers."
       activePath="/feed"
       showOnboardingNav={showOnboardingNav}
+      showAdminLink={showAdminLink}
       actions={
         <Link href="/portfolio" className={buttonStyles({ size: "lg" })}>
           View portfolio

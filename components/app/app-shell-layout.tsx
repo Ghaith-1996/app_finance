@@ -55,6 +55,7 @@ export function AppShellLayout({
   backHref,
   backLabel = "Back to portfolio",
   showOnboardingNav = true,
+  showAdminLink = false,
 }: {
   eyebrow: string;
   title: string;
@@ -65,6 +66,7 @@ export function AppShellLayout({
   backHref?: string;
   backLabel?: string;
   showOnboardingNav?: boolean;
+  showAdminLink?: boolean;
 }) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
@@ -249,7 +251,7 @@ export function AppShellLayout({
               <Globe className="h-4 w-4" />
               Landing Page
             </Link>
-            <UserMenu />
+            <UserMenu showAdminLink={showAdminLink} />
           </div>
         </div>
       </aside>

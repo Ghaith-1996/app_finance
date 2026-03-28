@@ -26,6 +26,7 @@ function storyTickerTag(h: PortfolioFeedHighlight): string {
 export default async function PortfolioPage() {
   const {
     showOnboardingNav,
+    showAdminLink,
     portfolioId,
     portfolioData,
     portfolioOverview,
@@ -40,6 +41,7 @@ export default async function PortfolioPage() {
         description="Create a portfolio from onboarding to see holdings and analysis here."
         activePath="/portfolio"
         showOnboardingNav={showOnboardingNav}
+        showAdminLink={showAdminLink}
       >
         <div className="rounded-2xl border border-white/[0.06] bg-surface-raised p-8 text-center">
           <p className="text-slate-400">
@@ -71,6 +73,7 @@ export default async function PortfolioPage() {
       description="Welcome back. Here's your market snapshot for today."
       activePath="/portfolio"
       showOnboardingNav={showOnboardingNav}
+      showAdminLink={showAdminLink}
     >
       <div className="space-y-6">
         {/* Top row cards */}

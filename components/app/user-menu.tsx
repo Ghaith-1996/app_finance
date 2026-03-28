@@ -4,11 +4,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { ChevronDown, LogOut, Settings } from "lucide-react";
+import { ChevronDown, LogOut, Settings, Shield } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
 import { sanitizeExternalUrl } from "@/lib/security/external-url";
 
-export function UserMenu() {
+export function UserMenu({ showAdminLink = false }: { showAdminLink?: boolean }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<{
     displayName: string | null;
@@ -155,6 +155,17 @@ export function UserMenu() {
             <Settings className="h-4 w-4 shrink-0" />
             Settings
           </Link>
+          {showAdminLink ? (
+            <Link
+              href="/admin"
+              role="menuitem"
+              onClick={() => setOpen(false)}
+              className="flex items-center gap-2 px-3 py-2.5 text-sm text-slate-200 transition hover:bg-white/5"
+            >
+              <Shield className="h-4 w-4 shrink-0" />
+              Admin
+            </Link>
+          ) : null}
           <button
             type="button"
             role="menuitem"

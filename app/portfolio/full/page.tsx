@@ -257,6 +257,7 @@ export default async function FullPortfolioPage() {
   const billingSummary = await getCurrentUserBillingSummary();
   const {
     showOnboardingNav,
+    showAdminLink,
     portfolioId,
     portfolioCreatedAt,
     holdings,
@@ -274,6 +275,7 @@ export default async function FullPortfolioPage() {
         activePath="/portfolio"
         backHref="/portfolio"
         showOnboardingNav={showOnboardingNav}
+        showAdminLink={showAdminLink}
         actions={
           <Link href="/portfolio" className={buttonStyles({ variant: "secondary" })}>
             Back to overview
@@ -307,6 +309,7 @@ export default async function FullPortfolioPage() {
       activePath="/portfolio"
       backHref="/portfolio"
       showOnboardingNav={showOnboardingNav}
+      showAdminLink={showAdminLink}
     >
       <div className="-mx-4 rounded-[2.5rem] bg-[#0a0f15] p-6 shadow-inner sm:mx-0 lg:p-10">
         <div className="flex flex-col gap-10 lg:flex-row">

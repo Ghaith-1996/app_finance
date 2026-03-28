@@ -18,6 +18,7 @@ export default async function AnalysisPage({
   const params = await searchParams;
   const {
     showOnboardingNav,
+    showAdminLink,
     portfolioId,
     portfolioOverview,
     portfolioInsights,
@@ -30,6 +31,7 @@ export default async function AnalysisPage({
       description="Every 20 minutes, the system ingests new articles and matches them against your portfolio holdings and watchlist symbols."
       activePath="/analysis"
       showOnboardingNav={showOnboardingNav}
+      showAdminLink={showAdminLink}
       actions={
         <>
           <Link

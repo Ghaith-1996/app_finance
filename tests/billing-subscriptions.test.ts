@@ -86,6 +86,8 @@ import {
 describe("billing subscriptions", () => {
   beforeEach(() => {
     currentSupabase = createSupabaseMock("premium");
+    delete process.env.ADMIN_USER_IDS;
+    delete process.env.ADMIN_USER_EMAILS;
   });
 
   it("omits Stripe identifiers from the public billing summary", async () => {
@@ -104,5 +106,17 @@ describe("billing subscriptions", () => {
     expect(state.planKey).toBe("ultimate");
     expect(state.stripeCustomerId).toBe("cus_123");
     expect(state.stripeSubscriptionId).toBe("sub_123");
+  });
+
+  it("unlocks all model tiers for admin users without changing their Stripe plan", async () => {
+    currentSupabase = createSupabaseMock("free");
+    process.env.ADMIN_USER_IDS = "user-1";
+
+    const summary = await getBillingSummaryForUser("user-1");
+
+    expect(summary.planKey).toBe("free");
+    expect(summary.allowedModelTiers).toEqual(["free", "premium", "ultimate"]);
+    expect(summary.defaultModelTier).toBe("ultimate");
+    expect(summary.hasAdminModelAccess).toBe(true);
   });
 });

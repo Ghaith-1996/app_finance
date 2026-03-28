@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { OnboardingPageClient } from "@/components/app/onboarding-page-client";
 import { getUserPortfolios } from "@/lib/actions/portfolio";
+import { loadShellChromeState } from "@/lib/server/page-loaders";
 
 export default async function OnboardingPage() {
   const { data: portfolios } = await getUserPortfolios();
@@ -10,5 +11,7 @@ export default async function OnboardingPage() {
     redirect("/home");
   }
 
-  return <OnboardingPageClient />;
+  const { showAdminLink } = await loadShellChromeState();
+
+  return <OnboardingPageClient showAdminLink={showAdminLink} />;
 }

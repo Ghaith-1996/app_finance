@@ -119,7 +119,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    await assertUserCanUseModelTier(user.id, modelTier);
+    await assertUserCanUseModelTier(user, modelTier);
   } catch (error) {
     if (error instanceof BillingAccessError) {
       return json(

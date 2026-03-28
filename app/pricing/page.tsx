@@ -7,6 +7,7 @@ import { Panel } from "@/components/ui/panel";
 import { PLAN_LABELS } from "@/lib/billing/plans";
 import { getStripe } from "@/lib/billing/stripe";
 import { getBillingSummaryForUser } from "@/lib/billing/subscriptions";
+import { isAdminUser } from "@/lib/security/admin";
 import { loadOnboardingNavState } from "@/lib/server/page-loaders";
 import { createClient } from "@/lib/supabase/server";
 
@@ -85,7 +86,8 @@ export default async function PricingPage({
   } = await supabase.auth.getUser();
 
   const showOnboardingNav = await loadOnboardingNavState();
-  const billingSummary = user ? await getBillingSummaryForUser(user.id) : null;
+  const showAdminLink = isAdminUser(user);
+  const billingSummary = user ? await getBillingSummaryForUser(user.id, user.email) : null;
   const [premiumPriceLabel, ultimatePriceLabel] = await Promise.all([
     loadPriceLabel("premium"),
     loadPriceLabel("ultimate"),
@@ -103,6 +105,7 @@ export default async function PricingPage({
       backHref={user ? "/settings" : "/"}
       backLabel={user ? "Back to settings" : "Back to landing"}
       showOnboardingNav={showOnboardingNav}
+      showAdminLink={showAdminLink}
       actions={
         user ? (
           <Link

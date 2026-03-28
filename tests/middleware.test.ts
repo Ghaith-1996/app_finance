@@ -54,6 +54,15 @@ describe("middleware", () => {
     expect(response.headers.get("location")).toContain("/login");
   });
 
+  it("treats /admin as a protected path", async () => {
+    getSession.mockResolvedValue({ data: { session: null } });
+
+    const { middleware } = await import("@/middleware");
+    const response = await middleware(new NextRequest("http://localhost/admin"));
+
+    expect(response.headers.get("location")).toContain("/login?redirectTo=%2Fadmin");
+  });
+
   it("excludes api routes from the middleware matcher", async () => {
     const { config } = await import("@/middleware");
 

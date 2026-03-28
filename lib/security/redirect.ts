@@ -12,6 +12,7 @@ const ALLOWED_PREFIXES = [
   "/home",
   "/watchlist",
   "/settings",
+  "/admin",
   "/complete-profile",
   "/onboarding",
   "/pricing",

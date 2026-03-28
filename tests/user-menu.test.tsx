@@ -132,4 +132,17 @@ describe("UserMenu", () => {
     expect(document.querySelector("img")).toBeNull();
     expect(screen.getByText("A")).toBeTruthy();
   });
+
+  it("shows an admin link when the server marks the viewer as admin", async () => {
+    render(<UserMenu showAdminLink />);
+
+    await screen.findByText("Ada Lovelace");
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /ada lovelace/i }));
+    });
+
+    const adminLink = await screen.findByRole("menuitem", { name: /admin/i });
+    expect(adminLink).toHaveAttribute("href", "/admin");
+  });
 });

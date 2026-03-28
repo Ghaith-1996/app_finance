@@ -2,7 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { sanitizeRedirect } from "@/lib/security/redirect";
 
-const protectedPaths = ["/onboarding", "/analysis", "/feed", "/portfolio", "/home", "/watchlist", "/settings", "/complete-profile"];
+const protectedPaths = ["/onboarding", "/analysis", "/feed", "/portfolio", "/home", "/watchlist", "/settings", "/admin", "/complete-profile"];
 
 function isProtectedPath(pathname: string) {
   return protectedPaths.some((path) => pathname === path || pathname.startsWith(path + "/"));

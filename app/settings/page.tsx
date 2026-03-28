@@ -5,6 +5,7 @@ import { ProfileForm } from "@/components/app/profile-form";
 import { Badge } from "@/components/ui/badge";
 import { getBillingSummaryForUser } from "@/lib/billing/subscriptions";
 import { getCurrentUserProfile, saveCurrentUserProfile } from "@/lib/actions/profile";
+import { isAdminUser } from "@/lib/security/admin";
 import { loadOnboardingNavState } from "@/lib/server/page-loaders";
 import { createClient } from "@/lib/supabase/server";
 
@@ -24,7 +25,8 @@ export default async function SettingsPage({
 
   const profile = await getCurrentUserProfile();
   const showOnboardingNav = await loadOnboardingNavState();
-  const billingSummary = await getBillingSummaryForUser(user.id);
+  const showAdminLink = isAdminUser(user);
+  const billingSummary = await getBillingSummaryForUser(user.id, user.email);
   const sp = searchParams ? await searchParams : {};
   const billingMessage =
     typeof sp.billing === "string" ? sp.billing : Array.isArray(sp.billing) ? sp.billing[0] : null;
@@ -38,6 +40,7 @@ export default async function SettingsPage({
       backHref="/home"
       backLabel="Back to home"
       showOnboardingNav={showOnboardingNav}
+      showAdminLink={showAdminLink}
     >
       <div className="space-y-6">
         {billingMessage === "success" ? (

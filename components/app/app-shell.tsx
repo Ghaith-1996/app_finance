@@ -13,6 +13,7 @@ export function AppShell({
   backHref,
   backLabel = "Back to portfolio",
   showOnboardingNav = true,
+  showAdminLink = false,
 }: {
   eyebrow: string;
   title: string;
@@ -25,6 +26,7 @@ export function AppShell({
   backHref?: string;
   backLabel?: string;
   showOnboardingNav?: boolean;
+  showAdminLink?: boolean;
 }) {
   return (
     <AppShellLayout
@@ -36,6 +38,7 @@ export function AppShell({
       backHref={backHref}
       backLabel={backLabel}
       showOnboardingNav={showOnboardingNav}
+      showAdminLink={showAdminLink}
     >
       {children}
     </AppShellLayout>

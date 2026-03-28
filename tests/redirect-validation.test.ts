@@ -13,6 +13,7 @@ describe("isValidInternalRedirect", () => {
     expect(isValidInternalRedirect("/home")).toBe(true);
     expect(isValidInternalRedirect("/watchlist")).toBe(true);
     expect(isValidInternalRedirect("/settings")).toBe(true);
+    expect(isValidInternalRedirect("/admin")).toBe(true);
     expect(isValidInternalRedirect("/complete-profile")).toBe(true);
     expect(isValidInternalRedirect("/onboarding")).toBe(true);
     expect(isValidInternalRedirect("/pricing")).toBe(true);
@@ -37,7 +38,6 @@ describe("isValidInternalRedirect", () => {
   });
 
   it("rejects unknown internal paths", () => {
-    expect(isValidInternalRedirect("/admin")).toBe(false);
     expect(isValidInternalRedirect("/api/secret")).toBe(false);
     expect(isValidInternalRedirect("/")).toBe(false);
   });
@@ -63,7 +63,7 @@ describe("sanitizeRedirect", () => {
   it("returns fallback for invalid paths", () => {
     expect(sanitizeRedirect("https://evil.com", "/portfolio")).toBe("/portfolio");
     expect(sanitizeRedirect("//evil.com", "/portfolio")).toBe("/portfolio");
-    expect(sanitizeRedirect("/admin", "/portfolio")).toBe("/portfolio");
+    expect(sanitizeRedirect("/admin", "/portfolio")).toBe("/admin");
   });
 
   it("returns fallback for null/undefined", () => {

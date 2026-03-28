@@ -177,6 +177,8 @@ describe("POST /api/portfolio-copilot", () => {
     mockComputePortfolioOverview.mockClear();
     mockGetAIProviderById.mockClear();
     currentSupabase = createSupabaseMock({});
+    delete process.env.ADMIN_USER_IDS;
+    delete process.env.ADMIN_USER_EMAILS;
   });
 
   it("defaults to the free tier when modelTier is omitted", async () => {
@@ -244,6 +246,25 @@ describe("POST /api/portfolio-copilot", () => {
       body: JSON.stringify({
         portfolioId: "p1",
         message: "What should I watch?",
+        modelTier: "ultimate",
+      }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    expect(mockGetAIProviderById).toHaveBeenCalledWith("azure");
+  });
+
+  it("allows admin users to request the ultimate provider without a paid plan", async () => {
+    process.env.ADMIN_USER_IDS = "user-1";
+    mockAnswerPortfolioQuestion.mockResolvedValue("Admin Azure answer");
+
+    const req = new Request("http://localhost/api/portfolio-copilot", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        portfolioId: "p1",
+        message: "Give me the strongest answer",
         modelTier: "ultimate",
       }),
     });

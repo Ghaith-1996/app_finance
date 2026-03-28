@@ -618,7 +618,7 @@ export const faqs: FAQItem[] = [
   {
     question: "Will live broker connections work in this first version?",
     answer:
-      "The current build is frontend-first, so the broker connection flow is modeled as a polished product experience with mocked states. Live authentication and sync come in the backend phase.",
+      "The initial release focuses on manual portfolio import and CSV upload. Guided broker-sync flows are on the roadmap and will be added in a future update.",
   },
   {
     question: "Can users create a portfolio manually?",
@@ -631,9 +631,9 @@ export const faqs: FAQItem[] = [
       "Each story is ranked by portfolio relevance and includes a plain-English explanation of which holdings or sectors it touches, instead of making the user infer that on their own.",
   },
   {
-    question: "What comes after the frontend MVP?",
+    question: "What comes next for Pulsefolio?",
     answer:
-      "The next phase should add authentication, secure broker linking, persistent portfolios, news ingestion, and the AI analysis pipeline behind the mocked product states.",
+      "Upcoming releases will add secure broker linking, deeper AI insights, and expanded data-source coverage to keep your portfolio context richer every day.",
   },
 ];
 

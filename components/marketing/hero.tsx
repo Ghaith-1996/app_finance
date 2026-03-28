@@ -215,9 +215,8 @@ export function Hero() {
                     A calmer, more personal entry point into finance
                   </p>
                   <p className="text-sm leading-6 text-slate-400">
-                    The marketing layer now feels closer to an all-in-one
-                    financial home, while the product preview still shows the
-                    portfolio-aware intelligence underneath.
+                    Pulsefolio brings everything into one financial home
+                    while keeping the portfolio-aware intelligence underneath.
                   </p>
                 </div>
               </div>

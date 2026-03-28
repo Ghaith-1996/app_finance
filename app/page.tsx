@@ -65,7 +65,7 @@ export default function Home() {
       </main>
       <footer className="border-t border-white/[0.06] px-6 py-8 lg:px-8">
         <div className="mx-auto flex max-w-7xl flex-col gap-4 text-sm text-slate-500 md:flex-row md:items-center md:justify-between">
-          <p>PortfolioSignal frontend MVP for portfolio-aware finance workflows.</p>
+          <p>&copy; {new Date().getFullYear()} Pulsefolio. Portfolio-aware finance intelligence.</p>
           <div className="flex flex-wrap items-center gap-4">
             <Link href="/onboarding" className="transition hover:text-slate-300">
               Onboarding
@@ -123,8 +123,8 @@ function PlatformSection() {
       <div className="mx-auto max-w-7xl space-y-12">
         <SectionHeading
           eyebrow="Product walkthrough"
-          title="The frontend now reads like an intelligent financial home"
-          description="The structure borrows more from consumer-finance storytelling: clean entry points, lighter surfaces, human copy, and product moments that make AI feel useful instead of abstract."
+          title="An intelligent financial home built around your holdings"
+          description="Clean entry points, lighter surfaces, and product moments that make AI feel useful instead of abstract — all shaped by the portfolio you actually own."
         />
         <div className="grid gap-6 lg:grid-cols-[1.02fr_0.98fr]">
           <div className="grid gap-4">
@@ -201,8 +201,8 @@ function PlatformSection() {
                   </p>
                 </div>
                 <p className="mt-4 text-sm leading-7 text-slate-300">
-                  The current frontend already frames broker connections as
-                  read-only and sets up a clean path for secure syncing later.
+                  Pulsefolio frames broker connections as read-only and
+                  sets up a clean path for secure syncing later.
                 </p>
               </div>
             </Panel>
@@ -237,8 +237,8 @@ function ProofSection() {
       <div className="mx-auto max-w-7xl space-y-12">
         <SectionHeading
           eyebrow="What makes it feel current"
-          title="The frontend now speaks in a warmer, more personal finance language"
-          description="Origin's best cue is tone: direct but reassuring, product-led, and centered on helping people feel more in control of their money."
+          title="A warmer, more personal finance language"
+          description="Direct but reassuring, product-led, and centered on helping people feel more in control of their money."
           align="center"
         />
         <div className="grid gap-4 lg:grid-cols-2">
@@ -286,8 +286,8 @@ function FaqSection() {
       <div className="mx-auto max-w-7xl space-y-12">
         <SectionHeading
           eyebrow="FAQ"
-          title="Questions the frontend already helps answer"
-          description="The current build stays frontend-first, but the user journey is already shaped around the broker sync, AI analysis, and personalized feed experience."
+          title="Questions Pulsefolio helps answer"
+          description="The experience is shaped around broker sync, AI analysis, and a personalized feed — so the answers start from what you own."
         />
         <div className="grid gap-4 lg:grid-cols-2">
           {faqs.map((faq) => (
@@ -318,12 +318,11 @@ function FinalCallToAction() {
               Next phase ready
             </Badge>
             <h2 className="text-4xl font-semibold tracking-tight text-white">
-              Build the intelligent portfolio home first, then connect the real data.
+              Your intelligent portfolio home starts here.
             </h2>
             <p className="text-lg leading-8 text-slate-400">
-              The frontend now has the warmer marketing layer, the onboarding
-              flow, and the product routes needed for backend integration without a
-              redesign.
+              Connect a portfolio, run the AI analysis, and open a daily brief
+              that already knows what matters — all in one place.
             </p>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row">

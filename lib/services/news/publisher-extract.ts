@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { spawnArticleExtractionWorker } from "@/lib/services/news/extraction-trigger";
 import { validatePublisherUrl } from "@/lib/security/publisher-url";
 
-const EXTRACTABLE_SOURCE_TYPES = ["finnhub", "newsapi", "gnews", "marketaux"] as const;
+const EXTRACTABLE_SOURCE_TYPES = ["finnhub", "newsapi", "gnews", "marketaux", "newsapi_ai", "newscatcher"] as const;
 
 export interface BatchExtractionStats {
   attempted: number;

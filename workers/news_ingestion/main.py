@@ -31,6 +31,8 @@ from .bootstrap import configure_worker_environment, prepare_worker_runtime
 from .extract_full_text import backfill_full_text, spawn_extraction_worker
 from .fetchers.edgar_fetcher import fetch_edgar_news
 from .fetchers.gnews_fetcher import fetch_gnews_news
+from .fetchers.newscatcher_fetcher import fetch_newscatcher_news
+from .fetchers.newsapi_ai_fetcher import fetch_newsapi_ai_news
 from .fetchers.newsapi_fetcher import fetch_newsapi_news
 from .fetchers.result import SourceFetchBundle
 from .upsert import UpsertStats, upsert_articles
@@ -50,6 +52,7 @@ class SourceConfig:
     fetcher: Callable[..., SourceFetchBundle]
     uses_tickers: bool = False
     accepts_gnews_queries: bool = False
+    accepts_queries: bool = False
     env_var: str | None = None
     env_error: str | None = None
     import_name: str | None = None
@@ -88,6 +91,42 @@ SOURCE_REGISTRY: dict[str, SourceConfig] = {
 
 VALID_SOURCES = frozenset(SOURCE_REGISTRY)
 
+CANDIDATE_SOURCE_REGISTRY: dict[str, SourceConfig] = {
+    "edgar": SOURCE_REGISTRY["edgar"],
+    "newsapi_ai": SourceConfig(
+        key="newsapi_ai",
+        label="NewsAPI.ai",
+        fetcher=fetch_newsapi_ai_news,
+        accepts_queries=True,
+        env_var="NEWSAPI_AI_API_KEY",
+        env_error="Missing. Required for NewsAPI.ai article search.",
+    ),
+    "gnews": SOURCE_REGISTRY["gnews"],
+    "newscatcher": SourceConfig(
+        key="newscatcher",
+        label="NewsCatcher",
+        fetcher=fetch_newscatcher_news,
+        accepts_queries=True,
+        env_var="NEWSCATCHER_API_KEY",
+        env_error="Missing. Required for NewsCatcher v3 article search.",
+    ),
+}
+
+CANDIDATE_VALID_SOURCES = frozenset(CANDIDATE_SOURCE_REGISTRY)
+
+PROVIDER_SETS: dict[str, dict[str, SourceConfig]] = {
+    "current": SOURCE_REGISTRY,
+    "candidate": CANDIDATE_SOURCE_REGISTRY,
+}
+
+
+def _get_registry(provider_set: str = "current") -> dict[str, SourceConfig]:
+    return PROVIDER_SETS.get(provider_set, SOURCE_REGISTRY)
+
+
+def _get_valid_sources(provider_set: str = "current") -> frozenset[str]:
+    return frozenset(_get_registry(provider_set))
+
 
 def _empty_bundle(*, outcome: str = "skipped", error: str | None = None) -> SourceFetchBundle:
     return SourceFetchBundle(articles=[], outcome=outcome, error=error)
@@ -104,9 +143,12 @@ def _merge_source_row(stats: UpsertStats, bundle: SourceFetchBundle) -> dict:
 def _source_rows_from_maps(
     bundles: dict[str, SourceFetchBundle],
     stats: dict[str, UpsertStats] | None = None,
+    *,
+    registry: dict[str, SourceConfig] | None = None,
 ) -> dict[str, dict]:
+    active_reg = registry or SOURCE_REGISTRY
     source_rows: dict[str, dict] = {}
-    for key in SOURCE_REGISTRY:
+    for key in active_reg:
         source_rows[key] = _merge_source_row(
             (stats or {}).get(key, _empty_stats()),
             bundles.get(key, _empty_bundle()),
@@ -115,7 +157,7 @@ def _source_rows_from_maps(
 
 
 def _label_for(key: str) -> str:
-    config = SOURCE_REGISTRY.get(key)
+    config = SOURCE_REGISTRY.get(key) or CANDIDATE_SOURCE_REGISTRY.get(key)
     return config.label if config else key
 
 
@@ -143,8 +185,9 @@ def _all_rows_failed(stats: UpsertStats) -> bool:
     return stats.fetched > 0 and stats.inserted == 0 and stats.skipped == 0 and stats.failed >= stats.fetched
 
 
-def preflight_check() -> dict:
+def preflight_check(*, provider_set: str = "current") -> dict:
     """Validate dependencies and config. Returns {ok: bool, checks: [...]}. Never raises."""
+    registry = _get_registry(provider_set)
     checks: list[dict] = []
 
     try:
@@ -162,7 +205,7 @@ def preflight_check() -> dict:
         })
 
     seen_imports: set[str] = set()
-    for config in SOURCE_REGISTRY.values():
+    for config in registry.values():
         if not config.import_name or not config.import_label:
             continue
         if config.import_label in seen_imports:
@@ -195,7 +238,7 @@ def preflight_check() -> dict:
         **({"error": "Missing. Required to bypass RLS for news ingestion."} if not service_role_key else {}),
     })
 
-    for config in SOURCE_REGISTRY.values():
+    for config in registry.values():
         if not config.env_var or not config.env_error:
             continue
         value = os.getenv(config.env_var, "").strip()
@@ -214,6 +257,7 @@ def _fetch_source(
     *,
     tickers: list[str],
     gnews_queries: list[str] | None,
+    queries: list[str] | None = None,
     lookback_hours: int,
     max_articles_per_source: int,
 ) -> SourceFetchBundle:
@@ -228,6 +272,12 @@ def _fetch_source(
             lookback_hours=lookback_hours,
             max_articles=max_articles_per_source,
             queries=gnews_queries,
+        )
+    if config.accepts_queries:
+        return config.fetcher(
+            lookback_hours=lookback_hours,
+            max_articles=max_articles_per_source,
+            queries=queries,
         )
     return config.fetcher(
         lookback_hours=lookback_hours,
@@ -312,6 +362,8 @@ def run(
     sources: list[str] | None = None,
     sources_explicit: bool = False,
     gnews_queries: list[str] | None = None,
+    queries: list[str] | None = None,
+    provider_set: str = "current",
 ) -> dict:
     """
     Fetch from selected sources, optionally upsert, return stats + per-source outcomes.
@@ -321,12 +373,15 @@ def run(
     """
     prepare_worker_runtime()
 
-    active_sources = {s.lower() for s in sources} if sources else set(VALID_SOURCES)
-    active_sources &= VALID_SOURCES
-    if not active_sources:
-        active_sources = set(VALID_SOURCES)
+    registry = _get_registry(provider_set)
+    valid_sources = _get_valid_sources(provider_set)
 
-    bundles = {key: _empty_bundle() for key in SOURCE_REGISTRY}
+    active_sources = {s.lower() for s in sources} if sources else set(valid_sources)
+    active_sources &= valid_sources
+    if not active_sources:
+        active_sources = set(valid_sources)
+
+    bundles = {key: _empty_bundle() for key in registry}
 
     if "edgar" in active_sources and not tickers:
         if sources_explicit and sources and "edgar" in {s.lower() for s in sources}:
@@ -334,7 +389,7 @@ def run(
             return {
                 "ingest_status": "failed",
                 "ingest_detail": "EDGAR requires at least one ticker symbol.",
-                **_source_rows_from_maps(bundles),
+                **_source_rows_from_maps(bundles, registry=registry),
                 "total_inserted": 0,
             }
         active_sources.discard("edgar")
@@ -343,11 +398,11 @@ def run(
         return {
             "ingest_status": "failed",
             "ingest_detail": "Nothing to fetch: enable a global headline source or provide tickers for EDGAR.",
-            **_source_rows_from_maps(bundles),
+            **_source_rows_from_maps(bundles, registry=registry),
             "total_inserted": 0,
         }
 
-    active_source_keys = [key for key in SOURCE_REGISTRY if key in active_sources]
+    active_source_keys = [key for key in registry if key in active_sources]
 
     logger.info(
         "Starting ingestion: tickers=%s lookback_hours=%d max_per_source=%d probe=%s sources=%s gnews_queries=%d",
@@ -360,12 +415,13 @@ def run(
     )
 
     for key in active_source_keys:
-        config = SOURCE_REGISTRY[key]
+        config = registry[key]
         logger.info("Fetching via %s...", config.label)
         bundle = _fetch_source(
             config,
             tickers=tickers,
             gnews_queries=gnews_queries,
+            queries=queries,
             lookback_hours=lookback_hours,
             max_articles_per_source=max_articles_per_source,
         )
@@ -380,12 +436,12 @@ def run(
     if probe_only:
         return {
             "probe_only": True,
-            **{key: bundles[key].to_dict() for key in SOURCE_REGISTRY},
+            **{key: bundles[key].to_dict() for key in registry},
             "ingest_status": "probe",
             "ingest_detail": "Fetch-only probe; no database writes.",
         }
 
-    stats = {key: _empty_stats() for key in SOURCE_REGISTRY}
+    stats = {key: _empty_stats() for key in registry}
     for key in active_source_keys:
         stats[key] = upsert_articles(bundles[key].articles, source_label=key)
 
@@ -430,7 +486,7 @@ def run(
     result = {
         "ingest_status": ingest_status,
         "ingest_detail": ingest_detail,
-        **_source_rows_from_maps(bundles, stats),
+        **_source_rows_from_maps(bundles, stats, registry=registry),
         "total_inserted": total_inserted,
     }
     if extraction_stats:
@@ -483,6 +539,20 @@ def main() -> None:
         help="Optional JSON array of refresh-only targeted GNews queries.",
     )
     parser.add_argument(
+        "--queries-json",
+        required=False,
+        default="",
+        help="Optional JSON array of targeted queries passed to sources that accept queries (newsapi_ai, newscatcher).",
+    )
+    parser.add_argument(
+        "--provider-set",
+        required=False,
+        default="current",
+        choices=["current", "candidate"],
+        dest="provider_set",
+        help="Which set of news sources to use (default: current).",
+    )
+    parser.add_argument(
         "--backfill",
         action="store_true",
         help="Run full-text extraction on existing articles missing full_content (no ingestion).",
@@ -505,7 +575,7 @@ def main() -> None:
 
     if args.check:
         try:
-            result = preflight_check()
+            result = preflight_check(provider_set=args.provider_set)
             print(json.dumps(result), flush=True)
             sys.exit(0 if result["ok"] else 1)
         except Exception as exc:
@@ -527,10 +597,11 @@ def main() -> None:
     source_list = [s.strip().lower() for s in sources_arg.split(",") if s.strip()] or None
     sources_explicit = bool(sources_arg)
 
+    ps_valid = _get_valid_sources(args.provider_set)
     if source_list:
-        bad = [s for s in source_list if s not in VALID_SOURCES]
+        bad = [s for s in source_list if s not in ps_valid]
         if bad:
-            print(json.dumps({"error": f"Unknown sources: {bad}. Valid: {sorted(VALID_SOURCES)}"}), flush=True)
+            print(json.dumps({"error": f"Unknown sources: {bad}. Valid: {sorted(ps_valid)}"}), flush=True)
             sys.exit(1)
 
     gnews_queries: list[str] | None = None
@@ -545,7 +616,19 @@ def main() -> None:
             sys.exit(1)
         gnews_queries = [item.strip() for item in parsed_queries if item.strip()]
 
-    active_source_probe = set(source_list) if source_list else set(VALID_SOURCES)
+    general_queries: list[str] | None = None
+    if args.queries_json.strip():
+        try:
+            parsed_gq = json.loads(args.queries_json)
+        except json.JSONDecodeError as exc:
+            print(json.dumps({"error": f"Invalid --queries-json: {exc.msg}"}), flush=True)
+            sys.exit(1)
+        if not isinstance(parsed_gq, list) or not all(isinstance(item, str) for item in parsed_gq):
+            print(json.dumps({"error": "--queries-json must be a JSON array of strings"}), flush=True)
+            sys.exit(1)
+        general_queries = [item.strip() for item in parsed_gq if item.strip()]
+
+    active_source_probe = set(source_list) if source_list else set(ps_valid)
     if "edgar" in active_source_probe and not tickers:
         if sources_explicit and source_list and "edgar" in source_list:
             print(json.dumps({"error": "EDGAR requires --tickers with at least one symbol"}), flush=True)
@@ -560,11 +643,13 @@ def main() -> None:
             sources=source_list,
             sources_explicit=sources_explicit,
             gnews_queries=gnews_queries,
+            queries=general_queries,
+            provider_set=args.provider_set,
         )
         print(json.dumps(result), flush=True)
         sys.exit(0)
 
-    health = preflight_check()
+    health = preflight_check(provider_set=args.provider_set)
     if not health["ok"]:
         failures = [c for c in health["checks"] if not c["ok"]]
         print(json.dumps({"error": "Preflight failed", "checks": failures}), flush=True)
@@ -577,6 +662,8 @@ def main() -> None:
         sources=source_list,
         sources_explicit=sources_explicit,
         gnews_queries=gnews_queries,
+        queries=general_queries,
+        provider_set=args.provider_set,
     )
 
     print(json.dumps(result), flush=True)

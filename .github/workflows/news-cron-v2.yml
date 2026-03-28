@@ -1,0 +1,323 @@
+name: News Cron V2 (Candidate)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  trigger-candidate-cron:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install Python dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Validate endpoint format
+        run: |
+          set -euo pipefail
+          if [[ "${NEWS_V2_CRON_ENDPOINT}" != */api/news/cron/v2 ]]; then
+            echo "NEWS_V2_CRON_ENDPOINT must end with /api/news/cron/v2, got: ${NEWS_V2_CRON_ENDPOINT}"
+            exit 1
+          fi
+        env:
+          NEWS_V2_CRON_ENDPOINT: ${{ secrets.NEWS_V2_CRON_ENDPOINT }}
+
+      - name: Run candidate ingest worker and finalize
+        id: ingest
+        env:
+          NEWS_V2_CRON_ENDPOINT: ${{ secrets.NEWS_V2_CRON_ENDPOINT }}
+          NEWS_V2_CRON_SECRET: ${{ secrets.NEWS_V2_CRON_SECRET }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          NEWSAPI_AI_API_KEY: ${{ secrets.NEWSAPI_AI_API_KEY }}
+          NEWSCATCHER_API_KEY: ${{ secrets.NEWSCATCHER_API_KEY }}
+          EDGAR_IDENTITY: ${{ secrets.EDGAR_IDENTITY }}
+        run: |
+          set -euo pipefail
+
+          for name in NEWS_V2_CRON_ENDPOINT NEWS_V2_CRON_SECRET NEXT_PUBLIC_SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY; do
+            if [ -z "${!name:-}" ]; then
+              echo "${name} secret is not set"
+              exit 1
+            fi
+          done
+
+          payload_file="$(mktemp)"
+          response_file="$(mktemp)"
+
+          python -m workers.news_ingestion.cron_runner_v2 > "${payload_file}"
+          python -m json.tool "${payload_file}" > /dev/null
+
+          echo "Candidate cron payload summary:"
+          python3 -c "
+import json, sys
+data = json.load(open('${payload_file}'))
+sources = {k: len(v) if isinstance(v, list) else v for k, v in data.items() if k != 'tickers'}
+print(f'tickers: {len(data.get("tickers", []))} | sources: {json.dumps(sources, default=str)}')
+"
+
+          http_code="$(
+            curl -sS \
+              -X POST \
+              -H "Authorization: Bearer ${NEWS_V2_CRON_SECRET}" \
+              -H "Accept: application/json" \
+              -H "Content-Type: application/json" \
+              --data-binary "@${payload_file}" \
+              -o "${response_file}" \
+              -w "%{http_code}" \
+              "${NEWS_V2_CRON_ENDPOINT}"
+          )"
+
+          echo "HTTP ${http_code}"
+          python3 -c "
+import json
+data = json.load(open('${response_file}'))
+ids = data.get('insertedArticleIds', [])
+print(f'inserted: {len(ids)} | shouldEnrich: {data.get("shouldEnrich", False)}')
+"
+
+          if [ "${http_code}" -lt 200 ] || [ "${http_code}" -ge 300 ]; then
+            echo "Candidate cron invocation failed"
+            python3 -c "
+import json
+try:
+    data = json.load(open('${response_file}'))
+    print(f'error: {data.get(\"error\", \"unknown\")}')
+except Exception:
+    print('(non-JSON response)')
+"
+            exit 1
+          fi
+
+          article_ids="$(python3 -c "
+          import json
+          data = json.load(open('${response_file}'))
+          ids = data.get('insertedArticleIds', [])
+          print(json.dumps(ids))
+          ")"
+          should_enrich="$(python3 -c "
+          import json
+          data = json.load(open('${response_file}'))
+          print('true' if data.get('shouldEnrich', False) else 'false')
+          ")"
+
+          echo "article_ids=${article_ids}" >> "$GITHUB_OUTPUT"
+          echo "should_enrich=${should_enrich}" >> "$GITHUB_OUTPUT"
+
+      - name: Enrich articles in batches
+        if: steps.ingest.outputs.should_enrich == 'true'
+        env:
+          CRON_ENDPOINT: ${{ secrets.CRON_ENDPOINT }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+
+          # Enrichment uses the existing /api/news/cron/enrich endpoint (shared)
+          ENRICH_URL="${CRON_ENDPOINT}/enrich"
+          ARTICLE_IDS='${{ steps.ingest.outputs.article_ids }}'
+
+          echo "Enriching candidate articles via ${ENRICH_URL}"
+          echo "Total article IDs: $(echo "${ARTICLE_IDS}" | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))')"
+
+          python3 -c "
+          import json, subprocess, sys
+
+          ids = json.loads('${ARTICLE_IDS}')
+          batch_size = 10
+          batches = [ids[i:i+batch_size] for i in range(0, len(ids), batch_size)]
+
+          print(f'Processing {len(ids)} article(s) in {len(batches)} batch(es)')
+
+          failed = False
+          for i, batch in enumerate(batches):
+              print(f'--- Batch {i+1}/{len(batches)}: {len(batch)} article(s) ---')
+              payload = json.dumps({'articleIds': batch})
+
+              result = subprocess.run([
+                  'curl', '-sS',
+                  '-X', 'POST',
+                  '-H', 'Authorization: Bearer ${CRON_SECRET}',
+                  '-H', 'Content-Type: application/json',
+                  '-H', 'Accept: application/json',
+                  '-d', payload,
+                  '-w', '\n%{http_code}',
+                  '${ENRICH_URL}'
+              ], capture_output=True, text=True, timeout=120)
+
+              lines = result.stdout.strip().rsplit('\n', 1)
+              body = lines[0] if len(lines) > 1 else ''
+              http_code = lines[-1].strip()
+
+              print(f'HTTP {http_code}')
+
+              if not (200 <= int(http_code) < 300):
+                  print(f'Enrich batch {i+1} failed with HTTP {http_code}')
+                  failed = True
+                  break
+
+              try:
+                  resp = json.loads(body)
+                  if resp.get('error'):
+                      print(f'Enrich batch {i+1} returned error: {resp["error"]}')
+                      failed = True
+                      break
+                  print(f'  enriched={resp.get("enriched","?")}, skipped={resp.get("skipped","?")}')
+              except json.JSONDecodeError:
+                  print(f'Enrich batch {i+1} returned invalid JSON')
+                  failed = True
+                  break
+
+          if failed:
+              sys.exit(1)
+
+          print('All enrich batches completed successfully')
+          "
+
+      - name: Extract full text for new articles
+        if: steps.ingest.outputs.should_enrich == 'true'
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          set -euo pipefail
+
+          ARTICLE_IDS='${{ steps.ingest.outputs.article_ids }}'
+          ID_COUNT="$(echo "${ARTICLE_IDS}" | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))')"
+
+          if [ "${ID_COUNT}" -eq 0 ]; then
+            echo "No article IDs to extract"
+            exit 0
+          fi
+
+          echo "Extracting full text for ${ID_COUNT} candidate article(s)"
+
+          ID_CSV="$(echo "${ARTICLE_IDS}" | python3 -c 'import json,sys; print(",".join(json.load(sys.stdin)))')"
+          python -m workers.news_ingestion.extract_full_text --ids "${ID_CSV}"
+          echo "Full text extraction completed"
+
+      - name: Fetch eligible portfolio ids
+        if: steps.ingest.outputs.should_enrich == 'true'
+        id: analysis_targets
+        env:
+          CRON_ENDPOINT: ${{ secrets.CRON_ENDPOINT }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+
+          # Analysis uses the existing /api/analysis/cron endpoints (shared)
+          BASE_URL="${CRON_ENDPOINT%/api/news/cron}"
+          ANALYSIS_URL="${BASE_URL}/api/analysis/cron"
+
+          echo "Fetching eligible portfolio ids via ${ANALYSIS_URL}"
+
+          response_file="$(mktemp)"
+
+          http_code="$(
+            curl -sS \
+              -X GET \
+              -H "Authorization: Bearer ${CRON_SECRET}" \
+              -H "Accept: application/json" \
+              -o "${response_file}" \
+              -w "%{http_code}" \
+              "${ANALYSIS_URL}?force=true"
+          )"
+
+          echo "HTTP ${http_code}"
+
+          if [ "${http_code}" -lt 200 ] || [ "${http_code}" -ge 300 ]; then
+            echo "Analysis target discovery failed"
+            python3 -c "
+import json
+try:
+    data = json.load(open('${response_file}'))
+    print(f'error: {data.get(\"error\", \"unknown\")}')
+except Exception:
+    print('(non-JSON response)')
+"
+            exit 1
+          fi
+
+          portfolio_ids="$(python3 -c "
+          import json
+          data = json.load(open('${response_file}'))
+          print(json.dumps(data.get('portfolioIds', [])))
+          ")"
+          has_portfolios="$(python3 -c "
+          import json
+          data = json.load(open('${response_file}'))
+          print('true' if len(data.get('portfolioIds', [])) > 0 else 'false')
+          ")"
+
+          echo "portfolio_ids=${portfolio_ids}" >> "$GITHUB_OUTPUT"
+          echo "has_portfolios=${has_portfolios}" >> "$GITHUB_OUTPUT"
+          echo "Eligible portfolios: $(echo "${portfolio_ids}" | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))')"
+
+      - name: Run portfolio analysis per portfolio
+        if: steps.ingest.outputs.should_enrich == 'true'
+        env:
+          CRON_ENDPOINT: ${{ secrets.CRON_ENDPOINT }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+
+          BASE_URL="${CRON_ENDPOINT%/api/news/cron}"
+          ANALYSIS_URL="${BASE_URL}/api/analysis/cron"
+          PORTFOLIO_IDS='${{ steps.analysis_targets.outputs.portfolio_ids }}'
+
+          echo "Running portfolio analysis via ${ANALYSIS_URL}"
+
+          python3 -c "
+          import json, subprocess, sys
+
+          portfolio_ids = json.loads('${PORTFOLIO_IDS}')
+          print(f'Processing {len(portfolio_ids)} portfolio(s) sequentially')
+
+          for i, portfolio_id in enumerate(portfolio_ids):
+              print(f'--- Portfolio {i+1}/{len(portfolio_ids)}: {portfolio_id} ---')
+              payload = json.dumps({'portfolioId': portfolio_id, 'force': True})
+
+              result = subprocess.run([
+                  'curl', '-sS',
+                  '-X', 'POST',
+                  '-H', 'Authorization: Bearer ${CRON_SECRET}',
+                  '-H', 'Content-Type: application/json',
+                  '-H', 'Accept: application/json',
+                  '-d', payload,
+                  '-w', '\n%{http_code}',
+                  '${ANALYSIS_URL}'
+              ], capture_output=True, text=True, timeout=300)
+
+              lines = result.stdout.strip().rsplit('\n', 1)
+              body = lines[0] if len(lines) > 1 else ''
+              http_code = lines[-1].strip()
+
+              print(f'HTTP {http_code}')
+
+              if not (200 <= int(http_code) < 300):
+                  print(f'Analysis failed for portfolio {portfolio_id} with HTTP {http_code}')
+                  sys.exit(1)
+
+              try:
+                  resp = json.loads(body)
+              except json.JSONDecodeError:
+                  print(f'Analysis returned invalid JSON for portfolio {portfolio_id}')
+                  sys.exit(1)
+
+              if resp.get('error'):
+                  print(f'Analysis returned error for portfolio {portfolio_id}: {resp["error"]}')
+                  sys.exit(1)
+
+              run_id = resp.get('runId', '?')
+              skipped = resp.get('skipped', False)
+              print(f'  runId={run_id}, skipped={skipped}')
+
+          print(f'All {len(portfolio_ids)} portfolio(s) analyzed successfully')
+          "

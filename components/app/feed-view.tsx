@@ -1607,7 +1607,7 @@ function FeedEmptyState({
               data-testid="ingest-hint-empty-window"
               className="mx-auto max-w-xl text-sm leading-7 text-slate-400"
             >
-              No articles were returned by EDGAR, NewsAPI, or GNews in the current lookback window.
+              No articles were returned by EDGAR, NewsAPI, GNews, NewsAPI.ai, or NewsCatcher in the current lookback window.
               Broader market stories may still appear in <strong>Market</strong> mode.
             </p>
           ) : recent &&
@@ -1716,7 +1716,7 @@ function FeedEmptyState({
               data-testid="ingest-hint-empty-window"
               className="mx-auto max-w-xl text-sm leading-7 text-slate-400"
             >
-              No articles were returned by EDGAR, NewsAPI, or GNews in the current lookback window.
+              No articles were returned by EDGAR, NewsAPI, GNews, NewsAPI.ai, or NewsCatcher in the current lookback window.
             </p>
           ) : (
             <p className="mx-auto max-w-xl text-sm leading-7 text-slate-400">
@@ -1741,7 +1741,7 @@ function FeedEmptyState({
         <p className="mx-auto max-w-xl text-sm leading-7 text-slate-400">
           Run a news refresh from the Analysis page to populate the market feed
           with SEC filings and market headlines. If the feed stays empty, check the Analysis
-          pipeline for EDGAR, NewsAPI, or GNews errors (API key, firewall, or network issues).
+          pipeline for EDGAR, NewsAPI, GNews, NewsAPI.ai, or NewsCatcher errors (API key, firewall, or network issues).
         </p>
       </div>
     </Panel>

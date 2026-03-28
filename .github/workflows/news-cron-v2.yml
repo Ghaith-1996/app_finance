@@ -43,7 +43,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          for name in NEWS_V2_CRON_ENDPOINT NEWS_V2_CRON_SECRET NEXT_PUBLIC_SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY; do
+          for name in NEWS_V2_CRON_ENDPOINT NEWS_V2_CRON_SECRET NEXT_PUBLIC_SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY NEWSAPI_AI_API_KEY NEWSCATCHER_API_KEY EDGAR_IDENTITY; do
             if [ -z "${!name:-}" ]; then
               echo "${name} secret is not set"
               exit 1
@@ -98,40 +98,13 @@ jobs:
 
           if [ "${http_code}" -lt 200 ] || [ "${http_code}" -ge 300 ]; then
             echo "Candidate cron invocation failed"
-            python3 - "$response_file" <<'PY'
-            import json
-            import sys
-
-            path = sys.argv[1]
-            try:
-                data = json.load(open(path))
-                print(f"error: {data.get('error', 'unknown')}")
-            except Exception:
-                print("(non-JSON response)")
-            PY
+            error_detail="$(python3 -c 'import json, sys; data = json.load(open(sys.argv[1])); print(data.get("error", "unknown"))' "$response_file" 2>/dev/null || printf '%s' '(non-JSON response)')"
+            echo "error: ${error_detail}"
             exit 1
           fi
 
-          article_ids="$(
-            python3 - "$response_file" <<'PY'
-            import json
-            import sys
-
-            path = sys.argv[1]
-            data = json.load(open(path))
-            print(json.dumps(data.get("insertedArticleIds", [])))
-            PY
-          )"
-          should_enrich="$(
-            python3 - "$response_file" <<'PY'
-            import json
-            import sys
-
-            path = sys.argv[1]
-            data = json.load(open(path))
-            print("true" if data.get("shouldEnrich", False) else "false")
-            PY
-          )"
+          article_ids="$(python3 -c 'import json, sys; data = json.load(open(sys.argv[1])); print(json.dumps(data.get("insertedArticleIds", [])))' "$response_file")"
+          should_enrich="$(python3 -c 'import json, sys; data = json.load(open(sys.argv[1])); print("true" if data.get("shouldEnrich", False) else "false")' "$response_file")"
 
           echo "article_ids=${article_ids}" >> "$GITHUB_OUTPUT"
           echo "should_enrich=${should_enrich}" >> "$GITHUB_OUTPUT"
@@ -277,40 +250,13 @@ jobs:
 
           if [ "${http_code}" -lt 200 ] || [ "${http_code}" -ge 300 ]; then
             echo "Analysis target discovery failed"
-            python3 - "$response_file" <<'PY'
-            import json
-            import sys
-
-            path = sys.argv[1]
-            try:
-                data = json.load(open(path))
-                print(f"error: {data.get('error', 'unknown')}")
-            except Exception:
-                print("(non-JSON response)")
-            PY
+            error_detail="$(python3 -c 'import json, sys; data = json.load(open(sys.argv[1])); print(data.get("error", "unknown"))' "$response_file" 2>/dev/null || printf '%s' '(non-JSON response)')"
+            echo "error: ${error_detail}"
             exit 1
           fi
 
-          portfolio_ids="$(
-            python3 - "$response_file" <<'PY'
-            import json
-            import sys
-
-            path = sys.argv[1]
-            data = json.load(open(path))
-            print(json.dumps(data.get("portfolioIds", [])))
-            PY
-          )"
-          has_portfolios="$(
-            python3 - "$response_file" <<'PY'
-            import json
-            import sys
-
-            path = sys.argv[1]
-            data = json.load(open(path))
-            print("true" if len(data.get("portfolioIds", [])) > 0 else "false")
-            PY
-          )"
+          portfolio_ids="$(python3 -c 'import json, sys; data = json.load(open(sys.argv[1])); print(json.dumps(data.get("portfolioIds", [])))' "$response_file")"
+          has_portfolios="$(python3 -c 'import json, sys; data = json.load(open(sys.argv[1])); print("true" if len(data.get("portfolioIds", [])) > 0 else "false")' "$response_file")"
 
           echo "portfolio_ids=${portfolio_ids}" >> "$GITHUB_OUTPUT"
           echo "has_portfolios=${has_portfolios}" >> "$GITHUB_OUTPUT"

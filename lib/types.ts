@@ -176,6 +176,8 @@ export type NewsSourceType =
   | "finnhub"
   | "newsapi"
   | "gnews"
+  | "newsapi_ai"
+  | "newscatcher"
   | "seed"
   | "other";
 export type SourceConfidence = "high" | "standard";

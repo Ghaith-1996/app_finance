@@ -9,6 +9,7 @@ import {
   type UserProfileFormData,
   validateProfileInput,
 } from "@/lib/profile/utils";
+import { sanitizeExternalUrl } from "@/lib/security/external-url";
 import { sanitizeRedirect } from "@/lib/security/redirect";
 
 type UserProfileRow = {
@@ -45,11 +46,12 @@ export async function getCurrentUserProfile(): Promise<UserProfileFormData | nul
     displayName:
       row?.display_name?.trim() ||
       `${row?.first_name?.trim() || derived.firstName} ${row?.last_name?.trim() || derived.lastName}`.trim(),
-    avatarUrl:
+    avatarUrl: sanitizeExternalUrl(
       row?.avatar_url ||
       (meta.avatar_url as string | undefined) ||
       (meta.picture as string | undefined) ||
       null,
+    ),
   };
 }
 
@@ -74,19 +76,7 @@ export async function saveCurrentUserProfile(input: {
     (meta.avatar_url as string | undefined) ||
     (meta.picture as string | undefined) ||
     null;
-
-  // Validate avatar URL — only allow https: origins
-  let avatarUrl: string | null = null;
-  if (rawAvatarUrl) {
-    try {
-      const parsed = new URL(rawAvatarUrl);
-      if (parsed.protocol === "https:") {
-        avatarUrl = rawAvatarUrl;
-      }
-    } catch {
-      // Malformed URL — discard
-    }
-  }
+  const avatarUrl = sanitizeExternalUrl(rawAvatarUrl);
 
   const { data: existingHandle } = await supabase
     .from("user_profiles")

@@ -85,7 +85,7 @@ export default async function PricingPage({
   } = await supabase.auth.getUser();
 
   const showOnboardingNav = await loadOnboardingNavState();
-  const billingSummary = user ? await getBillingSummaryForUser(user.id, supabase) : null;
+  const billingSummary = user ? await getBillingSummaryForUser(user.id) : null;
   const [premiumPriceLabel, ultimatePriceLabel] = await Promise.all([
     loadPriceLabel("premium"),
     loadPriceLabel("ultimate"),

@@ -10,11 +10,11 @@ export function SiteHeader() {
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-6 px-6 py-4 lg:px-8">
         <Link href="/" className="flex items-center gap-3">
           <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-brand/15 text-sm font-semibold text-brand">
-            PS
+            PF
           </span>
           <div>
             <span className="block text-sm font-semibold tracking-[0.18em] uppercase text-white">
-              PortfolioSignal
+              Pulsefolio
             </span>
             <span className="block text-xs text-slate-500">
               AI portfolio news, made personal

@@ -48,7 +48,7 @@ export default async function FeedPage({
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  const billingSummary = user ? await getBillingSummaryForUser(user.id, supabase) : null;
+  const billingSummary = user ? await getBillingSummaryForUser(user.id) : null;
 
   const storyCount = parseCoverageCount(portfolioOverview.coverage);
   const pulsePct = analysisPulseFill(portfolioOverview.lastAnalyzedAt);

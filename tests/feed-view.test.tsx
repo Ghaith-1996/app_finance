@@ -760,6 +760,33 @@ describe("FeedView", () => {
     expect(screen.getByText(/open a portfolio or market-wide conversation/i)).toBeTruthy();
   });
 
+  it("does not render an external story link when the URL uses a dangerous scheme", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        feed: [
+          makeFeedItem({
+            id: "story-unsafe",
+            headline: "Unsafe story",
+            url: "javascript:alert(1)",
+          }),
+        ],
+        portfolioId: "p1",
+        mode: "personal",
+      }),
+    });
+
+    await act(async () => {
+      render(<FeedView portfolioId="p1" />);
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByText("Unsafe story"));
+    });
+
+    expect(screen.queryByRole("link", { name: /open full story/i })).toBeNull();
+  });
+
   it("opens generic Ask AI chat when no story is selected", async () => {
     const fetchMock = vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
       if (url.startsWith("/api/feed?")) {

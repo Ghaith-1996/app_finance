@@ -1,5 +1,5 @@
-import { createClient } from "@/lib/supabase/server";
 import { spawn } from "child_process";
+import { requireAdminRouteAccess } from "@/lib/security/admin";
 
 interface HealthCheck {
   name: string;
@@ -93,15 +93,8 @@ function runWorkerPreflight(): Promise<HealthResult> {
  *   - gnews package import OK
  */
 export async function GET(_request: Request) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-
-  if (authError || !user) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const { errorResponse } = await requireAdminRouteAccess();
+  if (errorResponse) return errorResponse;
 
   const health = await runWorkerPreflight();
 

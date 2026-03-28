@@ -1,7 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { spawnArticleExtractionWorker } from "@/lib/services/news/extraction-trigger";
+import { validatePublisherUrl } from "@/lib/security/publisher-url";
 
-const EXTRACTABLE_SOURCE_TYPES = ["finnhub", "newsapi", "gnews", "marketaux"] as const;
+const EXTRACTABLE_SOURCE_TYPES = ["finnhub", "newsapi", "gnews", "marketaux", "newsapi_ai", "newscatcher"] as const;
 
 export interface BatchExtractionStats {
   attempted: number;
@@ -37,7 +38,7 @@ function emptyStats(): BatchExtractionStats {
 
 const SEC_URL_PREFIXES = ["https://www.sec.gov/", "https://sec.gov/", "https://efts.sec.gov/"];
 function isUnsupportedUrl(url: string): boolean {
-  return SEC_URL_PREFIXES.some((p) => url.startsWith(p));
+  return SEC_URL_PREFIXES.some((p) => url.startsWith(p)) || !validatePublisherUrl(url).ok;
 }
 
 /**
@@ -72,6 +73,7 @@ export async function extractPublisherContent(
     if (!rows?.length) return stats;
 
     const toQueue: string[] = [];
+    const unsupportedUrlIds: string[] = [];
     for (const row of rows) {
       const id = row.id as string;
       const url = (row.url as string | null)?.trim() ?? "";
@@ -97,10 +99,21 @@ export async function extractPublisherContent(
       if (isUnsupportedUrl(url)) {
         stats.skippedUnsupportedUrl += 1;
         stats.skipped += 1;
+        unsupportedUrlIds.push(id);
         continue;
       }
 
       toQueue.push(id);
+    }
+
+    if (unsupportedUrlIds.length > 0) {
+      await supabase
+        .from("news_items")
+        .update({
+          extraction_status: "skipped",
+          extraction_error: "Unsupported publisher URL",
+        })
+        .in("id", unsupportedUrlIds);
     }
 
     if (!toQueue.length) return stats;
@@ -139,6 +152,7 @@ export async function extractPublisherContent(
 
   if (!articles?.length) return stats;
 
+  const unsupportedUrlIds: string[] = [];
   const ids = articles
     .filter((a) => {
       const st = a.extraction_status as string | null;
@@ -147,9 +161,26 @@ export async function extractPublisherContent(
         stats.skipped += 1;
         return false;
       }
+      const url = (a.url as string | null)?.trim() ?? "";
+      if (!url || isUnsupportedUrl(url)) {
+        stats.skippedUnsupportedUrl += 1;
+        stats.skipped += 1;
+        unsupportedUrlIds.push(a.id as string);
+        return false;
+      }
       return true;
     })
     .map((a) => a.id as string);
+
+  if (unsupportedUrlIds.length > 0) {
+    await supabase
+      .from("news_items")
+      .update({
+        extraction_status: "skipped",
+        extraction_error: "Unsupported publisher URL",
+      })
+      .in("id", unsupportedUrlIds);
+  }
 
   if (!ids.length) return stats;
 

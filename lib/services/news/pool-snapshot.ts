@@ -50,7 +50,7 @@ export async function getNewsPoolSnapshot24h(
   }
 
   const bySource: Record<string, number> = {};
-  const sourceTypes = ["edgar", "newsapi", "gnews", "finnhub", "yfinance", "marketaux", "seed", "other"];
+  const sourceTypes = ["edgar", "newsapi", "gnews", "finnhub", "yfinance", "marketaux", "newsapi_ai", "newscatcher", "seed", "other"];
   for (const st of sourceTypes) {
     const { count: c } = await supabase
       .from("news_items")

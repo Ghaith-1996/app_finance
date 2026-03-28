@@ -7,6 +7,7 @@ import { getPostComments, createComment } from "@/lib/actions/community";
 import { validateCommentBody } from "@/lib/community/types";
 import type { CommunityComment } from "@/lib/community/types";
 import { TurnstileBlock, useTurnstile } from "@/components/security/turnstile-widget";
+import { sanitizeExternalUrl } from "@/lib/security/external-url";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -82,10 +83,11 @@ export function PostCommentsPanel({ postId, onClose }: Props) {
         ) : (
           comments.map((c) => {
             const initials = c.author.displayName.split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
+            const safeAvatarUrl = sanitizeExternalUrl(c.author.avatarUrl);
             return (
               <div key={c.id} className="flex gap-2.5">
-                {c.author.avatarUrl ? (
-                  <img src={c.author.avatarUrl} alt="" className="h-7 w-7 shrink-0 rounded-full object-cover" />
+                {safeAvatarUrl ? (
+                  <img src={safeAvatarUrl} alt="" className="h-7 w-7 shrink-0 rounded-full object-cover" />
                 ) : (
                   <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand/15 text-[9px] font-bold text-brand">
                     {initials}

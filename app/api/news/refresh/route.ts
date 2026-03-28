@@ -1,4 +1,3 @@
-import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { ingestNewsToSupabase, extractPublisherContent } from "@/lib/services/news";
 import { runAnalysis } from "@/lib/services/analysis";
@@ -8,6 +7,7 @@ import { ENRICHABLE_SOURCE_TYPES } from "@/lib/services/news/source-config";
 import { runPythonWorker } from "@/lib/services/news/worker";
 import { resolveGlobalTickers } from "@/lib/services/ticker-resolver";
 import { getNewsPoolSnapshot24h } from "@/lib/services/news/pool-snapshot";
+import { requireAdminRouteAccess } from "@/lib/security/admin";
 
 /**
  * POST /api/news/refresh
@@ -25,15 +25,9 @@ import { getNewsPoolSnapshot24h } from "@/lib/services/news/pool-snapshot";
  * - Analysis: uses the selected portfolio’s holdings only.
  */
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-
-  if (authError || !user) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const { supabase, user, errorResponse } = await requireAdminRouteAccess();
+  if (errorResponse) return errorResponse;
+  const adminUser = user!;
 
   let body: { portfolioId?: string; lookbackHours?: number; maxArticles?: number } = {};
   try {
@@ -49,7 +43,7 @@ export async function POST(request: Request) {
     const { data: portfolios } = await supabase
       .from("portfolios")
       .select("id")
-      .eq("user_id", user.id)
+      .eq("user_id", adminUser.id)
       .order("created_at", { ascending: false })
       .limit(1);
     portfolioId = portfolios?.[0]?.id ?? null;
@@ -66,7 +60,7 @@ export async function POST(request: Request) {
     .from("portfolios")
     .select("id")
     .eq("id", portfolioId)
-    .eq("user_id", user.id)
+    .eq("user_id", adminUser.id)
     .single();
 
   if (!portfolio) {

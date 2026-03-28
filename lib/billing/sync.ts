@@ -18,8 +18,46 @@ function toIsoFromUnix(value: number | null | undefined): string | null {
   return new Date(value * 1000).toISOString();
 }
 
-function toPlainObject<T>(value: T): Record<string, unknown> {
-  return JSON.parse(JSON.stringify(value)) as Record<string, unknown>;
+function buildSubscriptionSnapshot(
+  subscription: Stripe.Subscription,
+): Record<string, unknown> {
+  const customerId =
+    typeof subscription.customer === "string"
+      ? subscription.customer
+      : subscription.customer.id;
+
+  return {
+    id: subscription.id,
+    customer_id: customerId,
+    status: subscription.status,
+    cancel_at_period_end: subscription.cancel_at_period_end,
+    canceled_at: toIsoFromUnix(subscription.canceled_at),
+    trial_start: toIsoFromUnix(subscription.trial_start),
+    trial_end: toIsoFromUnix(subscription.trial_end),
+    metadata: {
+      user_id: subscription.metadata?.user_id ?? null,
+      plan_key: subscription.metadata?.plan_key ?? null,
+    },
+    items: subscription.items.data.map((item) => {
+      const product = item.price?.product;
+      const productId = typeof product === "string" ? product : product?.id ?? null;
+
+      return {
+        id: item.id,
+        price_id: item.price?.id ?? null,
+        product_id: productId,
+        quantity: item.quantity ?? null,
+        current_period_start:
+          typeof item.current_period_start === "number"
+            ? toIsoFromUnix(item.current_period_start)
+            : null,
+        current_period_end:
+          typeof item.current_period_end === "number"
+            ? toIsoFromUnix(item.current_period_end)
+            : null,
+      };
+    }),
+  };
 }
 
 async function resolveUserIdForStripeCustomer(
@@ -94,7 +132,7 @@ function normalizeSubscription(
     canceled_at: toIsoFromUnix(subscription.canceled_at),
     trial_start: toIsoFromUnix(subscription.trial_start),
     trial_end: toIsoFromUnix(subscription.trial_end),
-    raw: toPlainObject(subscription),
+    raw: buildSubscriptionSnapshot(subscription),
   };
 }
 

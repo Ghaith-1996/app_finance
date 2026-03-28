@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { ChevronDown, LogOut, Settings } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
+import { sanitizeExternalUrl } from "@/lib/security/external-url";
 
 export function UserMenu() {
   const [user, setUser] = useState<User | null>(null);
@@ -98,10 +99,12 @@ export function UserMenu() {
   }
 
   const avatarUrl =
-    profile?.avatarUrl ??
-    user.user_metadata?.avatar_url ??
-    user.user_metadata?.picture ??
-    null;
+    sanitizeExternalUrl(
+      profile?.avatarUrl ??
+      user.user_metadata?.avatar_url ??
+      user.user_metadata?.picture ??
+      null,
+    );
   const name =
     profile?.displayName ??
     user.user_metadata?.full_name ??

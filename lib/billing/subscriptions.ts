@@ -13,9 +13,9 @@ import {
 import {
   loadBillingCustomerByUserId,
   loadSubscriptionsForUser,
-  type BillingSupabaseClient,
   type SubscriptionRow,
 } from "@/lib/billing/store";
+import { createServiceClient } from "@/lib/supabase/service";
 import { createClient } from "@/lib/supabase/server";
 import type { ArticleChatModelTier } from "@/lib/types";
 
@@ -24,12 +24,15 @@ export type BillingSummary = {
   status: string | null;
   allowedModelTiers: ArticleChatModelTier[];
   defaultModelTier: ArticleChatModelTier;
-  stripeCustomerId: string | null;
-  stripeSubscriptionId: string | null;
   cancelAtPeriodEnd: boolean;
   currentPeriodEnd: string | null;
   hasPaidAccess: boolean;
   hasUsedTrial: boolean;
+};
+
+export type BillingState = BillingSummary & {
+  stripeCustomerId: string | null;
+  stripeSubscriptionId: string | null;
 };
 
 export class BillingAccessError extends Error {
@@ -70,10 +73,10 @@ function selectCurrentSubscription(rows: SubscriptionRow[]): SubscriptionRow | n
   return rows[0] ?? null;
 }
 
-export function buildBillingSummary(input: {
+export function buildBillingState(input: {
   customerId?: string | null;
   rows: SubscriptionRow[];
-}): BillingSummary {
+}): BillingState {
   const activeRow = selectCurrentSubscription(input.rows);
   const activePlan = activeRow?.plan_key ? parsePlanKey(activeRow.plan_key) : null;
   const hasPaidAccess =
@@ -97,19 +100,36 @@ export function buildBillingSummary(input: {
   };
 }
 
-export async function getBillingSummaryForUser(
-  userId: string,
-  supabase: BillingSupabaseClient,
-): Promise<BillingSummary> {
+function toBillingSummary(state: BillingState): BillingSummary {
+  return {
+    planKey: state.planKey,
+    status: state.status,
+    allowedModelTiers: state.allowedModelTiers,
+    defaultModelTier: state.defaultModelTier,
+    cancelAtPeriodEnd: state.cancelAtPeriodEnd,
+    currentPeriodEnd: state.currentPeriodEnd,
+    hasPaidAccess: state.hasPaidAccess,
+    hasUsedTrial: state.hasUsedTrial,
+  };
+}
+
+export async function getBillingStateForUser(userId: string): Promise<BillingState> {
+  const serviceSupabase = createServiceClient();
   const [customer, rows] = await Promise.all([
-    loadBillingCustomerByUserId(supabase, userId),
-    loadSubscriptionsForUser(supabase, userId),
+    loadBillingCustomerByUserId(serviceSupabase, userId),
+    loadSubscriptionsForUser(serviceSupabase, userId),
   ]);
 
-  return buildBillingSummary({
+  return buildBillingState({
     customerId: customer?.stripe_customer_id ?? null,
     rows,
   });
+}
+
+export async function getBillingSummaryForUser(
+  userId: string,
+): Promise<BillingSummary> {
+  return toBillingSummary(await getBillingStateForUser(userId));
 }
 
 export async function getCurrentUserBillingSummary(): Promise<BillingSummary> {
@@ -119,18 +139,17 @@ export async function getCurrentUserBillingSummary(): Promise<BillingSummary> {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return buildBillingSummary({ rows: [] });
+    return toBillingSummary(buildBillingState({ rows: [] }));
   }
 
-  return getBillingSummaryForUser(user.id, supabase);
+  return getBillingSummaryForUser(user.id);
 }
 
 export async function assertUserCanUseModelTier(
   userId: string,
   tier: ArticleChatModelTier,
-  supabase: BillingSupabaseClient,
 ): Promise<BillingSummary> {
-  const summary = await getBillingSummaryForUser(userId, supabase);
+  const summary = await getBillingSummaryForUser(userId);
 
   if (!isTierAllowedForPlan(summary.planKey, tier)) {
     throw new BillingAccessError({

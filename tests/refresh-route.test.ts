@@ -1,4 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+
+const ORIGINAL_ADMIN_USER_IDS = process.env.ADMIN_USER_IDS;
 
 const mockResolveGlobalTickers = vi.fn();
 const mockRunPythonWorker = vi.fn();
@@ -123,6 +125,7 @@ function emptyExtractionStats() {
 
 describe("POST /api/news/refresh", () => {
   beforeEach(() => {
+    process.env.ADMIN_USER_IDS = "user-1";
     mockResolveGlobalTickers.mockReset();
     mockRunPythonWorker.mockReset();
     mockIngestNewsToSupabase.mockReset();
@@ -169,6 +172,31 @@ describe("POST /api/news/refresh", () => {
       data: { user: { id: "user-1" } },
       error: null,
     });
+  });
+
+  afterAll(() => {
+    process.env.ADMIN_USER_IDS = ORIGINAL_ADMIN_USER_IDS;
+  });
+
+  it("returns 401 when the caller is not authenticated", async () => {
+    supabaseMock.auth.getUser.mockResolvedValue({
+      data: { user: null },
+      error: null,
+    });
+
+    const res = await POST(new Request("http://localhost/api/news/refresh", { method: "POST" }));
+
+    expect(res.status).toBe(401);
+    expect(mockResolveGlobalTickers).not.toHaveBeenCalled();
+  });
+
+  it("returns 403 for authenticated non-admin callers", async () => {
+    process.env.ADMIN_USER_IDS = "different-user";
+
+    const res = await POST(new Request("http://localhost/api/news/refresh", { method: "POST" }));
+
+    expect(res.status).toBe(403);
+    expect(mockResolveGlobalTickers).not.toHaveBeenCalled();
   });
 
   it("uses global tickers for broad ingest, adds Finnhub portfolio news, then analyzes the portfolio", async () => {

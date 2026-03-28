@@ -10,7 +10,9 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import urlparse, urlunparse
+from urllib.parse import urljoin, urlparse, urlunparse
+
+from .url_safety import assert_safe_public_url
 
 logger = logging.getLogger(__name__)
 
@@ -94,14 +96,65 @@ def _configure_newspaper_article(url: str):
     return article
 
 
-def extract_article_text(url: str) -> tuple[str | None, str | None]:
+def _resolve_safe_fetch_url(url: str) -> tuple[str | None, str | None]:
+    ok, reason = assert_safe_public_url(url)
+    if not ok:
+        return None, reason
+
+    try:
+        import requests
+    except ImportError:
+        return url, None
+
+    session = requests.Session()
+    current_url = url
+
+    try:
+        for _ in range(5):
+            response = session.get(
+                current_url,
+                allow_redirects=False,
+                timeout=8,
+                stream=True,
+                headers={"User-Agent": USER_AGENT},
+            )
+            response.close()
+
+            if response.is_redirect or response.is_permanent_redirect:
+                location = response.headers.get("location")
+                if not location:
+                    return current_url, None
+
+                next_url = urljoin(current_url, location)
+                ok, reason = assert_safe_public_url(next_url)
+                if not ok:
+                    return None, f"blocked_redirect:{reason}"
+
+                current_url = next_url
+                continue
+
+            return current_url, None
+    except Exception as exc:
+        logger.debug("Safe redirect preflight failed for %s: %s", current_url, exc)
+        return None, "redirect_preflight_failed"
+    finally:
+        session.close()
+
+    return None, "redirect_hop_limit_exceeded"
+
+
+def extract_article_text(url: str) -> tuple[str | None, str | None, str | None]:
     """
     Download and parse a single article URL.
-    Returns (text, canonical_url_or_none).
+    Returns (text, canonical_url_or_none, error_or_none).
     """
-    article = _configure_newspaper_article(url)
+    safe_url, safe_error = _resolve_safe_fetch_url(url)
+    if safe_error:
+        return None, None, safe_error
+
+    article = _configure_newspaper_article(safe_url or url)
     if article is None:
-        return None, None
+        return None, None, "extractor_not_available"
 
     try:
         article.download()
@@ -109,11 +162,11 @@ def extract_article_text(url: str) -> tuple[str | None, str | None]:
         text = (article.text or "").strip()
         canon = getattr(article, "canonical_link", None) or None
         if text and len(text) >= MIN_USEFUL_LENGTH:
-            return text, canon
-        return None, canon
+            return text, canon, None
+        return None, canon, "insufficient_content"
     except Exception as exc:
         logger.debug("Extraction failed for %s: %s", url, exc)
-        return None, None
+        return None, None, "download_failed"
 
 
 def _fetch_cache_row(client, cache_key: str) -> dict | None:
@@ -180,6 +233,17 @@ def process_one_row(client, row: dict, stats: ExtractionStats) -> None:
         stats.skipped += 1
         return
 
+    ok, reason = assert_safe_public_url(url)
+    if not ok:
+        stats.skipped += 1
+        client.table("news_items").update(
+            {
+                "extraction_status": "skipped",
+                "extraction_error": f"Blocked publisher URL ({reason})",
+            }
+        ).eq("id", row_id).execute()
+        return
+
     client.table("news_items").update({"extraction_cache_key": cache_key}).eq("id", row_id).execute()
 
     cached = _fetch_cache_row(client, cache_key)
@@ -206,7 +270,7 @@ def process_one_row(client, row: dict, stats: ExtractionStats) -> None:
         {"extraction_status": "in_progress", "extraction_error": None}
     ).eq("id", row_id).execute()
 
-    text, canonical = extract_article_text(url)
+    text, canonical, extraction_error = extract_article_text(url)
 
     if text:
         client.table("article_extractions").upsert(
@@ -225,7 +289,18 @@ def process_one_row(client, row: dict, stats: ExtractionStats) -> None:
         stats.extracted += 1
         logger.info("Extracted %d chars for %s", len(text), url[:80])
     else:
-        err_msg = "Could not extract useful article text"
+        err_msg = {
+            "blocked_redirect:unsupported_scheme": "Blocked redirect target",
+            "blocked_redirect:blocked_hostname": "Blocked redirect target",
+            "blocked_redirect:blocked_ip": "Blocked redirect target",
+            "blocked_redirect:blocked_resolved_ip": "Blocked redirect target",
+            "blocked_redirect:credentials_not_allowed": "Blocked redirect target",
+            "blocked_redirect:missing_hostname": "Blocked redirect target",
+            "download_failed": "Could not extract useful article text",
+            "insufficient_content": "Could not extract useful article text",
+            "redirect_preflight_failed": "Could not validate redirect chain",
+            "redirect_hop_limit_exceeded": "Too many redirects",
+        }.get(extraction_error or "", "Could not extract useful article text")
         client.table("article_extractions").upsert(
             {
                 "cache_key": cache_key,

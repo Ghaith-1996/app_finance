@@ -3,6 +3,7 @@ import { completeProfileAction, getCurrentUserProfile } from "@/lib/actions/prof
 import { createClient } from "@/lib/supabase/server";
 import { ProfileForm } from "@/components/app/profile-form";
 import { isProfileComplete } from "@/lib/profile/utils";
+import { sanitizeRedirect } from "@/lib/security/redirect";
 
 export default async function CompleteProfilePage({
   searchParams,
@@ -19,7 +20,7 @@ export default async function CompleteProfilePage({
   }
 
   const params = await searchParams;
-  const redirectTo = params.redirectTo ?? "/portfolio";
+  const redirectTo = sanitizeRedirect(params.redirectTo, "/portfolio");
   const profile = await getCurrentUserProfile();
 
   if (isProfileComplete(profile)) {

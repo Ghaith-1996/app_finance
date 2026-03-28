@@ -32,6 +32,7 @@ import type {
   EarningsDataPoint,
   FinancialDataPoint,
 } from "@/lib/services/twelvedata";
+import { sanitizeExternalUrl } from "@/lib/security/external-url";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -453,6 +454,8 @@ function EmployeesCard({ profile }: { profile: WatchlistDetailData["profile"] })
 function ProfileBlock({ data }: { data: WatchlistDetailData }) {
   const { profile } = data;
   const hasProfile = profile.sector || profile.industry || profile.country || profile.website || profile.description;
+  const safeWebsiteUrl = sanitizeExternalUrl(profile.website);
+  const websiteLabel = profile.website?.replace(/^https?:\/\//, "").replace(/\/$/, "") ?? "";
   if (!hasProfile) return null;
 
   return (
@@ -479,15 +482,22 @@ function ProfileBlock({ data }: { data: WatchlistDetailData }) {
           </div>
         )}
         {profile.website && (
-          <a
-            href={profile.website}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 text-sm text-brand transition hover:text-brand-strong"
-          >
-            <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-            {profile.website.replace(/^https?:\/\//, "").replace(/\/$/, "")}
-          </a>
+          safeWebsiteUrl ? (
+            <a
+              href={safeWebsiteUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-sm text-brand transition hover:text-brand-strong"
+            >
+              <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+              {websiteLabel}
+            </a>
+          ) : (
+            <div className="inline-flex items-center gap-1.5 text-sm text-slate-400">
+              <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+              {websiteLabel}
+            </div>
+          )
         )}
         {profile.description && (
           <p className="text-[12px] leading-relaxed text-slate-400">{profile.description}</p>

@@ -1,5 +1,5 @@
 import { getStripePriceIdForPlan, getStripe, getAppBaseUrl } from "@/lib/billing/stripe";
-import { getBillingSummaryForUser } from "@/lib/billing/subscriptions";
+import { getBillingStateForUser } from "@/lib/billing/subscriptions";
 import { getOrCreateStripeCustomerForUser } from "@/lib/billing/sync";
 import { createClient } from "@/lib/supabase/server";
 
@@ -44,11 +44,11 @@ export async function POST(request: Request) {
     return json({ error: "plan must be 'premium' or 'ultimate'" }, 400);
   }
 
-  const billingSummary = await getBillingSummaryForUser(user.id, supabase);
-  if (billingSummary.hasPaidAccess && billingSummary.planKey === plan) {
+  const billingState = await getBillingStateForUser(user.id);
+  if (billingState.hasPaidAccess && billingState.planKey === plan) {
     return json({ error: `You are already on the ${plan} plan.` }, 409);
   }
-  if (billingSummary.hasPaidAccess && billingSummary.planKey !== "free") {
+  if (billingState.hasPaidAccess && billingState.planKey !== "free") {
     return json(
       {
         error: "Use Manage billing to change plans for an existing subscription.",
@@ -60,7 +60,7 @@ export async function POST(request: Request) {
   const stripe = getStripe();
   const customerId = await getOrCreateStripeCustomerForUser(user);
   const baseUrl = getAppBaseUrl(request);
-  const trialDays = billingSummary.hasUsedTrial ? undefined : 7;
+  const trialDays = billingState.hasUsedTrial ? undefined : 7;
 
   const session = await stripe.checkout.sessions.create({
     mode: "subscription",

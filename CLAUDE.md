@@ -68,6 +68,12 @@ These decisions were made in the current thread and are reflected in code/doc ch
 - removed `vercel.json`; Vercel still hosts the route, but GitHub Actions is now the active scheduler
 - `README.md` and `PRE_LAUNCH_CHECKLIST.md` now document the GitHub Actions scheduler setup, required secrets/env vars, and post-deploy smoke test
 - the remaining deployment risk is keeping GitHub Actions worker secrets and the deployed cron finalize route in sync
+- allowlisted admins now bypass Stripe AI model-tier gating without changing their underlying Stripe plan; billing summaries expose `hasAdminModelAccess` and unlock `free`, `premium`, and `ultimate`
+- added `/admin` as an allowlist-only admin console page, linked beneath `Settings` in the user menu for admin viewers
+- the admin console provides manual controls for `/api/news/health`, `/api/news/refresh`, and `/api/news/refresh-v2` using the viewer's existing session cookie
+- added the Phase 1 candidate news pipeline in parallel with the current one: `POST /api/news/cron/v2`, `POST /api/news/refresh-v2`, `.github/workflows/news-cron-v2.yml`, Python `providerSet=candidate`, and shared writes into the existing `news_items` pool
+- candidate ingestion uses EDGAR + NewsAPI.ai + GNews + NewsCatcher with portfolio keyword queries; the current scheduled pipeline stays active and unchanged until explicit cutover
+- candidate workflow/runtime note: `NEWS_V2_CRON_SECRET` must be present both in GitHub Actions and in the deployed app runtime serving `/api/news/cron/v2`; shared enrich/analysis steps still use `CRON_SECRET`
 - article chat UI moved out of the article detail panel into a separate surface: right-side sticky sidebar at `xl+` and a mobile slide-over sheet below `xl`
 - FeedView now owns article chat state, including activity tracking and a guarded story-switch confirmation modal when the current chat has messages or a draft
 - ArticleChatPanel now reports activity via `onActivityChange` and supports headerless/styled reuse inside the sidebar/sheet
@@ -207,11 +213,12 @@ That split is central to the product and the code.
 
 Ingestion model:
 
-- all ingestion into `news_items` happens via a 20-minute cron job (`POST /api/news/cron`)
+- scheduled production ingestion into `news_items` happens via a 20-minute cron job (`POST /api/news/cron`)
 - the cron job builds its global ticker universe from all user holdings + all user watchlist symbols
 - it runs Python worker (EDGAR + NewsAPI + GNews) + Finnhub targeted news
 - after enrichment, it runs analysis for all portfolios automatically
 - user-triggered refresh (`/api/news/refresh`) is deprecated and no longer called by the UI
+- manual candidate testing can also write into the same pool via `POST /api/news/cron/v2` or `POST /api/news/refresh-v2`
 - personal feed selection considers both portfolio holdings and watchlist symbols
 - `feed_items.match_sources` tracks whether each story matched via `"portfolio"`, `"watchlist"`, or both
 
@@ -237,6 +244,7 @@ Protected routes:
 - `/home`
 - `/watchlist`
 - `/settings`
+- `/admin`
 - `/complete-profile`
 
 Login flow:
@@ -492,6 +500,30 @@ Current behavior:
 - reuses the same validation and save path as first-login completion
 - shows `BillingSettingsPanel` with current plan, status, renewal date, allowed model tiers, and manage/upgrade CTAs
 - displays `billing=success` badge after Stripe checkout redirect
+- allowlisted admins see `hasAdminModelAccess` reflected in the billing UI and get an `Admin` link in the user menu
+
+### `/admin`
+
+Files:
+
+- `app/admin/page.tsx`
+- `components/app/admin-console-panel.tsx`
+- `lib/security/admin.ts`
+- `lib/billing/subscriptions.ts`
+
+Purpose:
+
+- allowlist-only admin surface for model-access verification and manual news operations
+
+Current behavior:
+
+- requires an authenticated Supabase session
+- redirects unauthenticated users to `/login?redirectTo=/admin`
+- redirects authenticated non-admin users to `/settings`
+- shows the current billing summary while clearly separating Stripe plan state from admin-only model-tier overrides
+- confirms whether `hasAdminModelAccess` is active and surfaces the currently allowed AI tiers
+- provides manual controls for `/api/news/health`, `/api/news/refresh`, and `/api/news/refresh-v2`
+- uses the viewer's current session cookie rather than any separate admin token
 
 ### `/pricing`
 
@@ -524,7 +556,7 @@ File:
 
 Behavior (unchanged, but no longer user-triggered):
 
-- authenticates user
+- authenticated + allowlist admin only
 - resolves selected portfolio or latest one
 - requires holdings
 - resolves global ticker universe from all holdings in DB
@@ -533,6 +565,29 @@ Behavior (unchanged, but no longer user-triggered):
 - enriches newly inserted articles with AI
 - runs portfolio analysis
 - returns per-stage details plus pool snapshot and analysis metadata
+
+### `POST /api/news/refresh-v2` (deprecated, admin/debug candidate path)
+
+File:
+
+- `app/api/news/refresh-v2/route.ts`
+
+Behavior:
+
+- authenticated + allowlist admin only
+- resolves the selected portfolio or latest one owned by the admin caller
+- requires holdings
+- resolves the global ticker universe from all holdings/watchlist symbols in DB
+- builds candidate portfolio keyword queries from the selected portfolio holdings
+- runs the candidate Python worker path (`providerSet=candidate`) using EDGAR + NewsAPI.ai + GNews + NewsCatcher
+- extracts publisher content, enriches inserted articles, runs analysis for the selected portfolio, and returns per-stage details plus pool snapshot and analysis metadata
+
+Important:
+
+- manual/testing-only path; no public UI outside the admin console calls this route
+- writes to the same `news_items` table as the current pipeline
+- does not include Finnhub targeted news
+- useful for side-by-side candidate provider validation before cutover
 
 ### `POST /api/analysis/run`
 
@@ -641,7 +696,7 @@ File:
 
 Behavior (unchanged):
 
-- authenticated
+- authenticated + allowlist admin only
 - resolves global ticker universe
 - runs Python worker
 - enriches inserted articles
@@ -696,6 +751,7 @@ Important:
 - no cross-provider dedupe with the current pipeline in Phase 1
 - source types `newsapi_ai` and `newscatcher` are new text values in the `source_type` column
 - candidate articles are visible in feeds and affect analysis immediately
+- `.github/workflows/news-cron-v2.yml` needs valid `NEWSAPI_AI_API_KEY` / `NEWSCATCHER_API_KEY`, and the deployed app serving this route must also have `NEWS_V2_CRON_SECRET`
 
 ### `GET /api/news/health`
 
@@ -705,7 +761,7 @@ File:
 
 Behavior:
 
-- authenticated
+- authenticated + allowlist admin only
 - runs worker preflight using `python -m workers.news_ingestion.main --check`
 - verifies Python availability and worker dependencies/config
 
@@ -2041,21 +2097,35 @@ Location:
 Main files:
 
 - `workers/news_ingestion/main.py`
+- `workers/news_ingestion/cron_runner_v2.py`
 - `workers/news_ingestion/bootstrap.py`
 - `workers/news_ingestion/schema.py`
 - `workers/news_ingestion/upsert.py`
 - `workers/news_ingestion/fetchers/edgar_fetcher.py`
 - `workers/news_ingestion/fetchers/newsapi_fetcher.py`
+- `workers/news_ingestion/fetchers/newsapi_ai_fetcher.py`
 - `workers/news_ingestion/fetchers/gnews_fetcher.py`
+- `workers/news_ingestion/fetchers/newscatcher_fetcher.py`
 - `workers/news_ingestion/fetchers/result.py`
+- `workers/news_ingestion/extract_full_text.py`
 
 What it does:
 
 - fetches EDGAR filings for a ticker universe
 - fetches NewsAPI market/business headlines
 - fetches GNews top and targeted queries
+- candidate path can also fetch NewsAPI.ai / Event Registry articles and NewsCatcher v3 articles
 - normalizes results into shared schema
 - upserts into Supabase
+
+Current worker shape:
+
+- `main.py` supports `providerSet=current|candidate`
+- current path = EDGAR + NewsAPI + GNews (+ Finnhub targeted refresh in the TypeScript route layer)
+- candidate path = EDGAR + NewsAPI.ai + GNews + NewsCatcher
+- `cron_runner.py` builds the current GitHub Actions payload
+- `cron_runner_v2.py` builds the manual candidate GitHub Actions payload
+- `extract_full_text.py` performs background full-text extraction for newly inserted articles
 
 Troubleshooting doc:
 
@@ -2099,6 +2169,16 @@ Common requirements:
 - `NEWSCATCHER_API_KEY` (NewsCatcher v3)
 - `NEWS_V2_CRON_SECRET` (bearer token for `/api/news/cron/v2`)
 - `NEWS_V2_CRON_ENDPOINT` (deployed URL for candidate cron finalize)
+
+Important:
+
+- `NEWS_V2_CRON_SECRET` must match between GitHub Actions and the deployed app runtime that serves `/api/news/cron/v2`
+- `CRON_SECRET` is still required for the shared enrich and analysis endpoints used by `.github/workflows/news-cron-v2.yml`
+
+### Admin allowlist
+
+- `ADMIN_USER_IDS`
+- `ADMIN_USER_EMAILS`
 
 ### AI
 
@@ -2165,8 +2245,11 @@ Current files:
 - `article-chat-route.test.ts`
 - `article-cta.test.tsx`
 - `cache.test.ts`
+- `candidate-source-registration.test.ts`
 - `cron-route.test.ts`
+- `cron-v2-route.test.ts`
 - `env-validation.test.ts`
+- `external-url.test.ts`
 - `feed-query.test.ts`
 - `feed-route.test.ts`
 - `feed-view.test.tsx`
@@ -2174,9 +2257,15 @@ Current files:
 - `finnhub-refresh.test.ts`
 - `gnews-targeting.test.ts`
 - `ingest-detail.test.ts`
+- `ingest-route.test.ts`
 - `logger.test.ts`
+- `news-health-route.test.ts`
 - `portfolio-match-parser.test.ts`
+- `portfolio-queries.test.ts`
+- `publisher-extract.test.ts`
+- `publisher-url.test.ts`
 - `refresh-route.test.ts`
+- `refresh-v2-route.test.ts`
 - `profile-utils.test.ts`
 - `auth-callback-route.test.ts`
 - `user-menu.test.tsx`
@@ -2188,7 +2277,9 @@ Current files:
 - `app-shell-layout.test.tsx`
 - `billing-subscriptions.test.ts`
 - `community-actions.test.ts`
+- `community-post-card.test.tsx`
 - `community-types.test.ts`
+- `complete-profile-page.test.ts`
 - `enrich-cron-route.test.ts`
 - `extraction-uuid-validation.test.ts`
 - `handle-hardening.test.ts`
@@ -2205,7 +2296,14 @@ Current files:
 - `portfolio-refresh-loaders.test.ts`
 - `rate-limit.test.ts`
 - `redirect-validation.test.ts`
+- `source-config-candidate.test.ts`
+- `stripe-webhook-route.test.ts`
 - `streamed-price-refresh-pages.test.tsx` (if present)
+- `timing-safe.test.ts`
+- `twelvedata-detail.test.ts`
+- `watchlist-detail-dashboard.test.tsx`
+- `watchlist-items.test.tsx`
+- `watchlist-page.test.tsx`
 
 Coverage themes:
 
@@ -2214,10 +2312,13 @@ Coverage themes:
 - analysis trigger UI state (status-only, no refresh button)
 - feed route: personal mode with matchSources/matchReasonCodes, market mode with isWatchlistMatch, watchlist-only fallback
 - cron route: full pipeline with Finnhub, analysis-for-all, cooldown skipping
+- candidate cron route: separate secret, candidate source payload validation, same-table writes
 - refresh route orchestration (deprecated but tested)
+- refresh-v2 route orchestration for the candidate provider set
 - Finnhub targeted ingest
 - Finnhub provider error classification (missing key, 401/403, 429, timeout, bad payload, no match, valid search)
 - GNews query building
+- provider-agnostic candidate query building
 - article CTA behavior
 - parser behavior
 - server-side cache (TTL expiry, fetch-through, hit/miss)
@@ -2227,10 +2328,11 @@ Coverage themes:
 - Turnstile server-side verification (success, failure, timeout/duplicate, network error, missing token/secret, action/hostname mismatch, idempotency key, client IP extraction)
 - Turnstile route/action protection gating (article-chat, portfolio-copilot, community post/comment reject without valid token)
 - article chat token budget assertion (2000 tokens across all four providers)
-- billing entitlement logic (buildBillingState, trialing/active/past_due, tier gating)
+- billing entitlement logic (buildBillingState, trialing/active/past_due, tier gating, admin override via `hasAdminModelAccess`)
 - Mistral provider creation, config validation, chat/enrichment methods
 - analysis cron route (GET eligibility, POST single-portfolio run, cooldown, CRON_SECRET)
 - enrichment cron route (batch enrichment, max batch size, CRON_SECRET)
+- admin news health / refresh route gating
 - middleware redirect behavior with sanitizeRedirect
 - app shell layout collapse/expand, localStorage persistence, navigation structure
 - community actions (createPost, createComment, getHomeFeed, ticker extraction)
@@ -2273,6 +2375,8 @@ Current docs in repo:
   - deployment checklist covering env vars, migrations, API quotas, smoke tests, rollback
 - `.github/workflows/news-cron.yml`
   - schedules GitHub Actions every 20 minutes, runs `python -m workers.news_ingestion.cron_runner`, and `POST`s the payload to the deployed `/api/news/cron` route
+- `.github/workflows/news-cron-v2.yml`
+  - manual `workflow_dispatch` candidate workflow that runs `python -m workers.news_ingestion.cron_runner_v2`, posts to `/api/news/cron/v2`, then reuses the shared enrich and analysis endpoints
 - `supabase/README.md`
   - migration application basics
 - `workers/news_ingestion/TROUBLESHOOTING.md`

@@ -45,6 +45,41 @@ _TOPIC_CATEGORY_MAP: dict[str, str] = {
 }
 
 
+def _raise_for_error_response(response: requests.Response) -> None:
+    """Raise sanitized HTTP errors without leaking headers or raw bodies."""
+    if response.ok:
+        return
+
+    detail: str | None = None
+    try:
+        payload = response.json()
+    except ValueError:
+        payload = None
+
+    if isinstance(payload, dict):
+        for key in ("message", "error", "detail"):
+            value = payload.get(key)
+            if isinstance(value, str) and value.strip():
+                detail = value.strip()
+                break
+
+        if detail is None:
+            status_value = payload.get("status")
+            if isinstance(status_value, str) and status_value.strip():
+                detail = status_value.strip()
+
+    if detail:
+        raise requests.HTTPError(
+            f"HTTP {response.status_code} from NewsCatcher search: {detail}",
+            response=response,
+        )
+
+    raise requests.HTTPError(
+        f"HTTP {response.status_code} from NewsCatcher search",
+        response=response,
+    )
+
+
 def stable_newscatcher_external_id(article: dict[str, Any]) -> str:
     """Stable dedupe key: prefer _id hash, then link hash, then headline+date."""
     _id = (article.get("_id") or "").strip()
@@ -171,6 +206,7 @@ def fetch_newscatcher_news(
 
     headers = {
         "x-api-token": key,
+        "Accept": "application/json",
         "Content-Type": "application/json",
     }
 
@@ -247,7 +283,7 @@ def _search(
         json=payload,
         timeout=20,
     )
-    response.raise_for_status()
+    _raise_for_error_response(response)
     data = response.json()
 
     results = data.get("articles", [])

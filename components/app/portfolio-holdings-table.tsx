@@ -23,13 +23,13 @@ type SortKey =
 
 type SortDir = "asc" | "desc";
 
-const COLUMNS: Array<{ key: SortKey; label: string; align?: "left" | "right" }> = [
-  { key: "symbol", label: "Holding" },
-  { key: "quantity", label: "Shares" },
-  { key: "averageCost", label: "Avg Cost" },
+const COLUMNS: Array<{ key: SortKey; label: string; align?: "left" | "right" | "center" }> = [
+  { key: "symbol", label: "Holding", align: "left" },
+  { key: "quantity", label: "Shares", align: "center" },
+  { key: "averageCost", label: "Avg Cost", align: "center" },
   { key: "costBasis", label: "Cost Basis", align: "right" },
-  { key: "price", label: "Price" },
-  { key: "dailyChange", label: "Day %" },
+  { key: "price", label: "Price", align: "center" },
+  { key: "dailyChange", label: "Day %", align: "center" },
   { key: "value", label: "Value", align: "right" },
   { key: "gainLoss", label: "Gain/Loss", align: "right" },
   { key: "gainLossPercent", label: "Gain/Loss %", align: "right" },
@@ -41,7 +41,7 @@ const inputClass =
 const MOBILE_GRID =
   "grid-cols-[minmax(0,1.65fr)_minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,1fr)_auto]";
 const DESKTOP_GRID =
-  "md:grid-cols-[1.5fr_1fr_1fr_1.2fr_1fr_1fr_1.2fr_1.1fr_1.1fr_auto]";
+  "md:grid-cols-[minmax(120px,1.6fr)_0.8fr_0.9fr_1fr_0.9fr_0.8fr_1fr_1fr_1fr_auto]";
 
 function getHoldingPrice(holding: Holding) {
   return holding.currentPrice || holding.price || 0;
@@ -333,7 +333,8 @@ export function PortfolioHoldingsTable({
             <div
               key={column.key}
               className={cn(
-                column.align === "right" ? "text-right" : undefined,
+                column.align === "right" && "text-right",
+                column.align === "center" && "text-center",
                 hiddenOnMobile && "hidden md:block",
               )}
             >
@@ -341,7 +342,7 @@ export function PortfolioHoldingsTable({
               type="button"
               onClick={() => handleSort(column.key)}
               className={`inline-flex items-center gap-1.5 transition hover:text-slate-300 ${
-                column.align === "right" ? "ml-auto" : ""
+                column.align === "right" ? "ml-auto" : column.align === "center" ? "mx-auto" : ""
               }`}
             >
               <span>{column.label}</span>
@@ -389,11 +390,11 @@ export function PortfolioHoldingsTable({
                 )}
               >
                 <div className="flex min-w-0 items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand/10 font-bold text-brand">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand/10 font-bold text-brand">
                     {holding.symbol.charAt(0)}
                   </div>
                   <div className="min-w-0">
-                    <p className="truncate font-bold leading-tight text-white">
+                    <p className="font-bold leading-tight text-white">
                       {holding.symbol}
                     </p>
                     <p className="mt-0.5 truncate text-[10px] font-bold uppercase tracking-widest text-slate-600">
@@ -401,20 +402,20 @@ export function PortfolioHoldingsTable({
                     </p>
                   </div>
                 </div>
-                <div className="hidden whitespace-nowrap text-[14px] font-medium text-slate-400 md:block">
+                <div className="hidden whitespace-nowrap text-center text-[14px] font-medium text-slate-400 md:block">
                   {holding.quantity.toFixed(2)}
                 </div>
-                <div className="hidden whitespace-nowrap text-[14px] font-medium text-slate-400 md:block">
+                <div className="hidden whitespace-nowrap text-center text-[14px] font-medium text-slate-400 md:block">
                   {formatPrice(holding.averageCost)}
                 </div>
                 <div className="hidden whitespace-nowrap text-right text-[14px] font-bold text-slate-300 md:block">
                   {formatPrice(costBasis)}
                 </div>
-                <div className="whitespace-nowrap text-right text-[14px] font-bold text-white">
+                <div className="whitespace-nowrap text-center text-[14px] font-bold text-white">
                   {formatPrice(price)}
                 </div>
                 <div
-                  className={`hidden whitespace-nowrap text-[14px] font-bold md:block ${
+                  className={`hidden whitespace-nowrap text-center text-[14px] font-bold md:block ${
                     isPositiveDay ? "text-emerald-400" : "text-red-400"
                   }`}
                 >

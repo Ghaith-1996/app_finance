@@ -10,7 +10,7 @@ function requireEnv(name: string): string {
   if (!value) {
     throw new Error(
       `[env] Missing required environment variable: ${name}. ` +
-      `Check .env and .env.example for setup instructions.`,
+      `Create .env.local or .env from .env.example and set the required value.`,
     );
   }
   return value;
@@ -31,6 +31,10 @@ export function requireSupabaseUrl(): string {
 /** Supabase anon key — required at runtime. */
 export function requireSupabaseAnonKey(): string {
   return requireEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY");
+}
+
+export function requireSupabaseServiceRoleKey(): string {
+  return requireEnv("SUPABASE_SERVICE_ROLE_KEY");
 }
 
 export function requireFinnhubKey(): string {

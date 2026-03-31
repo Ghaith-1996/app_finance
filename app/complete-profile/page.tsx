@@ -35,8 +35,6 @@ export default async function CompleteProfilePage({
             firstName: "",
             lastName: "",
             handle: "",
-            displayName: "",
-            avatarUrl: null,
           }
         }
         title="Complete your profile"

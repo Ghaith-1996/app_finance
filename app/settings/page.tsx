@@ -57,8 +57,6 @@ export default async function SettingsPage({
               firstName: "",
               lastName: "",
               handle: "",
-              displayName: "",
-              avatarUrl: null,
             }
           }
           title="Profile settings"

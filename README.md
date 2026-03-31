@@ -9,7 +9,14 @@ npm install
 npm run dev
 ```
 
-The app reads runtime configuration from `.env.example`. Copy the required values into `.env`.
+The app reads runtime configuration from `.env.example`. Create `.env.local` or `.env` from that file before starting the dev server.
+
+Minimum local env required to boot the app:
+
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+
+If either is missing, the app will now fail with a repo-specific `[env] Missing required environment variable` message instead of the generic Supabase runtime error.
 
 ## AI providers
 

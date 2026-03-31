@@ -4,10 +4,10 @@ import { useState, useTransition } from "react";
 import { Loader2 } from "lucide-react";
 import { Panel } from "@/components/ui/panel";
 import { Button } from "@/components/ui/button";
-import type { UserProfileFormData } from "@/lib/profile/utils";
+import type { ProfileFormValues } from "@/lib/profile/utils";
 
 interface Props {
-  initialProfile: UserProfileFormData;
+  initialProfile: ProfileFormValues;
   title: string;
   description: string;
   submitLabel: string;
@@ -20,7 +20,7 @@ interface Props {
   }) => Promise<
     | void
     | { ok: false; error: string }
-    | { ok: true; profile?: unknown }
+    | { ok: true }
   >;
   redirectTo?: string;
   successMessage?: string;

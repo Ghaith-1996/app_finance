@@ -730,7 +730,6 @@ export function FeedView({
       <div
         className={cn(
           "grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]",
-          showDesktopChat && "xl:grid-cols-[minmax(0,1fr)_380px_400px]",
         )}
       >
       <div className="space-y-6">
@@ -1039,7 +1038,18 @@ export function FeedView({
           isOpen={chatOpen}
           onClick={handleGlobalAskAiClick}
         />
-        {selectedStory ? (
+        {showDesktopChat ? (
+          <StoryChatSidebar
+            context={chatContext}
+            story={chatStory}
+            portfolioId={portfolioId}
+            allowedTiers={allowedModelTiers}
+            selectedTier={selectedChatTier}
+            onSelectedTierChange={setSelectedChatTier}
+            onClose={resetChatSurface}
+            onActivityChange={handleChatActivityChange}
+          />
+        ) : selectedStory && !chatOpen ? (
           <DetailPanel
             story={selectedStory}
             mode={mode}
@@ -1049,18 +1059,6 @@ export function FeedView({
           />
         ) : null}
       </div>
-      {showDesktopChat ? (
-        <StoryChatSidebar
-          context={chatContext}
-          story={chatStory}
-          portfolioId={portfolioId}
-          allowedTiers={allowedModelTiers}
-          selectedTier={selectedChatTier}
-          onSelectedTierChange={setSelectedChatTier}
-          onClose={resetChatSurface}
-          onActivityChange={handleChatActivityChange}
-        />
-      ) : null}
       </div>
 
 
@@ -1248,7 +1246,7 @@ function StoryChatSidebar({
   return (
     <Panel
       data-testid="story-chat-sidebar"
-      className="hidden h-fit space-y-5 rounded-2xl border-white/[0.06] bg-surface-raised p-6 shadow-sm xl:sticky xl:top-28 xl:block"
+      className="h-fit space-y-5 rounded-2xl border-white/[0.06] bg-surface-raised p-6 shadow-sm"
     >
       <StoryChatHeader context={context} story={story} onClose={onClose} />
       <ArticleChatPanel

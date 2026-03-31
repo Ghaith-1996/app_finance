@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import {
   defaultHandle,
   deriveNamesFromMetadata,
-  type UserProfileFormData,
+  type UserProfileData,
   validateProfileInput,
 } from "@/lib/profile/utils";
 import { sanitizeExternalUrl } from "@/lib/security/external-url";
@@ -22,7 +22,7 @@ type UserProfileRow = {
   accepted_terms_at: string | null;
 };
 
-export async function getCurrentUserProfile(): Promise<UserProfileFormData | null> {
+export async function getCurrentUserProfile(): Promise<UserProfileData | null> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -61,7 +61,7 @@ export async function saveCurrentUserProfile(input: {
   firstName: string;
   lastName: string;
   handle: string;
-}): Promise<{ ok: true; profile: UserProfileFormData } | { ok: false; error: string }> {
+}): Promise<{ ok: true } | { ok: false; error: string }> {
   const validation = validateProfileInput(input);
   if (!validation.ok) return { ok: false, error: validation.error };
 
@@ -114,16 +114,7 @@ export async function saveCurrentUserProfile(input: {
   revalidatePath("/settings");
   revalidatePath("/complete-profile");
 
-  return {
-    ok: true,
-    profile: {
-      firstName,
-      lastName,
-      handle,
-      displayName,
-      avatarUrl,
-    },
-  };
+  return { ok: true };
 }
 
 export async function completeProfileAction(input: {

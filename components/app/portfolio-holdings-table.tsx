@@ -38,6 +38,11 @@ const COLUMNS: Array<{ key: SortKey; label: string; align?: "left" | "right" }> 
 const inputClass =
   "w-full rounded-xl border border-white/10 bg-[#0d1520] px-3 py-2 text-sm text-white outline-none placeholder:text-slate-600 focus:border-brand focus:ring-1 focus:ring-brand";
 
+const MOBILE_GRID =
+  "grid-cols-[minmax(0,1.8fr)_minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,1fr)]";
+const DESKTOP_GRID =
+  "md:grid-cols-[1.6fr_0.9fr_0.9fr_1.1fr_0.9fr_0.9fr_1.1fr_1.1fr_1.1fr]";
+
 function getHoldingPrice(holding: Holding) {
   return holding.currentPrice || holding.price || 0;
 }
@@ -168,7 +173,7 @@ function HoldingAdjustPanel({
       <p className="mb-4 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
         Update position — {holding.symbol}
       </p>
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="grid gap-6 lg:grid-cols-2">
         <form onSubmit={submitSale} className="space-y-3 rounded-xl border border-white/[0.06] bg-surface-raised/50 p-4">
           <div className="flex items-center gap-2 text-sm font-semibold text-white">
             <Minus className="h-4 w-4 text-amber-400" />
@@ -315,7 +320,13 @@ export function PortfolioHoldingsTable({
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-[1.5fr_1fr_1fr_auto] items-center gap-x-2 px-3 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-600 sm:px-6 md:grid-cols-[1.5fr_1fr_1fr_1.2fr_1fr_1fr_1.2fr_1.1fr_1.1fr_auto] md:gap-x-4">
+      <div
+        className={cn(
+          "grid items-center gap-x-3 px-3 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-600 sm:px-6 md:gap-x-4",
+          MOBILE_GRID,
+          DESKTOP_GRID,
+        )}
+      >
         {COLUMNS.map((column) => {
           const hiddenOnMobile = ["quantity", "averageCost", "costBasis", "dailyChange", "gainLossPercent"].includes(column.key);
           return (
@@ -347,8 +358,6 @@ export function PortfolioHoldingsTable({
           </div>
           );
         })}
-        {/* empty header for the News action column */}
-        <div />
       </div>
 
       <div className="space-y-3">
@@ -369,23 +378,33 @@ export function PortfolioHoldingsTable({
                 type="button"
                 onClick={() => setOpenId((id) => (id === holding.id ? null : holding.id))}
                 className={cn(
-                  "grid w-full grid-cols-[1.5fr_1fr_1fr_auto] items-center gap-x-2 rounded-2xl border px-3 py-3 text-left transition-transform duration-200 sm:px-6 sm:py-5 md:grid-cols-[1.5fr_1fr_1fr_1.2fr_1fr_1fr_1.2fr_1.1fr_1.1fr_auto] md:gap-x-4",
+                  "grid w-full items-center gap-x-3 rounded-2xl border px-3 py-3 text-left transition-transform duration-200 sm:px-6 sm:py-5 md:gap-x-4",
+                  MOBILE_GRID,
+                  DESKTOP_GRID,
                   isOpen
                     ? "border-brand/40 bg-surface-raised shadow-[0_0_0_1px_rgba(34,197,94,0.12)]"
                     : "border-white/[0.06] bg-surface-raised hover:-translate-y-0.5 hover:border-white/10",
                 )}
               >
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand/10 font-bold text-brand">
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand/10 font-bold text-brand">
                     {holding.symbol.charAt(0)}
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <p className="font-bold leading-tight text-white">
                       {holding.symbol}
                     </p>
-                    <p className="mt-0.5 text-[10px] font-bold uppercase tracking-widest text-slate-600">
+                    <p className="mt-0.5 truncate text-[10px] font-bold uppercase tracking-widest text-slate-600">
                       {holding.company}
                     </p>
+                    <Link
+                      href={`/feed?ticker=${encodeURIComponent(holding.symbol)}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="mt-1 inline-flex items-center gap-1 rounded-md border border-brand/25 bg-brand/10 px-2 py-0.5 text-[10px] font-bold text-brand transition hover:border-brand/40 hover:bg-brand/15"
+                    >
+                      <Newspaper className="h-3 w-3" />
+                      News
+                    </Link>
                   </div>
                 </div>
                 <div className="hidden whitespace-nowrap text-[14px] font-medium text-slate-400 md:block">
@@ -426,16 +445,6 @@ export function PortfolioHoldingsTable({
                 >
                   {isPositiveTotal ? "+" : ""}
                   {gainLossPercent.toFixed(2)}%
-                </div>
-                <div className="flex justify-end">
-                  <Link
-                    href={`/feed?ticker=${encodeURIComponent(holding.symbol)}`}
-                    onClick={(e) => e.stopPropagation()}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-brand/25 bg-brand/10 px-3 py-2 text-[11px] font-bold text-brand transition hover:border-brand/40 hover:bg-brand/15"
-                  >
-                    <Newspaper className="h-3.5 w-3.5" />
-                    News
-                  </Link>
                 </div>
               </button>
 

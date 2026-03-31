@@ -1,7 +1,10 @@
-export type UserProfileFormData = {
+export type ProfileFormValues = {
   firstName: string;
   lastName: string;
   handle: string;
+};
+
+export type UserProfileData = ProfileFormValues & {
   displayName: string;
   avatarUrl: string | null;
   acceptedTermsAt: string | null;
@@ -111,7 +114,7 @@ export function defaultHandle(user: {
 }
 
 export function isProfileComplete(
-  profile: Pick<UserProfileFormData, "firstName" | "lastName" | "handle" | "acceptedTermsAt"> | null,
+  profile: Pick<UserProfileData, "firstName" | "lastName" | "handle" | "acceptedTermsAt"> | null,
 ): boolean {
   if (!profile) return false;
   return (

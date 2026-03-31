@@ -38,6 +38,11 @@ const COLUMNS: Array<{ key: SortKey; label: string; align?: "left" | "right" }> 
 const inputClass =
   "w-full rounded-xl border border-white/10 bg-[#0d1520] px-3 py-2 text-sm text-white outline-none placeholder:text-slate-600 focus:border-brand focus:ring-1 focus:ring-brand";
 
+const MOBILE_GRID =
+  "grid-cols-[minmax(0,1.65fr)_minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,1fr)_auto]";
+const DESKTOP_GRID =
+  "md:grid-cols-[1.5fr_1fr_1fr_1.2fr_1fr_1fr_1.2fr_1.1fr_1.1fr_auto]";
+
 function getHoldingPrice(holding: Holding) {
   return holding.currentPrice || holding.price || 0;
 }
@@ -168,7 +173,7 @@ function HoldingAdjustPanel({
       <p className="mb-4 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
         Update position — {holding.symbol}
       </p>
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="grid gap-6 lg:grid-cols-2">
         <form onSubmit={submitSale} className="space-y-3 rounded-xl border border-white/[0.06] bg-surface-raised/50 p-4">
           <div className="flex items-center gap-2 text-sm font-semibold text-white">
             <Minus className="h-4 w-4 text-amber-400" />
@@ -315,7 +320,13 @@ export function PortfolioHoldingsTable({
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-[1.5fr_1fr_1fr_auto] items-center gap-x-2 px-3 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-600 sm:px-6 md:grid-cols-[1.5fr_1fr_1fr_1.2fr_1fr_1fr_1.2fr_1.1fr_1.1fr_auto] md:gap-x-4">
+      <div
+        className={cn(
+          "grid items-center gap-x-3 px-3 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-600 sm:px-6 md:gap-x-4",
+          MOBILE_GRID,
+          DESKTOP_GRID,
+        )}
+      >
         {COLUMNS.map((column) => {
           const hiddenOnMobile = ["quantity", "averageCost", "costBasis", "dailyChange", "gainLossPercent"].includes(column.key);
           return (
@@ -369,21 +380,23 @@ export function PortfolioHoldingsTable({
                 type="button"
                 onClick={() => setOpenId((id) => (id === holding.id ? null : holding.id))}
                 className={cn(
-                  "grid w-full grid-cols-[1.5fr_1fr_1fr_auto] items-center gap-x-2 rounded-2xl border px-3 py-3 text-left transition-transform duration-200 sm:px-6 sm:py-5 md:grid-cols-[1.5fr_1fr_1fr_1.2fr_1fr_1fr_1.2fr_1.1fr_1.1fr_auto] md:gap-x-4",
+                  "grid w-full items-center gap-x-3 rounded-2xl border px-3 py-3 text-left transition-transform duration-200 sm:px-6 sm:py-5 md:gap-x-4",
+                  MOBILE_GRID,
+                  DESKTOP_GRID,
                   isOpen
                     ? "border-brand/40 bg-surface-raised shadow-[0_0_0_1px_rgba(34,197,94,0.12)]"
                     : "border-white/[0.06] bg-surface-raised hover:-translate-y-0.5 hover:border-white/10",
                 )}
               >
-                <div className="flex items-center gap-3">
+                <div className="flex min-w-0 items-center gap-3">
                   <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand/10 font-bold text-brand">
                     {holding.symbol.charAt(0)}
                   </div>
-                  <div>
-                    <p className="font-bold leading-tight text-white">
+                  <div className="min-w-0">
+                    <p className="truncate font-bold leading-tight text-white">
                       {holding.symbol}
                     </p>
-                    <p className="mt-0.5 text-[10px] font-bold uppercase tracking-widest text-slate-600">
+                    <p className="mt-0.5 truncate text-[10px] font-bold uppercase tracking-widest text-slate-600">
                       {holding.company}
                     </p>
                   </div>
@@ -397,7 +410,7 @@ export function PortfolioHoldingsTable({
                 <div className="hidden whitespace-nowrap text-right text-[14px] font-bold text-slate-300 md:block">
                   {formatPrice(costBasis)}
                 </div>
-                <div className="whitespace-nowrap text-[14px] font-bold text-white">
+                <div className="whitespace-nowrap text-right text-[14px] font-bold text-white">
                   {formatPrice(price)}
                 </div>
                 <div

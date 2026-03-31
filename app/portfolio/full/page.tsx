@@ -311,8 +311,8 @@ export default async function FullPortfolioPage() {
       showOnboardingNav={showOnboardingNav}
       showAdminLink={showAdminLink}
     >
-      <div className="-mx-4 rounded-[2.5rem] bg-[#0a0f15] p-6 shadow-inner sm:mx-0 lg:p-10">
-        <div className="flex flex-col gap-10 lg:flex-row">
+      <div className="overflow-hidden rounded-[1.75rem] bg-[#0a0f15] p-4 shadow-inner sm:rounded-[2.25rem] sm:p-6 lg:p-8 xl:p-10">
+        <div className="flex flex-col gap-8 lg:flex-row xl:gap-10 2xl:gap-12">
           <PortfolioPricingSection
             portfolioId={portfolioId}
             portfolioCreatedAt={portfolioCreatedAt ?? new Date().toISOString()}
@@ -323,7 +323,7 @@ export default async function FullPortfolioPage() {
               <h2 className="mb-6 text-[22px] font-bold tracking-tight text-white">
                 Allocation & Position
               </h2>
-              <div className="grid gap-4 md:grid-cols-3">
+              <div className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-3">
                 {sectorCards.map((card) => {
                   const Icon = card.icon;
 
@@ -363,7 +363,7 @@ export default async function FullPortfolioPage() {
             </div>
           </PortfolioPricingSection>
 
-          <div className="w-full shrink-0 space-y-4 lg:w-[340px]">
+          <div className="w-full shrink-0 space-y-4 lg:w-[320px] xl:w-[340px] 2xl:w-[360px]">
             <div className="relative overflow-hidden rounded-[2.5rem] border border-white/[0.06] bg-surface-raised p-5 sm:p-8 shadow-sm">
               <div className="pointer-events-none absolute top-0 right-0 h-32 w-32 rounded-bl-full bg-gradient-to-bl from-white/5 to-transparent" />
 

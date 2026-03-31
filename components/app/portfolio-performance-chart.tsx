@@ -233,16 +233,16 @@ export function PortfolioPerformanceChart({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">
             Total Portfolio Value
           </p>
-          <p className="mt-2 text-[42px] font-bold leading-none tracking-tight text-white">
+          <p className="mt-2 text-[34px] font-bold leading-none tracking-tight text-white sm:text-[42px]">
             {formatCurrency(totalValue)}
           </p>
         </div>
-        <div className="flex items-center gap-5">
+        <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center sm:gap-5">
           <div
             className={cn(
               "flex items-center gap-2 rounded-xl border px-4 py-2",
@@ -259,7 +259,7 @@ export function PortfolioPerformanceChart({
               {dayChange.toFixed(1)}% Today
             </span>
           </div>
-          <div className="text-right">
+          <div className="sm:text-right">
             <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">
               24H Gain
             </p>
@@ -276,8 +276,8 @@ export function PortfolioPerformanceChart({
         </div>
       </div>
 
-      <div className="rounded-2xl border border-white/[0.06] bg-surface-raised p-6">
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+      <div className="rounded-2xl border border-white/[0.06] bg-surface-raised p-4 sm:p-6">
+        <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <div className="flex items-center gap-2">
               <p className="text-sm font-bold uppercase tracking-[0.15em] text-white">
@@ -291,14 +291,14 @@ export function PortfolioPerformanceChart({
               {getRangeDescription(range, createdAt)}
             </p>
           </div>
-          <div className="flex rounded-xl border border-white/[0.06] bg-white/[0.03] p-1">
+          <div className="flex w-full overflow-x-auto rounded-xl border border-white/[0.06] bg-white/[0.03] p-1 sm:w-auto">
             {(["1D", "1W", "1M", "ALL"] as TimeRange[]).map((r) => (
               <button
                 key={r}
                 type="button"
                 onClick={() => setRange(r)}
                 className={cn(
-                  "rounded-lg px-4 py-1.5 text-xs font-bold transition",
+                  "min-w-[48px] shrink-0 rounded-lg px-4 py-1.5 text-xs font-bold transition",
                   range === r
                     ? "bg-brand/15 text-brand"
                     : "text-slate-500 hover:text-slate-300",
@@ -310,7 +310,7 @@ export function PortfolioPerformanceChart({
           </div>
         </div>
 
-        <div className="h-[320px] w-full">
+        <div className="h-[260px] w-full sm:h-[320px]">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart
               data={data}

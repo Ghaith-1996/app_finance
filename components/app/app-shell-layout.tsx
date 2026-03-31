@@ -100,7 +100,7 @@ export function AppShellLayout({
     : mainNav.filter((item) => item.href !== "/onboarding");
 
   return (
-    <div className="flex min-h-screen bg-background text-foreground">
+    <div className="flex min-h-screen overflow-x-clip bg-background text-foreground">
       {/* Expand rail when sidebar hidden */}
       {collapsed ? (
         <button
@@ -258,14 +258,14 @@ export function AppShellLayout({
 
       {/* Mobile header */}
       <header className="fixed left-0 right-0 top-0 z-40 flex flex-col border-b border-white/[0.06] bg-surface/95 backdrop-blur-xl lg:hidden">
-        <div className="flex items-center justify-between px-4 py-3">
+        <div className="flex items-center gap-3 px-4 py-3 sm:px-5">
           <Link href="/" className="flex items-center gap-2">
             <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-brand/15 text-xs font-bold text-brand">
               PF
             </span>
             <span className="text-sm font-semibold text-slate-200">Pulsefolio</span>
           </Link>
-          <nav className="flex max-w-[65%] items-center gap-1 overflow-x-auto">
+          <nav className="flex flex-1 items-center justify-end gap-1 overflow-x-auto pb-1">
             {visibleMainNav.map((item) => {
               const Icon = item.icon;
               return (
@@ -298,7 +298,7 @@ export function AppShellLayout({
             </Link>
           </nav>
         </div>
-        <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-white/[0.04] px-4 py-2 text-[11px] text-slate-500">
+        <div className="flex gap-4 overflow-x-auto whitespace-nowrap border-t border-white/[0.04] px-4 py-2 text-[11px] text-slate-500 sm:px-5">
           <Link href="/portfolio/full" className={cn(pathname === "/portfolio/full" && "font-medium text-brand")}>
             Full portfolio
           </Link>
@@ -310,13 +310,13 @@ export function AppShellLayout({
 
       <main
         className={cn(
-          "flex-1 transition-[margin] duration-300 ease-out",
+          "min-w-0 flex-1 transition-[margin] duration-300 ease-out",
           collapsed ? "lg:ml-0" : "lg:ml-[260px]",
-          "px-4 pt-24 pb-10 sm:px-6 lg:px-10 lg:pt-10",
+          "px-4 pt-28 pb-10 sm:px-6 md:px-8 lg:px-10 lg:pt-8 xl:px-12",
           mainClassName,
         )}
       >
-        <div className="mx-auto max-w-[1600px] space-y-8">
+        <div className="mx-auto w-full max-w-[1680px] space-y-8">
           {backHref ? (
             <div>
               <Link
@@ -330,7 +330,7 @@ export function AppShellLayout({
               </Link>
             </div>
           ) : null}
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+          <div className="flex flex-col gap-4 sm:gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div className="max-w-3xl space-y-3">
               {eyebrow ? (
                 <p className="text-xs font-semibold uppercase tracking-[0.24em] text-brand">

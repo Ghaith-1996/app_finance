@@ -23,13 +23,13 @@ type SortKey =
 
 type SortDir = "asc" | "desc";
 
-const COLUMNS: Array<{ key: SortKey; label: string; align?: "left" | "right" | "center" }> = [
-  { key: "symbol", label: "Holding", align: "left" },
-  { key: "quantity", label: "Shares", align: "center" },
-  { key: "averageCost", label: "Avg Cost", align: "center" },
+const COLUMNS: Array<{ key: SortKey; label: string; align?: "left" | "right" }> = [
+  { key: "symbol", label: "Holding" },
+  { key: "quantity", label: "Shares" },
+  { key: "averageCost", label: "Avg Cost" },
   { key: "costBasis", label: "Cost Basis", align: "right" },
-  { key: "price", label: "Price", align: "center" },
-  { key: "dailyChange", label: "Day %", align: "center" },
+  { key: "price", label: "Price" },
+  { key: "dailyChange", label: "Day %" },
   { key: "value", label: "Value", align: "right" },
   { key: "gainLoss", label: "Gain/Loss", align: "right" },
   { key: "gainLossPercent", label: "Gain/Loss %", align: "right" },
@@ -39,9 +39,9 @@ const inputClass =
   "w-full rounded-xl border border-white/10 bg-[#0d1520] px-3 py-2 text-sm text-white outline-none placeholder:text-slate-600 focus:border-brand focus:ring-1 focus:ring-brand";
 
 const MOBILE_GRID =
-  "grid-cols-[minmax(0,1.65fr)_minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,1fr)_auto]";
+  "grid-cols-[minmax(0,1.8fr)_minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,1fr)]";
 const DESKTOP_GRID =
-  "md:grid-cols-[minmax(120px,1.6fr)_0.8fr_0.9fr_1fr_0.9fr_0.8fr_1fr_1fr_1fr_auto]";
+  "md:grid-cols-[1.6fr_0.9fr_0.9fr_1.1fr_0.9fr_0.9fr_1.1fr_1.1fr_1.1fr]";
 
 function getHoldingPrice(holding: Holding) {
   return holding.currentPrice || holding.price || 0;
@@ -333,8 +333,7 @@ export function PortfolioHoldingsTable({
             <div
               key={column.key}
               className={cn(
-                column.align === "right" && "text-right",
-                column.align === "center" && "text-center",
+                column.align === "right" ? "text-right" : undefined,
                 hiddenOnMobile && "hidden md:block",
               )}
             >
@@ -342,7 +341,7 @@ export function PortfolioHoldingsTable({
               type="button"
               onClick={() => handleSort(column.key)}
               className={`inline-flex items-center gap-1.5 transition hover:text-slate-300 ${
-                column.align === "right" ? "ml-auto" : column.align === "center" ? "mx-auto" : ""
+                column.align === "right" ? "ml-auto" : ""
               }`}
             >
               <span>{column.label}</span>
@@ -359,8 +358,6 @@ export function PortfolioHoldingsTable({
           </div>
           );
         })}
-        {/* empty header for the News action column */}
-        <div />
       </div>
 
       <div className="space-y-3">
@@ -400,22 +397,30 @@ export function PortfolioHoldingsTable({
                     <p className="mt-0.5 truncate text-[10px] font-bold uppercase tracking-widest text-slate-600">
                       {holding.company}
                     </p>
+                    <Link
+                      href={`/feed?ticker=${encodeURIComponent(holding.symbol)}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="mt-1 inline-flex items-center gap-1 rounded-md border border-brand/25 bg-brand/10 px-2 py-0.5 text-[10px] font-bold text-brand transition hover:border-brand/40 hover:bg-brand/15"
+                    >
+                      <Newspaper className="h-3 w-3" />
+                      News
+                    </Link>
                   </div>
                 </div>
-                <div className="hidden whitespace-nowrap text-center text-[14px] font-medium text-slate-400 md:block">
+                <div className="hidden whitespace-nowrap text-[14px] font-medium text-slate-400 md:block">
                   {holding.quantity.toFixed(2)}
                 </div>
-                <div className="hidden whitespace-nowrap text-center text-[14px] font-medium text-slate-400 md:block">
+                <div className="hidden whitespace-nowrap text-[14px] font-medium text-slate-400 md:block">
                   {formatPrice(holding.averageCost)}
                 </div>
                 <div className="hidden whitespace-nowrap text-right text-[14px] font-bold text-slate-300 md:block">
                   {formatPrice(costBasis)}
                 </div>
-                <div className="whitespace-nowrap text-center text-[14px] font-bold text-white">
+                <div className="whitespace-nowrap text-[14px] font-bold text-white">
                   {formatPrice(price)}
                 </div>
                 <div
-                  className={`hidden whitespace-nowrap text-center text-[14px] font-bold md:block ${
+                  className={`hidden whitespace-nowrap text-[14px] font-bold md:block ${
                     isPositiveDay ? "text-emerald-400" : "text-red-400"
                   }`}
                 >
@@ -440,16 +445,6 @@ export function PortfolioHoldingsTable({
                 >
                   {isPositiveTotal ? "+" : ""}
                   {gainLossPercent.toFixed(2)}%
-                </div>
-                <div className="flex justify-end">
-                  <Link
-                    href={`/feed?ticker=${encodeURIComponent(holding.symbol)}`}
-                    onClick={(e) => e.stopPropagation()}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-brand/25 bg-brand/10 px-3 py-2 text-[11px] font-bold text-brand transition hover:border-brand/40 hover:bg-brand/15"
-                  >
-                    <Newspaper className="h-3.5 w-3.5" />
-                    News
-                  </Link>
                 </div>
               </button>
 

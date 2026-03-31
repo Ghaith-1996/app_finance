@@ -78,6 +78,7 @@ export function FeedView({
   portfolioId,
   insights = [],
   initialSymbol,
+  initialTicker,
   initialFeedPayload,
   allowedModelTiers = ["free", "premium", "ultimate"],
   defaultModelTier = "free",
@@ -86,11 +87,13 @@ export function FeedView({
   insights?: PortfolioInsight[];
   /** When set (e.g. from `/feed?symbol=AAPL`), pre-select that holding in personal mode if it appears in the feed. */
   initialSymbol?: string;
+  /** When set (e.g. from `/feed?ticker=AAPL`), switch to market mode and filter by this ticker tag. */
+  initialTicker?: string;
   initialFeedPayload?: FeedResponsePayload | null;
   allowedModelTiers?: ArticleChatModelTier[];
   defaultModelTier?: ArticleChatModelTier;
 }) {
-  const [mode, setMode] = useState<FeedMode>("personal");
+  const [mode, setMode] = useState<FeedMode>(() => initialTicker ? "market" : "personal");
   const [feed, setFeed] = useState<NewsItem[]>(() => initialFeedPayload?.feed ?? []);
   const [isInitialLoading, setIsInitialLoading] = useState(() => !initialFeedPayload);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -112,8 +115,8 @@ export function FeedView({
   const [selectedSourceType, setSelectedSourceType] = useState(
     sourceTypeOptions[0].label,
   );
-  const [tickerInput, setTickerInput] = useState("");
-  const [appliedTickerQuery, setAppliedTickerQuery] = useState("");
+  const [tickerInput, setTickerInput] = useState(() => initialTicker?.trim().toUpperCase() ?? "");
+  const [appliedTickerQuery, setAppliedTickerQuery] = useState(() => initialTicker?.trim().toUpperCase() ?? "");
 
   // Shared filters
   const [selectedCategory, setSelectedCategory] = useState("All categories");

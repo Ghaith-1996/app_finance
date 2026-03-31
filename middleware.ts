@@ -4,8 +4,15 @@ import { sanitizeRedirect } from "@/lib/security/redirect";
 
 const protectedPaths = ["/onboarding", "/analysis", "/feed", "/portfolio", "/home", "/watchlist", "/settings", "/admin", "/complete-profile"];
 
+/** Paths where an incomplete profile is acceptable (the user is actively completing it, or reading ToS). */
+const profileExemptPaths = ["/complete-profile", "/terms"];
+
 function isProtectedPath(pathname: string) {
   return protectedPaths.some((path) => pathname === path || pathname.startsWith(path + "/"));
+}
+
+function isProfileExemptPath(pathname: string) {
+  return profileExemptPaths.some((path) => pathname === path || pathname.startsWith(path + "/"));
 }
 
 export async function middleware(request: NextRequest) {
@@ -57,6 +64,31 @@ export async function middleware(request: NextRequest) {
       redirectResponse.cookies.set(cookie.name, cookie.value);
     });
     return redirectResponse;
+  }
+
+  // Gate: authenticated users on protected paths must have a complete profile (name + ToS)
+  if (user && isProtectedPath(request.nextUrl.pathname) && !isProfileExemptPath(request.nextUrl.pathname)) {
+    const { data: profile } = await supabase
+      .from("user_profiles")
+      .select("first_name, last_name, handle, accepted_terms_at")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    const isComplete =
+      !!profile?.first_name?.trim() &&
+      !!profile?.last_name?.trim() &&
+      !!profile?.handle?.trim() &&
+      !!profile?.accepted_terms_at;
+
+    if (!isComplete) {
+      const completeUrl = new URL("/complete-profile", request.url);
+      completeUrl.searchParams.set("redirectTo", request.nextUrl.pathname);
+      const redirectResponse = NextResponse.redirect(completeUrl);
+      response.cookies.getAll().forEach((cookie) => {
+        redirectResponse.cookies.set(cookie.name, cookie.value);
+      });
+      return redirectResponse;
+    }
   }
 
   return response;

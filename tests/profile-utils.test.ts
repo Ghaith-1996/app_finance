@@ -68,6 +68,7 @@ describe("profile utils", () => {
         firstName: "Ada",
         lastName: "Lovelace",
         handle: "ada",
+        acceptedTermsAt: "2026-01-01T00:00:00Z",
       }),
     ).toBe(true);
 
@@ -76,6 +77,16 @@ describe("profile utils", () => {
         firstName: "Ada",
         lastName: "",
         handle: "ada",
+        acceptedTermsAt: "2026-01-01T00:00:00Z",
+      }),
+    ).toBe(false);
+
+    expect(
+      isProfileComplete({
+        firstName: "Ada",
+        lastName: "Lovelace",
+        handle: "ada",
+        acceptedTermsAt: null,
       }),
     ).toBe(false);
 

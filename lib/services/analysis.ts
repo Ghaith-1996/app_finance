@@ -16,7 +16,7 @@ import { resolveDirectStockMatch } from "./news/direct-match";
 import { newsWindowCutoffIso } from "./news/pool-snapshot";
 
 /** Newest-first cap on global `news_items` considered per analysis run. */
-export const ANALYSIS_NEWS_POOL_LIMIT = 100;
+export const ANALYSIS_NEWS_POOL_LIMIT = 500;
 
 /** Minimum boosted relevance to persist a `feed_item` (after EDGAR boost). */
 export const ANALYSIS_RELEVANCE_MIN = 60;

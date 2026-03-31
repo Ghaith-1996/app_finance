@@ -21,7 +21,7 @@ export function getStripe(): Stripe {
     stripeClient = new Stripe(requireStripeEnv("STRIPE_SECRET_KEY"), {
       apiVersion: STRIPE_API_VERSION,
       appInfo: {
-        name: "portfolio-signal",
+        name: "pulsefolio",
       },
     });
   }

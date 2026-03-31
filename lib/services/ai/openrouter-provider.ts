@@ -86,7 +86,7 @@ export function createOpenRouterProvider(): IAIProvider {
     process.env.OPENROUTER_HTTP_REFERER?.trim() ||
     process.env.NEXT_PUBLIC_SITE_URL?.trim() ||
     "";
-  const title = process.env.OPENROUTER_APP_NAME?.trim() || "Portfolio Signal";
+  const title = process.env.OPENROUTER_APP_NAME?.trim() || "Pulsefolio";
 
   const extraHeaders: Record<string, string> = {};
   if (referer) extraHeaders["HTTP-Referer"] = referer;

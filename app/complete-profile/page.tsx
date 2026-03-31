@@ -44,6 +44,7 @@ export default async function CompleteProfilePage({
         submitLabel="Continue"
         redirectTo={redirectTo}
         onSubmit={completeProfileAction}
+        requireTerms
       />
     </div>
   );

@@ -11,9 +11,9 @@ import { isMarketHeadlineSource } from "@/lib/services/news/source-config";
 
 /** Hard cap: only articles from the last 24 hours appear in either feed mode. */
 const FEED_MAX_AGE_MINUTES = 24 * 60;
-export const DEFAULT_FEED_PAGE_SIZE = 50;
+export const DEFAULT_FEED_PAGE_SIZE = 100;
 const MIN_PAGE_SIZE = 10;
-const MAX_PAGE_SIZE = 100;
+const MAX_PAGE_SIZE = 500;
 
 type ServerSupabase = Awaited<ReturnType<typeof createClient>>;
 

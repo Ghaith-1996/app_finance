@@ -15,6 +15,7 @@ interface Props {
     firstName: string;
     lastName: string;
     handle: string;
+    acceptTerms?: boolean;
     redirectTo?: string;
   }) => Promise<
     | void
@@ -23,6 +24,8 @@ interface Props {
   >;
   redirectTo?: string;
   successMessage?: string;
+  /** Show Terms of Service checkbox (for first-time profile completion). */
+  requireTerms?: boolean;
 }
 
 export function ProfileForm({
@@ -33,10 +36,12 @@ export function ProfileForm({
   onSubmit,
   redirectTo,
   successMessage,
+  requireTerms,
 }: Props) {
   const [firstName, setFirstName] = useState(initialProfile.firstName);
   const [lastName, setLastName] = useState(initialProfile.lastName);
   const [handle, setHandle] = useState(initialProfile.handle);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -59,6 +64,7 @@ export function ProfileForm({
               firstName,
               lastName,
               handle,
+              acceptTerms: requireTerms ? acceptedTerms : undefined,
               redirectTo,
             });
             if (result && "ok" in result && result.ok === false) {
@@ -114,8 +120,30 @@ export function ProfileForm({
         {error ? <p className="text-sm text-rose-300">{error}</p> : null}
         {saved ? <p className="text-sm text-brand">{saved}</p> : null}
 
+        {requireTerms ? (
+          <label className="flex items-start gap-3 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={acceptedTerms}
+              onChange={(e) => setAcceptedTerms(e.target.checked)}
+              className="mt-0.5 h-4 w-4 shrink-0 rounded border border-white/20 bg-white/[0.03] accent-brand"
+            />
+            <span className="text-sm text-slate-400">
+              I agree to the{" "}
+              <a
+                href="/terms"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-brand underline underline-offset-2 hover:text-brand-strong"
+              >
+                Terms of Service
+              </a>
+            </span>
+          </label>
+        ) : null}
+
         <div className="flex justify-end">
-          <Button type="submit" size="lg" disabled={pending}>
+          <Button type="submit" size="lg" disabled={pending || (requireTerms && !acceptedTerms)}>
             {pending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
             {submitLabel}
           </Button>

@@ -8,6 +8,7 @@ activate the correct source registries and that ``run()`` honours the
 
 from __future__ import annotations
 
+import os
 import sys
 import unittest
 from pathlib import Path
@@ -176,24 +177,76 @@ class TestRunProviderSet(unittest.TestCase):
 class TestPreflightProviderSet(unittest.TestCase):
     """preflight_check respects the provider_set argument."""
 
+    @patch("workers.news_ingestion.main.importlib.import_module")
     @patch("workers.news_ingestion.main.configure_worker_environment", return_value="/tmp")
-    def test_candidate_preflight_checks_candidate_env_vars(self, _):
-        result = preflight_check(provider_set="candidate")
+    def test_candidate_preflight_checks_candidate_env_vars(self, _, mock_import_module):
+        mock_import_module.return_value = object()
+
+        with patch.dict(os.environ, {
+            "SUPABASE_SERVICE_ROLE_KEY": "service-role",
+            "EDGAR_IDENTITY": "Agent agent@example.com",
+            "NEWSAPI_AI_API_KEY": "newsapi-ai-key",
+        }, clear=True):
+            result = preflight_check(provider_set="candidate")
+
         check_names = {c["name"] for c in result["checks"]}
         self.assertIn("NEWSAPI_AI_API_KEY", check_names)
         self.assertIn("NEWSCATCHER_API_KEY", check_names)
-        # newsapi's env var should NOT be checked
         self.assertNotIn("NEWSAPI_KEY", check_names)
 
+        check_map = {c["name"]: c for c in result["checks"]}
+        self.assertFalse(check_map["NEWSCATCHER_API_KEY"]["ok"])
+        self.assertTrue(result["ok"])
+
+    @patch("workers.news_ingestion.main.importlib.import_module")
     @patch("workers.news_ingestion.main.configure_worker_environment", return_value="/tmp")
-    def test_current_preflight_checks_current_env_vars(self, _):
-        result = preflight_check(provider_set="current")
+    def test_candidate_preflight_fails_when_newsapi_ai_key_missing(self, _, mock_import_module):
+        mock_import_module.return_value = object()
+
+        with patch.dict(os.environ, {
+            "SUPABASE_SERVICE_ROLE_KEY": "service-role",
+            "EDGAR_IDENTITY": "Agent agent@example.com",
+            "NEWSCATCHER_API_KEY": "newscatcher-key",
+        }, clear=True):
+            result = preflight_check(provider_set="candidate")
+
+        check_map = {c["name"]: c for c in result["checks"]}
+        self.assertFalse(result["ok"])
+        self.assertFalse(check_map["NEWSAPI_AI_API_KEY"]["ok"])
+        self.assertTrue(check_map["NEWSCATCHER_API_KEY"]["ok"])
+
+    @patch("workers.news_ingestion.main.importlib.import_module")
+    @patch("workers.news_ingestion.main.configure_worker_environment", return_value="/tmp")
+    def test_candidate_preflight_fails_when_service_role_missing(self, _, mock_import_module):
+        mock_import_module.return_value = object()
+
+        with patch.dict(os.environ, {
+            "EDGAR_IDENTITY": "Agent agent@example.com",
+            "NEWSAPI_AI_API_KEY": "newsapi-ai-key",
+            "NEWSCATCHER_API_KEY": "newscatcher-key",
+        }, clear=True):
+            result = preflight_check(provider_set="candidate")
+
+        check_map = {c["name"]: c for c in result["checks"]}
+        self.assertFalse(result["ok"])
+        self.assertFalse(check_map["SUPABASE_SERVICE_ROLE_KEY"]["ok"])
+
+    @patch("workers.news_ingestion.main.importlib.import_module")
+    @patch("workers.news_ingestion.main.configure_worker_environment", return_value="/tmp")
+    def test_current_preflight_checks_current_env_vars(self, _, mock_import_module):
+        mock_import_module.return_value = object()
+
+        with patch.dict(os.environ, {
+            "SUPABASE_SERVICE_ROLE_KEY": "service-role",
+            "EDGAR_IDENTITY": "Agent agent@example.com",
+            "NEWSAPI_KEY": "newsapi-key",
+        }, clear=True):
+            result = preflight_check(provider_set="current")
+
         check_names = {c["name"] for c in result["checks"]}
         self.assertIn("NEWSAPI_KEY", check_names)
-        # candidate-only vars should NOT be checked
         self.assertNotIn("NEWSAPI_AI_API_KEY", check_names)
         self.assertNotIn("NEWSCATCHER_API_KEY", check_names)
-
 
 if __name__ == "__main__":
     unittest.main()

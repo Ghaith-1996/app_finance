@@ -43,7 +43,7 @@ export default async function PortfolioPage() {
         showOnboardingNav={showOnboardingNav}
         showAdminLink={showAdminLink}
       >
-        <div className="rounded-2xl border border-white/[0.06] bg-surface-raised p-8 text-center">
+        <div className="rounded-2xl border border-white/[0.06] bg-surface-raised p-5 sm:p-8 text-center">
           <p className="text-slate-400">
             You don&apos;t have a portfolio yet. Complete onboarding to add one.
           </p>
@@ -77,18 +77,18 @@ export default async function PortfolioPage() {
     >
       <div className="space-y-6">
         {/* Top row cards */}
-        <div className="grid gap-4 md:grid-cols-[1.1fr_0.9fr_0.9fr]">
+        <div className="grid gap-4 md:grid-cols-[1.3fr_0.85fr_0.85fr]">
           <PortfolioValueCard
             initialOverview={portfolioOverview}
             portfolioId={portfolioId}
           />
 
-          <div className="flex flex-col justify-between rounded-2xl border border-white/[0.06] bg-surface-raised p-8 min-h-[180px]">
+          <div className="flex flex-col justify-between rounded-2xl border border-white/[0.06] bg-surface-raised p-5 sm:p-8 min-h-[180px]">
             <div>
               <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">
                 IMPORT METHOD
               </p>
-              <p className="mt-4 text-[26px] font-bold tracking-tight text-white">{sourceDisplayLabel}</p>
+              <p className="mt-4 text-xl sm:text-[26px] font-bold tracking-tight text-white">{sourceDisplayLabel}</p>
             </div>
             <div className="mt-auto pt-4 flex">
               <span className="inline-flex items-center gap-1.5 rounded-lg bg-brand/10 px-3 py-1.5 text-[11px] font-bold tracking-widest text-brand">
@@ -98,12 +98,12 @@ export default async function PortfolioPage() {
             </div>
           </div>
 
-          <div className="flex flex-col justify-between rounded-2xl border border-white/[0.06] bg-surface-raised p-8 min-h-[180px]">
+          <div className="flex flex-col justify-between rounded-2xl border border-white/[0.06] bg-surface-raised p-5 sm:p-8 min-h-[180px]">
             <div>
               <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">
                 LAST ANALYZED
               </p>
-              <p className="mt-4 text-[26px] font-bold tracking-tight text-white">{portfolioOverview.lastAnalyzedAt || "Never"}</p>
+              <p className="mt-4 text-xl sm:text-[26px] font-bold tracking-tight text-white">{portfolioOverview.lastAnalyzedAt || "Never"}</p>
             </div>
             <div className="mt-auto pt-4 flex">
               <span className="inline-flex items-center gap-1.5 rounded-lg bg-brand/10 px-3 py-1.5 text-[11px] font-bold tracking-widest text-brand">
@@ -118,9 +118,9 @@ export default async function PortfolioPage() {
 
         {/* Action cards row */}
         <div className="grid gap-4 md:grid-cols-[1.2fr_0.8fr]">
-          <Link href="/portfolio/full" className="group relative flex items-center justify-between overflow-hidden rounded-2xl bg-brand p-8 text-[#080c11] transition-all hover:bg-brand-strong">
+          <Link href="/portfolio/full" className="group relative flex items-center justify-between overflow-hidden rounded-2xl bg-brand p-5 sm:p-8 text-[#080c11] transition-all hover:bg-brand-strong">
             <div className="relative z-10 pl-2">
-              <h2 className="text-[26px] font-bold tracking-tight">See Full Portfolio</h2>
+              <h2 className="text-xl sm:text-[26px] font-bold tracking-tight">See Full Portfolio</h2>
               <p className="mt-2 text-[15px] text-[#080c11]/70">Drill down into individual asset performance.</p>
             </div>
             <div className="relative z-10 rounded-xl bg-black/10 p-4 transition-colors group-hover:bg-black/20 mr-2">
@@ -128,9 +128,9 @@ export default async function PortfolioPage() {
             </div>
           </Link>
 
-          <Link href="/watchlist" className="group relative flex items-center justify-between overflow-hidden rounded-2xl border border-white/[0.06] bg-surface-raised p-8 text-white transition-all hover:bg-surface-hover">
+          <Link href="/watchlist" className="group relative flex items-center justify-between overflow-hidden rounded-2xl border border-white/[0.06] bg-surface-raised p-5 sm:p-8 text-white transition-all hover:bg-surface-hover">
             <div className="relative z-10 pl-2">
-              <h2 className="text-[26px] font-bold tracking-tight">Watch List</h2>
+              <h2 className="text-xl sm:text-[26px] font-bold tracking-tight">Watch List</h2>
               <p className="mt-2 text-slate-500 text-[15px]">Track your potential next big moves.</p>
             </div>
             <div className="relative z-10 rounded-xl bg-white/5 p-4 transition-colors group-hover:bg-white/10 mr-2">

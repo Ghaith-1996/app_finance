@@ -73,7 +73,7 @@ These decisions were made in the current thread and are reflected in code/doc ch
 - the admin console provides manual controls for `/api/news/health`, `/api/news/refresh`, and `/api/news/refresh-v2` using the viewer's existing session cookie
 - added the Phase 1 candidate news pipeline in parallel with the current one: `POST /api/news/cron/v2`, `POST /api/news/refresh-v2`, `.github/workflows/news-cron-v2.yml`, Python `providerSet=candidate`, and shared writes into the existing `news_items` pool
 - candidate ingestion uses EDGAR + NewsAPI.ai + GNews + NewsCatcher with portfolio keyword queries; the current scheduled pipeline stays active and unchanged until explicit cutover
-- candidate workflow/runtime note: `NEWS_V2_CRON_SECRET` must be present both in GitHub Actions and in the deployed app runtime serving `/api/news/cron/v2`; shared enrich/analysis steps still use `CRON_SECRET`
+- candidate workflow/runtime note: `NEWS_V2_CRON_SECRET` must be present both in GitHub Actions and in the deployed app runtime serving `/api/news/cron/v2`; shared enrich/analysis steps still use `CRON_SECRET`, while NewsCatcher auth/search probes are warning-only best-effort checks
 - article chat UI moved out of the article detail panel into a separate surface: right-side sticky sidebar at `xl+` and a mobile slide-over sheet below `xl`
 - FeedView now owns article chat state, including activity tracking and a guarded story-switch confirmation modal when the current chat has messages or a draft
 - ArticleChatPanel now reports activity via `onActivityChange` and supports headerless/styled reuse inside the sidebar/sheet
@@ -100,6 +100,11 @@ These decisions were made in the current thread and are reflected in code/doc ch
 - global CSS (`app/globals.css`) now includes high-performance keyframe animations for floating elements and glass shimmer effects
 - added high-res AI assets (Strategy, Guardrails, Macro, Alpha) for the interactive use cases section
 - installed `framer-motion`, `gsap`, and `clsx` to support the new premium interface standards
+- app shell layout max-width widened from `1400px` to `1600px` (`components/app/app-shell-layout.tsx`), portfolio page grid ratios adjusted to give the left column more space
+- `/complete-profile` now requires first-time users to accept Terms of Service via a checkbox before completing their profile; the `ProfileForm` component accepts a `requireTerms` prop that gates the submit button
+- added `/terms` page (`app/terms/page.tsx`) with 15 legal sections covering service description, AI-generated content disclaimers, billing, privacy, limitation of liability, etc.
+- personal feed article limits raised: `ANALYSIS_NEWS_POOL_LIMIT` 100→500 (articles scored per analysis run), `MAX_PAGE_SIZE` 100→500 (pagination cap), `DEFAULT_FEED_PAGE_SIZE` 50→100; time-based 24-hour filter unchanged
+- updated `tests/analysis-constants.test.ts` to reflect the new 500-article pool limit
 
 Important runtime note:
 
@@ -479,6 +484,7 @@ Current behavior:
 - preloads any existing/derived profile values from `user_profiles` and OAuth metadata
 - redirects completed users to the requested destination immediately
 - otherwise requires first name, last name, and username before entering the app
+- first-time users must also accept Terms of Service via a checkbox before submitting
 
 ### `/settings`
 
@@ -543,6 +549,23 @@ Current behavior:
 - Premium CTA and Ultimate CTA create Stripe Checkout sessions
 - already-subscribed users on paid plans are rejected (409) by the checkout route
 - shows `billing=cancel` feedback when returning from a cancelled checkout
+
+### `/terms`
+
+Files:
+
+- `app/terms/page.tsx`
+
+Purpose:
+
+- public Terms of Service page linked from the first-time profile completion form
+
+Current behavior:
+
+- renders 15 legal sections covering service description, AI-generated content disclaimers, billing, privacy, limitation of liability, etc.
+- styled with dark theme matching the rest of the app
+- includes a "Back to home" link at the top
+- linked from the ToS checkbox on `/complete-profile` (opens in a new tab)
 
 ## API Routes
 
@@ -1292,7 +1315,7 @@ Main file:
 
 Key constants:
 
-- `ANALYSIS_NEWS_POOL_LIMIT = 100`
+- `ANALYSIS_NEWS_POOL_LIMIT = 500`
 - `ANALYSIS_RELEVANCE_MIN = 60`
 
 Core behavior:
@@ -1300,7 +1323,7 @@ Core behavior:
 - creates/updates `analysis_runs`
 - reads holdings for the selected portfolio
 - reads the user's `watchlist_items` (resolved via `portfolio.user_id`)
-- reads newest 100 `news_items` from the last 24 hours
+- reads newest 500 `news_items` from the last 24 hours
 - performs dual matching: checks articles against both portfolio holdings and watchlist symbols
 - persists `feed_items` only when relevance is high enough
 - writes `portfolio_insights`
@@ -2122,7 +2145,7 @@ Current worker shape:
 
 - `main.py` supports `providerSet=current|candidate`
 - current path = EDGAR + NewsAPI + GNews (+ Finnhub targeted refresh in the TypeScript route layer)
-- candidate path = EDGAR + NewsAPI.ai + GNews + NewsCatcher
+- candidate path = EDGAR + NewsAPI.ai + GNews + NewsCatcher (best-effort for cron/preflight; NewsCatcher degradation warns but does not block candidate cron on its own)
 - `cron_runner.py` builds the current GitHub Actions payload
 - `cron_runner_v2.py` builds the manual candidate GitHub Actions payload
 - `extract_full_text.py` performs background full-text extraction for newly inserted articles
@@ -2166,7 +2189,7 @@ Common requirements:
 ### Candidate Ingestion (Phase 1)
 
 - `NEWSAPI_AI_API_KEY` (EventRegistry / NewsAPI.ai)
-- `NEWSCATCHER_API_KEY` (NewsCatcher v3)
+- `NEWSCATCHER_API_KEY` (NewsCatcher v3; best-effort warning-only for candidate cron probes/preflight)
 - `NEWS_V2_CRON_SECRET` (bearer token for `/api/news/cron/v2`)
 - `NEWS_V2_CRON_ENDPOINT` (deployed URL for candidate cron finalize)
 
@@ -2174,6 +2197,7 @@ Important:
 
 - `NEWS_V2_CRON_SECRET` must match between GitHub Actions and the deployed app runtime that serves `/api/news/cron/v2`
 - `CRON_SECRET` is still required for the shared enrich and analysis endpoints used by `.github/workflows/news-cron-v2.yml`
+- `NEWSCATCHER_API_KEY` is optional for candidate workflow probes and `--check`; missing or invalid NewsCatcher config now warns but does not block the `v2` cron run
 
 ### Admin allowlist
 

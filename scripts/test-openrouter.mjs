@@ -50,7 +50,7 @@ const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     ...(process.env.OPENROUTER_HTTP_REFERER && {
       "HTTP-Referer": process.env.OPENROUTER_HTTP_REFERER,
     }),
-    "X-Title": process.env.OPENROUTER_APP_NAME || "Portfolio Signal test",
+    "X-Title": process.env.OPENROUTER_APP_NAME || "Pulsefolio test",
   },
   body: JSON.stringify(body),
 });

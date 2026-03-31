@@ -108,7 +108,7 @@ CANDIDATE_SOURCE_REGISTRY: dict[str, SourceConfig] = {
         fetcher=fetch_newscatcher_news,
         accepts_queries=True,
         env_var="NEWSCATCHER_API_KEY",
-        env_error="Missing. Required for NewsCatcher v3 article search.",
+        env_error="Missing. Optional warning-only check for candidate NewsCatcher article search.",
     ),
 }
 
@@ -185,6 +185,10 @@ def _all_rows_failed(stats: UpsertStats) -> bool:
     return stats.fetched > 0 and stats.inserted == 0 and stats.skipped == 0 and stats.failed >= stats.fetched
 
 
+def _is_warning_only_preflight_check(check: dict, *, provider_set: str) -> bool:
+    return provider_set == "candidate" and check.get("name") == "NEWSCATCHER_API_KEY"
+
+
 def preflight_check(*, provider_set: str = "current") -> dict:
     """Validate dependencies and config. Returns {ok: bool, checks: [...]}. Never raises."""
     registry = _get_registry(provider_set)
@@ -248,7 +252,10 @@ def preflight_check(*, provider_set: str = "current") -> dict:
             **({"error": config.env_error} if not value else {}),
         })
 
-    all_ok = all(c["ok"] for c in checks)
+    all_ok = all(
+        c["ok"] or _is_warning_only_preflight_check(c, provider_set=provider_set)
+        for c in checks
+    )
     return {"ok": all_ok, "checks": checks}
 
 

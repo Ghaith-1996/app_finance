@@ -1,8 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowDown, ArrowUp, ArrowUpDown, Minus, Plus } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Minus, Newspaper, Plus } from "lucide-react";
 
 import type { Holding } from "@/lib/types";
 import { recordHoldingAdd, recordHoldingSale } from "@/lib/actions/portfolio";
@@ -314,12 +315,17 @@ export function PortfolioHoldingsTable({
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-[1.5fr_1fr_1fr_1.2fr_1fr_1fr_1.2fr_1.1fr_1.1fr] items-center gap-x-4 px-6 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-600">
-        {COLUMNS.map((column) => (
-          <div
-            key={column.key}
-            className={column.align === "right" ? "text-right" : undefined}
-          >
+      <div className="grid grid-cols-[1.5fr_1fr_1fr_auto] items-center gap-x-2 px-3 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-600 sm:px-6 md:grid-cols-[1.5fr_1fr_1fr_1.2fr_1fr_1fr_1.2fr_1.1fr_1.1fr_auto] md:gap-x-4">
+        {COLUMNS.map((column) => {
+          const hiddenOnMobile = ["quantity", "averageCost", "costBasis", "dailyChange", "gainLossPercent"].includes(column.key);
+          return (
+            <div
+              key={column.key}
+              className={cn(
+                column.align === "right" ? "text-right" : undefined,
+                hiddenOnMobile && "hidden md:block",
+              )}
+            >
             <button
               type="button"
               onClick={() => handleSort(column.key)}
@@ -339,7 +345,10 @@ export function PortfolioHoldingsTable({
               )}
             </button>
           </div>
-        ))}
+          );
+        })}
+        {/* empty header for the News action column */}
+        <div />
       </div>
 
       <div className="space-y-3">
@@ -360,7 +369,7 @@ export function PortfolioHoldingsTable({
                 type="button"
                 onClick={() => setOpenId((id) => (id === holding.id ? null : holding.id))}
                 className={cn(
-                  "grid w-full grid-cols-[1.5fr_1fr_1fr_1.2fr_1fr_1fr_1.2fr_1.1fr_1.1fr] items-center gap-x-4 rounded-2xl border px-6 py-5 text-left transition-transform duration-200",
+                  "grid w-full grid-cols-[1.5fr_1fr_1fr_auto] items-center gap-x-2 rounded-2xl border px-3 py-3 text-left transition-transform duration-200 sm:px-6 sm:py-5 md:grid-cols-[1.5fr_1fr_1fr_1.2fr_1fr_1fr_1.2fr_1.1fr_1.1fr_auto] md:gap-x-4",
                   isOpen
                     ? "border-brand/40 bg-surface-raised shadow-[0_0_0_1px_rgba(34,197,94,0.12)]"
                     : "border-white/[0.06] bg-surface-raised hover:-translate-y-0.5 hover:border-white/10",
@@ -379,20 +388,20 @@ export function PortfolioHoldingsTable({
                     </p>
                   </div>
                 </div>
-                <div className="whitespace-nowrap text-[14px] font-medium text-slate-400">
+                <div className="hidden whitespace-nowrap text-[14px] font-medium text-slate-400 md:block">
                   {holding.quantity.toFixed(2)}
                 </div>
-                <div className="whitespace-nowrap text-[14px] font-medium text-slate-400">
+                <div className="hidden whitespace-nowrap text-[14px] font-medium text-slate-400 md:block">
                   {formatPrice(holding.averageCost)}
                 </div>
-                <div className="whitespace-nowrap text-right text-[14px] font-bold text-slate-300">
+                <div className="hidden whitespace-nowrap text-right text-[14px] font-bold text-slate-300 md:block">
                   {formatPrice(costBasis)}
                 </div>
                 <div className="whitespace-nowrap text-[14px] font-bold text-white">
                   {formatPrice(price)}
                 </div>
                 <div
-                  className={`whitespace-nowrap text-[14px] font-bold ${
+                  className={`hidden whitespace-nowrap text-[14px] font-bold md:block ${
                     isPositiveDay ? "text-emerald-400" : "text-red-400"
                   }`}
                 >
@@ -411,12 +420,22 @@ export function PortfolioHoldingsTable({
                   {formatPrice(gainLoss)}
                 </div>
                 <div
-                  className={`whitespace-nowrap text-right text-[15px] font-bold ${
+                  className={`hidden whitespace-nowrap text-right text-[15px] font-bold md:block ${
                     isPositiveTotal ? "text-emerald-400" : "text-red-400"
                   }`}
                 >
                   {isPositiveTotal ? "+" : ""}
                   {gainLossPercent.toFixed(2)}%
+                </div>
+                <div className="flex justify-end">
+                  <Link
+                    href={`/feed?ticker=${encodeURIComponent(holding.symbol)}`}
+                    onClick={(e) => e.stopPropagation()}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-brand/25 bg-brand/10 px-3 py-2 text-[11px] font-bold text-brand transition hover:border-brand/40 hover:bg-brand/15"
+                  >
+                    <Newspaper className="h-3.5 w-3.5" />
+                    News
+                  </Link>
                 </div>
               </button>
 

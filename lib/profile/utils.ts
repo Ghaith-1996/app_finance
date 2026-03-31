@@ -4,6 +4,7 @@ export type UserProfileFormData = {
   handle: string;
   displayName: string;
   avatarUrl: string | null;
+  acceptedTermsAt: string | null;
 };
 
 export type UserProfileValidationResult =
@@ -110,12 +111,13 @@ export function defaultHandle(user: {
 }
 
 export function isProfileComplete(
-  profile: Pick<UserProfileFormData, "firstName" | "lastName" | "handle"> | null,
+  profile: Pick<UserProfileFormData, "firstName" | "lastName" | "handle" | "acceptedTermsAt"> | null,
 ): boolean {
   if (!profile) return false;
   return (
     !!profile.firstName.trim() &&
     !!profile.lastName.trim() &&
-    !!profile.handle.trim()
+    !!profile.handle.trim() &&
+    !!profile.acceptedTermsAt
   );
 }

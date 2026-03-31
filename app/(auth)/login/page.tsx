@@ -43,11 +43,11 @@ export default function LoginPage() {
             className="inline-flex items-center gap-3 text-white no-underline"
           >
             <span className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-brand/15 text-lg font-semibold text-brand">
-              PS
+              PF
             </span>
             <div className="text-left">
               <p className="text-xs uppercase tracking-[0.22em] text-slate-500">
-                PortfolioSignal
+                Pulsefolio
               </p>
               <p className="text-base font-semibold text-white">
                 Personal AI finance

@@ -30,83 +30,78 @@ jobs:
         env:
           NEWS_V2_CRON_ENDPOINT: ${{ secrets.NEWS_V2_CRON_ENDPOINT }}
 
-      - name: Verify NewsCatcher auth
+      - name: Probe NewsCatcher (warning only)
         env:
           NEWSCATCHER_API_KEY: ${{ secrets.NEWSCATCHER_API_KEY }}
         run: |
           set -euo pipefail
 
-          response_file="$(mktemp)"
-          http_code="$(
-            curl -sS \
-              -X GET \
-              -H "x-api-token: ${NEWSCATCHER_API_KEY}" \
-              -H "Accept: application/json" \
-              -o "${response_file}" \
-              -w "%{http_code}" \
-              "https://v3-api.newscatcherapi.com/api/subscription"
-          )"
+          warn() {
+            echo "::warning::${1}"
+          }
 
-          echo "HTTP ${http_code}"
-
-          if ! python3 -m json.tool "${response_file}" > /dev/null 2>&1; then
-            echo "NewsCatcher auth check returned invalid JSON"
-            exit 1
+          if [ -z "${NEWSCATCHER_API_KEY:-}" ]; then
+            warn "NEWSCATCHER_API_KEY is not set; candidate cron will continue without blocking on NewsCatcher."
+            exit 0
           fi
 
-          if [ "${http_code}" -lt 200 ] || [ "${http_code}" -ge 300 ]; then
-            error_detail="$(python3 -c 'import json, sys; data = json.load(open(sys.argv[1])); print(data.get("message") or data.get("error") or data.get("status") or "unknown")' "$response_file")"
-            echo "NewsCatcher auth check failed: ${error_detail}"
-            exit 1
+          auth_response_file="$(mktemp)"
+          if ! auth_http_code="$(
+            curl -sS               -X GET               -H "x-api-token: ${NEWSCATCHER_API_KEY}"               -H "Accept: application/json"               -o "${auth_response_file}"               -w "%{http_code}"               "https://v3-api.newscatcherapi.com/api/subscription"
+          )"; then
+            warn "NewsCatcher auth probe request failed; candidate cron will continue."
+            exit 0
           fi
 
-          provider_message="$(python3 -c 'import json, sys; data = json.load(open(sys.argv[1])); print((data.get("message") or data.get("error") or "").strip())' "$response_file")"
-          if [ -n "${provider_message}" ]; then
-            echo "NewsCatcher auth check returned unexpected message: ${provider_message}"
-            exit 1
+          echo "NewsCatcher auth probe HTTP ${auth_http_code}"
+
+          if ! python3 -m json.tool "${auth_response_file}" > /dev/null 2>&1; then
+            warn "NewsCatcher auth probe returned invalid JSON; candidate cron will continue."
+            exit 0
           fi
 
-          python3 -c 'import json, sys; data = json.load(open(sys.argv[1])); print(f"subscription_status={data.get(\"status\", \"unknown\")} plan_calls_left={data.get(\"plan_calls_left\", \"?\")} concurrent_calls={data.get(\"concurrent_calls\", \"?\")}")' "$response_file"
-
-      - name: Verify NewsCatcher search
-        env:
-          NEWSCATCHER_API_KEY: ${{ secrets.NEWSCATCHER_API_KEY }}
-        run: |
-          set -euo pipefail
-
-          response_file="$(mktemp)"
-          http_code="$(
-            curl -sS \
-              -X POST \
-              -H "x-api-token: ${NEWSCATCHER_API_KEY}" \
-              -H "Accept: application/json" \
-              -H "Content-Type: application/json" \
-              -d '{"q":"bitcoin","page_size":1,"lang":"en","sort_by":"date"}' \
-              -o "${response_file}" \
-              -w "%{http_code}" \
-              "https://v3-api.newscatcherapi.com/api/search"
-          )"
-
-          echo "HTTP ${http_code}"
-
-          if ! python3 -m json.tool "${response_file}" > /dev/null 2>&1; then
-            echo "NewsCatcher search check returned invalid JSON"
-            exit 1
+          if [ "${auth_http_code}" -lt 200 ] || [ "${auth_http_code}" -ge 300 ]; then
+            auth_error_detail="$(python3 -c 'import json, sys; data = json.load(open(sys.argv[1])); print(data.get("message") or data.get("error") or data.get("status") or "unknown")' "$auth_response_file")"
+            warn "NewsCatcher auth probe failed (HTTP ${auth_http_code}): ${auth_error_detail}"
+            exit 0
           fi
 
-          if [ "${http_code}" -lt 200 ] || [ "${http_code}" -ge 300 ]; then
-            error_detail="$(python3 -c 'import json, sys; data = json.load(open(sys.argv[1])); print(data.get("message") or data.get("error") or data.get("status") or "unknown")' "$response_file")"
-            echo "NewsCatcher search check failed: ${error_detail}"
-            exit 1
+          auth_provider_message="$(python3 -c 'import json, sys; data = json.load(open(sys.argv[1])); print((data.get("message") or data.get("error") or "").strip())' "$auth_response_file")"
+          if [ -n "${auth_provider_message}" ]; then
+            warn "NewsCatcher auth probe returned unexpected message: ${auth_provider_message}"
+            exit 0
           fi
 
-          provider_message="$(python3 -c 'import json, sys; data = json.load(open(sys.argv[1])); print((data.get("message") or data.get("error") or "").strip())' "$response_file")"
-          if [ -n "${provider_message}" ]; then
-            echo "NewsCatcher search check returned unexpected message: ${provider_message}"
-            exit 1
+          python3 -c 'import json, sys; data = json.load(open(sys.argv[1])); print("subscription_status=%s plan_calls_left=%s concurrent_calls=%s" % (data.get("status", "unknown"), data.get("plan_calls_left", "?"), data.get("concurrent_calls", "?")))' "$auth_response_file"
+
+          search_response_file="$(mktemp)"
+          if ! search_http_code="$(
+            curl -sS               -X POST               -H "x-api-token: ${NEWSCATCHER_API_KEY}"               -H "Accept: application/json"               -H "Content-Type: application/json"               -d '{"q":"bitcoin","page_size":1,"lang":"en","sort_by":"date"}'               -o "${search_response_file}"               -w "%{http_code}"               "https://v3-api.newscatcherapi.com/api/search"
+          )"; then
+            warn "NewsCatcher search probe request failed; candidate cron will continue."
+            exit 0
           fi
 
-          python3 -c 'import json, sys; data = json.load(open(sys.argv[1])); articles = data.get("articles", []); count = len(articles) if isinstance(articles, list) else 0; print(f"search_status={data.get(\"status\", \"unknown\")} total_hits={data.get(\"total_hits\", \"?\")} articles={count}")' "$response_file"
+          echo "NewsCatcher search probe HTTP ${search_http_code}"
+
+          if ! python3 -m json.tool "${search_response_file}" > /dev/null 2>&1; then
+            warn "NewsCatcher search probe returned invalid JSON; candidate cron will continue."
+            exit 0
+          fi
+
+          if [ "${search_http_code}" -lt 200 ] || [ "${search_http_code}" -ge 300 ]; then
+            search_error_detail="$(python3 -c 'import json, sys; data = json.load(open(sys.argv[1])); print(data.get("message") or data.get("error") or data.get("status") or "unknown")' "$search_response_file")"
+            warn "NewsCatcher search probe failed (HTTP ${search_http_code}): ${search_error_detail}"
+            exit 0
+          fi
+
+          search_provider_message="$(python3 -c 'import json, sys; data = json.load(open(sys.argv[1])); print((data.get("message") or data.get("error") or "").strip())' "$search_response_file")"
+          if [ -n "${search_provider_message}" ]; then
+            warn "NewsCatcher search probe returned unexpected message: ${search_provider_message}"
+            exit 0
+          fi
+
+          python3 -c 'import json, sys; data = json.load(open(sys.argv[1])); articles = data.get("articles", []); count = len(articles) if isinstance(articles, list) else 0; print("search_status=%s total_hits=%s articles=%s" % (data.get("status", "unknown"), data.get("total_hits", "?"), count))' "$search_response_file"
 
       - name: Run candidate ingest worker and finalize
         id: ingest
@@ -121,7 +116,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          for name in NEWS_V2_CRON_ENDPOINT NEWS_V2_CRON_SECRET NEXT_PUBLIC_SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY NEWSAPI_AI_API_KEY NEWSCATCHER_API_KEY EDGAR_IDENTITY; do
+          for name in NEWS_V2_CRON_ENDPOINT NEWS_V2_CRON_SECRET NEXT_PUBLIC_SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY NEWSAPI_AI_API_KEY EDGAR_IDENTITY; do
             if [ -z "${!name:-}" ]; then
               echo "${name} secret is not set"
               exit 1

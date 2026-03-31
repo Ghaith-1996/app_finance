@@ -100,9 +100,9 @@ export function WatchlistItems({ initialItems, selectedSymbol, onSelectSymbol }:
         </p>
       )}
 
-      <div className="grid grid-cols-[2fr_1fr_auto] items-end gap-4 px-6 pb-2 text-[10px] font-bold uppercase tracking-widest text-slate-600">
+      <div className="grid grid-cols-[2fr_1fr_auto] items-end gap-2 px-3 pb-2 text-[10px] font-bold uppercase tracking-widest text-slate-600 sm:gap-4 sm:px-6">
         <div>ASSET</div>
-        <div>PERFORMANCE</div>
+        <div className="hidden sm:block">PERFORMANCE</div>
         <div className="flex flex-col items-end gap-2">
           <button
             type="button"
@@ -123,7 +123,7 @@ export function WatchlistItems({ initialItems, selectedSymbol, onSelectSymbol }:
               Auto-refreshing...
             </div>
           ) : null}
-          <div className="w-full text-right">STATUS</div>
+          <div className="hidden w-full text-right sm:block">STATUS</div>
         </div>
       </div>
 
@@ -187,7 +187,7 @@ function WatchlistRow({
     <div
       ref={rowRef}
       className={cn(
-        "grid cursor-pointer grid-cols-[2fr_1fr_auto] items-center gap-4 rounded-2xl border px-6 py-5 transition-all duration-200 hover:-translate-y-0.5",
+        "grid cursor-pointer grid-cols-[2fr_1fr_auto] items-center gap-2 rounded-2xl border px-3 py-3 transition-all duration-200 hover:-translate-y-0.5 sm:gap-4 sm:px-6 sm:py-5",
         selected
           ? "border-brand/30 bg-brand/5"
           : "border-white/[0.06] bg-surface-raised hover:border-white/10",
@@ -204,7 +204,7 @@ function WatchlistRow({
       }}
     >
       <div className="flex items-center gap-3">
-        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/5 text-lg font-bold text-slate-400">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/5 text-lg font-bold text-slate-400 sm:h-12 sm:w-12">
           {item.company.charAt(0) || item.symbol.charAt(0)}
         </div>
         <div>
@@ -246,7 +246,7 @@ function WatchlistRow({
 
       <div className="flex items-center justify-end gap-2 sm:gap-3">
         <Link
-          href={`/feed?symbol=${encodeURIComponent(item.symbol)}`}
+          href={`/feed?ticker=${encodeURIComponent(item.symbol)}`}
           onClick={(e) => e.stopPropagation()}
           className="inline-flex items-center gap-1.5 rounded-lg border border-brand/25 bg-brand/10 px-3 py-2 text-[11px] font-bold text-brand transition hover:border-brand/40 hover:bg-brand/15"
         >

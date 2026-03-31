@@ -19,6 +19,7 @@ type UserProfileRow = {
   display_name: string | null;
   avatar_url: string | null;
   handle: string | null;
+  accepted_terms_at: string | null;
 };
 
 export async function getCurrentUserProfile(): Promise<UserProfileFormData | null> {
@@ -31,7 +32,7 @@ export async function getCurrentUserProfile(): Promise<UserProfileFormData | nul
 
   const { data } = await supabase
     .from("user_profiles")
-    .select("user_id, first_name, last_name, display_name, avatar_url, handle")
+    .select("user_id, first_name, last_name, display_name, avatar_url, handle, accepted_terms_at")
     .eq("user_id", user.id)
     .maybeSingle();
 
@@ -52,6 +53,7 @@ export async function getCurrentUserProfile(): Promise<UserProfileFormData | nul
       (meta.picture as string | undefined) ||
       null,
     ),
+    acceptedTermsAt: row?.accepted_terms_at ?? null,
   };
 }
 
@@ -128,9 +130,25 @@ export async function completeProfileAction(input: {
   firstName: string;
   lastName: string;
   handle: string;
+  acceptTerms?: boolean;
   redirectTo?: string;
 }): Promise<{ ok: false; error: string } | never> {
+  if (!input.acceptTerms) {
+    return { ok: false, error: "You must accept the Terms of Service to continue." };
+  }
+
   const result = await saveCurrentUserProfile(input);
   if (!result.ok) return result;
+
+  // Record ToS acceptance
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (user) {
+    await supabase
+      .from("user_profiles")
+      .update({ accepted_terms_at: new Date().toISOString() })
+      .eq("user_id", user.id);
+  }
+
   redirect(sanitizeRedirect(input.redirectTo?.trim(), "/portfolio"));
 }

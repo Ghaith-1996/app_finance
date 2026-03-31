@@ -1,4 +1,4 @@
-# Portfolio Signal
+# Pulsefolio
 
 Next.js app for portfolio monitoring, market/news ingestion, and AI-assisted article analysis.
 

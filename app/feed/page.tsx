@@ -30,12 +30,15 @@ function analysisPulseFill(lastAnalyzedAt: string): number {
 export default async function FeedPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ symbol?: string | string[] }>;
+  searchParams?: Promise<{ symbol?: string | string[]; ticker?: string | string[] }>;
 }) {
   const sp = searchParams ? await searchParams : {};
   const raw = sp.symbol;
   const initialSymbol =
     typeof raw === "string" ? raw : Array.isArray(raw) ? raw[0] : undefined;
+  const rawTicker = sp.ticker;
+  const initialTicker =
+    typeof rawTicker === "string" ? rawTicker : Array.isArray(rawTicker) ? rawTicker[0] : undefined;
 
   const {
     showOnboardingNav,
@@ -115,6 +118,7 @@ export default async function FeedPage({
           portfolioId={portfolioId}
           insights={portfolioInsights}
           initialSymbol={initialSymbol}
+          initialTicker={initialTicker}
           initialFeedPayload={initialFeedPayload}
           allowedModelTiers={billingSummary?.allowedModelTiers}
           defaultModelTier={billingSummary?.defaultModelTier}

@@ -4,6 +4,7 @@ type ProfileRow = {
   first_name: string | null;
   last_name: string | null;
   handle: string | null;
+  accepted_terms_at: string | null;
 } | null;
 
 const exchangeCodeForSession = vi.fn();
@@ -60,6 +61,25 @@ describe("GET /auth/callback", () => {
       first_name: "Ada",
       last_name: null,
       handle: "ada",
+      accepted_terms_at: null,
+    });
+
+    const response = await GET(
+      new Request("http://localhost/auth/callback?code=abc&redirectTo=/home"),
+    );
+
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toBe(
+      "http://localhost/complete-profile?redirectTo=%2Fhome",
+    );
+  });
+
+  it("redirects profiles without ToS acceptance to the profile completion page", async () => {
+    mockProfile({
+      first_name: "Ada",
+      last_name: "Lovelace",
+      handle: "ada",
+      accepted_terms_at: null,
     });
 
     const response = await GET(
@@ -77,6 +97,7 @@ describe("GET /auth/callback", () => {
       first_name: "Ada",
       last_name: "Lovelace",
       handle: "ada",
+      accepted_terms_at: "2026-01-01T00:00:00Z",
     });
 
     const response = await GET(

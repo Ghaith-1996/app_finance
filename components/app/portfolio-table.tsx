@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 
-import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Newspaper } from "lucide-react";
 
 import type { Holding } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Panel } from "@/components/ui/panel";
-import { formatPercent, formatPrice } from "@/lib/utils";
+import { cn, formatPercent, formatPrice } from "@/lib/utils";
 
 type SortKey =
   | "symbol"
@@ -30,6 +31,9 @@ const COLUMNS: Array<{ key: SortKey; label: string }> = [
   { key: "value", label: "Value" },
   { key: "gainAmount", label: "Gain / Loss" },
 ];
+
+/* extra unsortable column for the News link */
+const HAS_NEWS_COLUMN = true;
 
 function getValue(holding: Holding, key: SortKey): number | string {
   const displayPrice = holding.currentPrice || holding.price;
@@ -83,26 +87,30 @@ export function PortfolioTable({ holdings }: { holdings: Holding[] }) {
         <table className="min-w-full divide-y divide-white/[0.06]">
           <thead className="bg-white/[0.03]">
             <tr>
-              {COLUMNS.map((col) => (
-                <th key={col.key} className="px-5 py-4">
-                  <button
-                    type="button"
-                    onClick={() => handleSort(col.key)}
-                    className="inline-flex items-center gap-1.5 text-xs uppercase tracking-[0.22em] text-slate-500 transition hover:text-slate-300"
-                  >
-                    {col.label}
-                    {sortKey === col.key ? (
-                      sortDir === "desc" ? (
-                        <ArrowDown className="h-3 w-3 text-brand" />
+              {COLUMNS.map((col) => {
+                const hideOnMobile = col.key === "averageCost" || col.key === "dailyChange";
+                return (
+                  <th key={col.key} className={cn("px-3 py-3 sm:px-5 sm:py-4", hideOnMobile && "hidden sm:table-cell")}>
+                    <button
+                      type="button"
+                      onClick={() => handleSort(col.key)}
+                      className="inline-flex items-center gap-1.5 text-xs uppercase tracking-[0.22em] text-slate-500 transition hover:text-slate-300"
+                    >
+                      {col.label}
+                      {sortKey === col.key ? (
+                        sortDir === "desc" ? (
+                          <ArrowDown className="h-3 w-3 text-brand" />
+                        ) : (
+                          <ArrowUp className="h-3 w-3 text-brand" />
+                        )
                       ) : (
-                        <ArrowUp className="h-3 w-3 text-brand" />
-                      )
-                    ) : (
-                      <ArrowUpDown className="h-3 w-3 opacity-30" />
-                    )}
-                  </button>
-                </th>
-              ))}
+                        <ArrowUpDown className="h-3 w-3 opacity-30" />
+                      )}
+                    </button>
+                  </th>
+                );
+              })}
+              {HAS_NEWS_COLUMN && <th className="px-3 py-3 sm:px-5 sm:py-4" />}
             </tr>
           </thead>
           <tbody className="divide-y divide-white/[0.06]">
@@ -115,7 +123,7 @@ export function PortfolioTable({ holdings }: { holdings: Holding[] }) {
 
               return (
                 <tr key={holding.id} className="transition hover:bg-white/[0.02]">
-                  <td className="px-5 py-5">
+                  <td className="px-3 py-3 sm:px-5 sm:py-5">
                     <div className="space-y-1">
                       <div className="flex items-center gap-3">
                         <span className="text-sm font-semibold text-white">
@@ -126,28 +134,28 @@ export function PortfolioTable({ holdings }: { holdings: Holding[] }) {
                       <p className="text-sm text-slate-500">{holding.company}</p>
                     </div>
                   </td>
-                  <td className="px-5 py-5 text-sm text-slate-300">
+                  <td className="px-3 py-3 sm:px-5 sm:py-5 text-sm text-slate-300">
                     {hasPosition ? holding.quantity : "—"}
                   </td>
-                  <td className="px-5 py-5 text-sm text-slate-300">
+                  <td className="hidden sm:table-cell px-3 py-3 sm:px-5 sm:py-5 text-sm text-slate-300">
                     {holding.averageCost > 0 ? formatPrice(holding.averageCost) : "—"}
                   </td>
-                  <td className="px-5 py-5 text-sm text-white">
+                  <td className="px-3 py-3 sm:px-5 sm:py-5 text-sm text-white">
                     {formatPrice(displayPrice)}
                   </td>
                   <td
                     className={
                       holding.dailyChange >= 0
-                        ? "px-5 py-5 text-sm text-emerald-400"
-                        : "px-5 py-5 text-sm text-red-400"
+                        ? "hidden sm:table-cell px-3 py-3 sm:px-5 sm:py-5 text-sm text-emerald-400"
+                        : "hidden sm:table-cell px-3 py-3 sm:px-5 sm:py-5 text-sm text-red-400"
                     }
                   >
                     {formatPercent(holding.dailyChange)}
                   </td>
-                  <td className="px-5 py-5 text-sm font-semibold text-white">
+                  <td className="px-3 py-3 sm:px-5 sm:py-5 text-sm font-semibold text-white">
                     {hasPosition ? formatPrice(displayValue) : "—"}
                   </td>
-                  <td className="px-5 py-5">
+                  <td className="px-3 py-3 sm:px-5 sm:py-5">
                     {hasPosition ? (
                       <div className="space-y-0.5">
                         <p
@@ -173,6 +181,15 @@ export function PortfolioTable({ holdings }: { holdings: Holding[] }) {
                     ) : (
                       <span className="text-sm text-slate-600">—</span>
                     )}
+                  </td>
+                  <td className="px-3 py-3 sm:px-5 sm:py-5">
+                    <Link
+                      href={`/feed?ticker=${encodeURIComponent(holding.symbol)}`}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-brand/25 bg-brand/10 px-3 py-2 text-[11px] font-bold text-brand transition hover:border-brand/40 hover:bg-brand/15"
+                    >
+                      <Newspaper className="h-3.5 w-3.5" />
+                      News
+                    </Link>
                   </td>
                 </tr>
               );

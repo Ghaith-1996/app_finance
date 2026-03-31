@@ -364,7 +364,7 @@ export default async function FullPortfolioPage() {
           </PortfolioPricingSection>
 
           <div className="w-full shrink-0 space-y-4 lg:w-[340px]">
-            <div className="relative overflow-hidden rounded-[2.5rem] border border-white/[0.06] bg-surface-raised p-8 shadow-sm">
+            <div className="relative overflow-hidden rounded-[2.5rem] border border-white/[0.06] bg-surface-raised p-5 sm:p-8 shadow-sm">
               <div className="pointer-events-none absolute top-0 right-0 h-32 w-32 rounded-bl-full bg-gradient-to-bl from-white/5 to-transparent" />
 
               <div className="mb-8 flex items-center gap-3">
@@ -437,7 +437,7 @@ export default async function FullPortfolioPage() {
               defaultModelTier={billingSummary.defaultModelTier}
             />
 
-            <div className="rounded-[2.5rem] border border-brand/15 bg-brand/10 p-8 shadow-sm">
+            <div className="rounded-[2.5rem] border border-brand/15 bg-brand/10 p-5 sm:p-8 shadow-sm">
               <p className="mb-3 text-[13px] font-bold text-brand">Emerald Advisor</p>
               <p className="text-[15px] leading-relaxed text-slate-400">
                 {feedHighlights[0]?.whyItMatters ||

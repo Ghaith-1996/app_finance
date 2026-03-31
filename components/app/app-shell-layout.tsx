@@ -22,7 +22,7 @@ import {
 import { UserMenu } from "@/components/app/user-menu";
 import { cn } from "@/lib/utils";
 
-const STORAGE_KEY = "portfolio-signal-sidebar-collapsed";
+const STORAGE_KEY = "pulsefolio-sidebar-collapsed";
 
 const mainNav = [
   { href: "/home", label: "Home", icon: Home },
@@ -125,13 +125,13 @@ export function AppShellLayout({
           <div className="flex items-start justify-between gap-2 px-6 pt-8 pb-4">
             <Link href="/" className="flex min-w-0 flex-1 items-center gap-3">
               <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand/15 text-sm font-bold text-brand">
-                PS
+                PF
               </span>
               <div className="min-w-0">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
                   Observatory
                 </p>
-                <p className="truncate text-sm font-semibold text-slate-200">PortfolioSignal</p>
+                <p className="truncate text-sm font-semibold text-slate-200">Pulsefolio</p>
               </div>
             </Link>
             <button
@@ -261,9 +261,9 @@ export function AppShellLayout({
         <div className="flex items-center justify-between px-4 py-3">
           <Link href="/" className="flex items-center gap-2">
             <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-brand/15 text-xs font-bold text-brand">
-              PS
+              PF
             </span>
-            <span className="text-sm font-semibold text-slate-200">PortfolioSignal</span>
+            <span className="text-sm font-semibold text-slate-200">Pulsefolio</span>
           </Link>
           <nav className="flex max-w-[65%] items-center gap-1 overflow-x-auto">
             {visibleMainNav.map((item) => {
@@ -312,11 +312,11 @@ export function AppShellLayout({
         className={cn(
           "flex-1 transition-[margin] duration-300 ease-out",
           collapsed ? "lg:ml-0" : "lg:ml-[260px]",
-          "px-6 pt-28 pb-12 lg:px-10 lg:pt-10",
+          "px-4 pt-24 pb-10 sm:px-6 lg:px-10 lg:pt-10",
           mainClassName,
         )}
       >
-        <div className="mx-auto max-w-[1400px] space-y-8">
+        <div className="mx-auto max-w-[1600px] space-y-8">
           {backHref ? (
             <div>
               <Link

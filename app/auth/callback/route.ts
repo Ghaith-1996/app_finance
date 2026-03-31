@@ -18,7 +18,7 @@ export async function GET(request: Request) {
       if (user) {
         const { data: profile } = await supabase
           .from("user_profiles")
-          .select("first_name, last_name, handle")
+          .select("first_name, last_name, handle, accepted_terms_at")
           .eq("user_id", user.id)
           .maybeSingle();
 
@@ -28,7 +28,7 @@ export async function GET(request: Request) {
           handle: (profile?.handle as string | undefined) ?? "",
         });
 
-        if (!validation.ok) {
+        if (!validation.ok || !profile?.accepted_terms_at) {
           return NextResponse.redirect(
             `${origin}/complete-profile?redirectTo=${encodeURIComponent(redirectTo)}`,
           );

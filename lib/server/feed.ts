@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import type {
   FeedMode,
+  FeedSort,
   MatchReasonCode,
   MatchSource,
   NewsItem,
@@ -14,13 +15,25 @@ const FEED_MAX_AGE_MINUTES = 24 * 60;
 export const DEFAULT_FEED_PAGE_SIZE = 100;
 const MIN_PAGE_SIZE = 10;
 const MAX_PAGE_SIZE = 500;
+const NO_HOT_NEWS_SORT_NOTICE = "No hot news yet. Showing most recent instead.";
+const PERSONAL_FEED_SORTS: FeedSort[] = ["match", "recent", "hot"];
+const MARKET_FEED_SORTS: FeedSort[] = ["recent", "hot", "oldest"];
 
 type ServerSupabase = Awaited<ReturnType<typeof createClient>>;
+
+type SortableStory = {
+  story: NewsItem;
+  publishedAtIso: string;
+  detailOpenCount: number;
+  relevanceScore: number;
+};
 
 export type FeedResponsePayload = {
   feed: NewsItem[];
   portfolioId: string | null;
   mode: FeedMode;
+  appliedSort: FeedSort;
+  sortNotice: string | null;
   portfolioSymbols: string[];
   portfolioSectors: string[];
   watchlistSymbols: string[];
@@ -53,6 +66,24 @@ export function parseFeedPageSize(pageSizeParam: string | null): number {
   return Math.min(MAX_PAGE_SIZE, Math.max(MIN_PAGE_SIZE, parsed));
 }
 
+export function defaultFeedSort(mode: FeedMode): FeedSort {
+  return mode === "market" ? "recent" : "match";
+}
+
+export function parseFeedSort(
+  sortParam: string | null | undefined,
+  mode: FeedMode,
+): FeedSort {
+  const defaultSort = defaultFeedSort(mode);
+  if (!sortParam) return defaultSort;
+
+  const normalized = sortParam.trim().toLowerCase();
+  const allowedSorts = mode === "market" ? MARKET_FEED_SORTS : PERSONAL_FEED_SORTS;
+  return allowedSorts.includes(normalized as FeedSort)
+    ? (normalized as FeedSort)
+    : defaultSort;
+}
+
 function paginateRows<T>(rows: T[], page: number, pageSize: number) {
   const totalCount = rows.length;
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
@@ -82,6 +113,136 @@ function formatPublishedAt(iso: string): string {
   return `${Math.floor(min / 1440)} days ago`;
 }
 
+function comparePublishedAt(
+  leftIso: string,
+  rightIso: string,
+  direction: "asc" | "desc",
+): number {
+  const leftTime = new Date(leftIso).getTime();
+  const rightTime = new Date(rightIso).getTime();
+  return direction === "asc" ? leftTime - rightTime : rightTime - leftTime;
+}
+
+function compareNullableNumbersDesc(left: number, right: number): number {
+  return right - left;
+}
+
+function compareStoryIds(left: SortableStory, right: SortableStory): number {
+  return (left.story.newsItemId || left.story.id).localeCompare(
+    right.story.newsItemId || right.story.id,
+  );
+}
+
+function sortStories(
+  stories: SortableStory[],
+  requestedSort: FeedSort,
+  mode: FeedMode,
+): {
+  stories: SortableStory[];
+  appliedSort: FeedSort;
+  sortNotice: string | null;
+} {
+  const shouldFallbackToRecent =
+    requestedSort === "hot" &&
+    stories.length > 0 &&
+    stories.every((item) => item.detailOpenCount <= 0);
+
+  const appliedSort = shouldFallbackToRecent ? "recent" : requestedSort;
+  const sortNotice = shouldFallbackToRecent ? NO_HOT_NEWS_SORT_NOTICE : null;
+
+  const sortedStories = [...stories].sort((left, right) => {
+    if (appliedSort === "match") {
+      const relevanceCompare = compareNullableNumbersDesc(
+        left.relevanceScore,
+        right.relevanceScore,
+      );
+      if (relevanceCompare !== 0) return relevanceCompare;
+      const recentCompare = comparePublishedAt(
+        left.publishedAtIso,
+        right.publishedAtIso,
+        "desc",
+      );
+      return recentCompare !== 0 ? recentCompare : compareStoryIds(left, right);
+    }
+
+    if (appliedSort === "recent") {
+      const recentCompare = comparePublishedAt(
+        left.publishedAtIso,
+        right.publishedAtIso,
+        "desc",
+      );
+      return recentCompare !== 0 ? recentCompare : compareStoryIds(left, right);
+    }
+
+    if (appliedSort === "oldest") {
+      const oldestCompare = comparePublishedAt(
+        left.publishedAtIso,
+        right.publishedAtIso,
+        "asc",
+      );
+      return oldestCompare !== 0 ? oldestCompare : compareStoryIds(left, right);
+    }
+
+    const hotCompare = compareNullableNumbersDesc(
+      left.detailOpenCount,
+      right.detailOpenCount,
+    );
+    if (hotCompare !== 0) return hotCompare;
+
+    const recentCompare = comparePublishedAt(
+      left.publishedAtIso,
+      right.publishedAtIso,
+      "desc",
+    );
+    if (recentCompare !== 0) return recentCompare;
+
+    if (mode === "personal") {
+      const relevanceCompare = compareNullableNumbersDesc(
+        left.relevanceScore,
+        right.relevanceScore,
+      );
+      if (relevanceCompare !== 0) return relevanceCompare;
+    }
+
+    return compareStoryIds(left, right);
+  });
+
+  return { stories: sortedStories, appliedSort, sortNotice };
+}
+
+function buildEmptyFeedPayload({
+  portfolioId,
+  mode,
+  appliedSort,
+  portfolioSymbols,
+  portfolioSectors,
+  watchlistSymbols,
+  pageSize,
+}: {
+  portfolioId: string | null;
+  mode: FeedMode;
+  appliedSort: FeedSort;
+  portfolioSymbols: string[];
+  portfolioSectors: string[];
+  watchlistSymbols: string[];
+  pageSize: number;
+}): FeedResponsePayload {
+  return {
+    feed: [],
+    portfolioId,
+    mode,
+    appliedSort,
+    sortNotice: null,
+    portfolioSymbols,
+    portfolioSectors,
+    watchlistSymbols,
+    page: 1,
+    pageSize,
+    totalCount: 0,
+    totalPages: 1,
+  };
+}
+
 export async function resolveFeedPayload({
   supabase,
   userId,
@@ -94,6 +255,7 @@ export async function resolveFeedPayload({
   sector = null,
   category = null,
   maxMinutes = null,
+  sort = null,
   ticker = null,
   sourceType = null,
   page,
@@ -111,12 +273,15 @@ export async function resolveFeedPayload({
   sector?: string | null;
   category?: string | null;
   maxMinutes?: string | null;
+  sort?: string | null;
   ticker?: string | null;
   sourceType?: string | null;
   page: number;
   pageSize: number;
   contextValidated?: boolean;
 }): Promise<FeedResolverResult> {
+  const requestedSort = parseFeedSort(sort, mode);
+
   let resolvedPortfolioId = portfolioId ?? null;
   if (!resolvedPortfolioId) {
     const { data: portfolios } = await supabase
@@ -196,6 +361,7 @@ export async function resolveFeedPayload({
         watchlistSymbols,
         category,
         maxMinutes,
+        sort: requestedSort,
         sourceType,
         ticker,
         page,
@@ -216,6 +382,7 @@ export async function resolveFeedPayload({
         sector,
         category,
         maxMinutes,
+        sort: requestedSort,
         page,
         pageSize,
       }),
@@ -229,6 +396,7 @@ export async function resolveFeedPayload({
         watchlistSymbols,
         category,
         maxMinutes,
+        sort: requestedSort,
         page,
         pageSize,
       }),
@@ -237,18 +405,15 @@ export async function resolveFeedPayload({
 
   return {
     ok: true,
-    data: {
-      feed: [],
+    data: buildEmptyFeedPayload({
       portfolioId: null,
       mode,
+      appliedSort: requestedSort,
       portfolioSymbols: [],
       portfolioSectors: [],
       watchlistSymbols,
-      page: 1,
       pageSize,
-      totalCount: 0,
-      totalPages: 1,
-    },
+    }),
   };
 }
 
@@ -263,6 +428,7 @@ async function buildPersonalPayload(
     sector: string | null;
     category: string | null;
     maxMinutes: string | null;
+    sort: FeedSort;
     page: number;
     pageSize: number;
   },
@@ -277,18 +443,15 @@ async function buildPersonalPayload(
     .maybeSingle();
 
   if (!latestRun) {
-    return {
-      feed: [],
+    return buildEmptyFeedPayload({
       portfolioId: opts.portfolioId,
       mode: "personal",
+      appliedSort: opts.sort,
       portfolioSymbols: opts.portfolioSymbols,
       portfolioSectors: opts.portfolioSectors,
       watchlistSymbols: opts.watchlistSymbols,
-      page: 1,
       pageSize: opts.pageSize,
-      totalCount: 0,
-      totalPages: 1,
-    };
+    });
   }
 
   let query = supabase
@@ -321,7 +484,8 @@ async function buildPersonalPayload(
         overall_effect,
         ticker_impacts,
         source_type,
-        metadata
+        metadata,
+        detail_open_count
       )
     `,
     )
@@ -347,7 +511,7 @@ async function buildPersonalPayload(
     sectors: string[];
     ai_summary: string | null;
     why_it_matters: string | null;
-    matched_stock_tags: string[];
+    matched_stock_tags: string[] | null;
     match_reason_codes: MatchReasonCode[] | null;
     match_sources: MatchSource[] | null;
     display_effect: string;
@@ -360,27 +524,28 @@ async function buildPersonalPayload(
       published_at: string;
       angle: string | null;
       category: string;
-      stock_tags: string[];
+      stock_tags: string[] | null;
       global_summary: string | null;
       overall_effect: string;
       ticker_impacts: TickerImpact[] | null;
       source_type: string;
       metadata: Record<string, unknown> | null;
+      detail_open_count: number | null;
     } | null;
   };
 
   const rawRows = (rows ?? []) as unknown as Row[];
-  let feed = rawRows.map((row) => {
+  let stories = rawRows.map((row) => {
     const news = row.news_items ?? null;
-    const publishedAt = news?.published_at ?? new Date().toISOString();
-    return {
+    const publishedAtIso = news?.published_at ?? new Date().toISOString();
+    const story = {
       id: row.id,
       newsItemId: news?.id ?? "",
       headline: news?.headline ?? "",
       source: news?.source ?? "",
       url: news?.url ?? undefined,
-      publishedAt: formatPublishedAt(publishedAt),
-      publishedMinutesAgo: minutesAgo(publishedAt),
+      publishedAt: formatPublishedAt(publishedAtIso),
+      publishedMinutesAgo: minutesAgo(publishedAtIso),
       relevanceScore: row.relevance_score,
       sentiment: row.sentiment as NewsItem["sentiment"],
       impact: row.impact as NewsItem["impact"],
@@ -401,20 +566,32 @@ async function buildPersonalPayload(
       sourceConfidence: (row.source_confidence ?? "standard") as NewsItem["sourceConfidence"],
       metadata: news?.metadata ?? {},
     } satisfies NewsItem;
+
+    return {
+      story,
+      publishedAtIso,
+      detailOpenCount: news?.detail_open_count ?? 0,
+      relevanceScore: row.relevance_score ?? 0,
+    } satisfies SortableStory;
   });
 
   if (opts.category) {
-    feed = feed.filter((item) => item.category === opts.category);
+    stories = stories.filter((item) => item.story.category === opts.category);
   }
 
   const cap = effectiveRecencyCap(opts.maxMinutes);
-  const filteredFeed = feed.filter((item) => item.publishedMinutesAgo <= cap);
-  const paginated = paginateRows(filteredFeed, opts.page, opts.pageSize);
+  const filteredStories = stories.filter(
+    (item) => item.story.publishedMinutesAgo <= cap,
+  );
+  const sortedStories = sortStories(filteredStories, opts.sort, "personal");
+  const paginated = paginateRows(sortedStories.stories, opts.page, opts.pageSize);
 
   return {
-    feed: paginated.pageRows,
+    feed: paginated.pageRows.map((item) => item.story),
     portfolioId: opts.portfolioId,
     mode: "personal",
+    appliedSort: sortedStories.appliedSort,
+    sortNotice: sortedStories.sortNotice,
     portfolioSymbols: opts.portfolioSymbols,
     portfolioSectors: opts.portfolioSectors,
     watchlistSymbols: opts.watchlistSymbols,
@@ -431,6 +608,7 @@ async function buildWatchlistOnlyPayload(
     watchlistSymbols: string[];
     category: string | null;
     maxMinutes: string | null;
+    sort: FeedSort;
     page: number;
     pageSize: number;
   },
@@ -445,7 +623,7 @@ async function buildWatchlistOnlyPayload(
     .from("news_items")
     .select(
       "id, headline, source, url, published_at, angle, category, stock_tags, " +
-        "global_summary, overall_effect, ticker_impacts, source_type, metadata, raw_content",
+        "global_summary, overall_effect, ticker_impacts, source_type, metadata, raw_content, detail_open_count",
     )
     .gte("published_at", publishedSince)
     .order("published_at", { ascending: false });
@@ -458,20 +636,21 @@ async function buildWatchlistOnlyPayload(
     published_at: string;
     angle: string | null;
     category: string;
-    stock_tags: string[];
+    stock_tags: string[] | null;
     global_summary: string | null;
     overall_effect: string;
     ticker_impacts: TickerImpact[] | null;
     source_type: string;
     metadata: Record<string, unknown> | null;
+    detail_open_count: number | null;
   };
 
   const rawRows = (rows ?? []) as unknown as NewsRow[];
   const categoryFilteredRows = opts.category
     ? rawRows.filter((row) => row.category === opts.category)
     : rawRows;
-  const mappedRows: Array<NewsItem | null> = categoryFilteredRows.map((row) => {
-    const publishedAt = row.published_at ?? new Date().toISOString();
+  const mappedRows: Array<SortableStory | null> = categoryFilteredRows.map((row) => {
+    const publishedAtIso = row.published_at ?? new Date().toISOString();
     const directMatch = resolveDirectStockMatch(
       row.stock_tags ?? [],
       row.ticker_impacts ?? [],
@@ -479,14 +658,14 @@ async function buildWatchlistOnlyPayload(
     );
     if (directMatch.matchedSymbols.length === 0) return null;
 
-    return {
+    const story = {
       id: row.id,
       newsItemId: row.id,
       headline: row.headline,
       source: row.source,
       url: row.url ?? undefined,
-      publishedAt: formatPublishedAt(publishedAt),
-      publishedMinutesAgo: minutesAgo(publishedAt),
+      publishedAt: formatPublishedAt(publishedAtIso),
+      publishedMinutesAgo: minutesAgo(publishedAtIso),
       relevanceScore: 75,
       angle: row.angle ?? "",
       category: (row.category ?? "other") as NewsItem["category"],
@@ -506,22 +685,32 @@ async function buildWatchlistOnlyPayload(
       isWatchlistMatch: true,
       whyItMatters: `Matches watchlist symbol${directMatch.matchedSymbols.length > 1 ? "s" : ""} ${directMatch.matchedSymbols.join(", ")}.`,
     } satisfies NewsItem;
+
+    return {
+      story,
+      publishedAtIso,
+      detailOpenCount: row.detail_open_count ?? 0,
+      relevanceScore: 75,
+    } satisfies SortableStory;
   });
 
-  const filteredFeed: NewsItem[] = mappedRows.filter(
-    (item): item is NewsItem => item !== null,
+  const filteredStories: SortableStory[] = mappedRows.filter(
+    (item): item is SortableStory => item !== null,
   );
 
   const cap = effectiveRecencyCap(opts.maxMinutes);
-  const recencyFilteredFeed = filteredFeed.filter(
-    (item) => item.publishedMinutesAgo <= cap,
+  const recencyFilteredStories = filteredStories.filter(
+    (item) => item.story.publishedMinutesAgo <= cap,
   );
-  const paginated = paginateRows(recencyFilteredFeed, opts.page, opts.pageSize);
+  const sortedStories = sortStories(recencyFilteredStories, opts.sort, "personal");
+  const paginated = paginateRows(sortedStories.stories, opts.page, opts.pageSize);
 
   return {
-    feed: paginated.pageRows,
+    feed: paginated.pageRows.map((item) => item.story),
     portfolioId: null,
     mode: "personal",
+    appliedSort: sortedStories.appliedSort,
+    sortNotice: sortedStories.sortNotice,
     portfolioSymbols: [],
     portfolioSectors: [],
     watchlistSymbols: opts.watchlistSymbols,
@@ -541,6 +730,7 @@ async function buildMarketPayload(
     watchlistSymbols: string[];
     category: string | null;
     maxMinutes: string | null;
+    sort: FeedSort;
     sourceType: string | null;
     ticker?: string | null;
     page: number;
@@ -563,7 +753,7 @@ async function buildMarketPayload(
     .from("news_items")
     .select(
       "id, headline, source, url, published_at, angle, category, stock_tags, " +
-        "global_summary, overall_effect, ticker_impacts, source_type, metadata, raw_content",
+        "global_summary, overall_effect, ticker_impacts, source_type, metadata, raw_content, detail_open_count",
     )
     .gte("published_at", publishedSince)
     .order("published_at", { ascending: false });
@@ -585,13 +775,14 @@ async function buildMarketPayload(
     published_at: string;
     angle: string | null;
     category: string;
-    stock_tags: string[];
+    stock_tags: string[] | null;
     global_summary: string | null;
     overall_effect: string;
     ticker_impacts: TickerImpact[] | null;
     source_type: string;
     metadata: Record<string, unknown> | null;
     raw_content: string | null;
+    detail_open_count: number | null;
   };
 
   const rawRows = (rows ?? []) as unknown as NewsRow[];
@@ -611,13 +802,11 @@ async function buildMarketPayload(
       });
   const cap = effectiveRecencyCap(opts.maxMinutes);
   const recencyFilteredRows = tickerFilteredRows.filter((row) => {
-    const publishedAt = row.published_at ?? new Date().toISOString();
-    return minutesAgo(publishedAt) <= cap;
+    const publishedAtIso = row.published_at ?? new Date().toISOString();
+    return minutesAgo(publishedAtIso) <= cap;
   });
-  const paginated = paginateRows(recencyFilteredRows, opts.page, opts.pageSize);
-
-  const feed = paginated.pageRows.map((row) => {
-    const publishedAt = row.published_at ?? new Date().toISOString();
+  const stories = recencyFilteredRows.map((row) => {
+    const publishedAtIso = row.published_at ?? new Date().toISOString();
     const portfolioDirectMatch = resolveDirectStockMatch(
       row.stock_tags ?? [],
       row.ticker_impacts ?? [],
@@ -630,15 +819,14 @@ async function buildMarketPayload(
     );
     const isPortfolioMatch = portfolioDirectMatch.matchedSymbols.length > 0;
     const isWatchlistMatch = watchlistDirectMatch.matchedSymbols.length > 0;
-
-    return {
+    const story = {
       id: row.id,
       newsItemId: row.id,
       headline: row.headline,
       source: row.source,
       url: row.url ?? undefined,
-      publishedAt: formatPublishedAt(publishedAt),
-      publishedMinutesAgo: minutesAgo(publishedAt),
+      publishedAt: formatPublishedAt(publishedAtIso),
+      publishedMinutesAgo: minutesAgo(publishedAtIso),
       angle: row.angle ?? "",
       category: (row.category ?? "other") as NewsItem["category"],
       stockTags: row.stock_tags ?? [],
@@ -658,12 +846,23 @@ async function buildMarketPayload(
         ]),
       ],
     } satisfies NewsItem;
+
+    return {
+      story,
+      publishedAtIso,
+      detailOpenCount: row.detail_open_count ?? 0,
+      relevanceScore: 0,
+    } satisfies SortableStory;
   });
+  const sortedStories = sortStories(stories, opts.sort, "market");
+  const paginated = paginateRows(sortedStories.stories, opts.page, opts.pageSize);
 
   return {
-    feed,
+    feed: paginated.pageRows.map((item) => item.story),
     portfolioId: opts.portfolioId,
     mode: "market",
+    appliedSort: sortedStories.appliedSort,
+    sortNotice: sortedStories.sortNotice,
     portfolioSymbols: opts.portfolioSymbols,
     portfolioSectors: opts.portfolioSectors,
     watchlistSymbols: opts.watchlistSymbols,
@@ -673,3 +872,5 @@ async function buildMarketPayload(
     totalPages: paginated.totalPages,
   };
 }
+
+export { NO_HOT_NEWS_SORT_NOTICE };

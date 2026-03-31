@@ -25,6 +25,7 @@ import {
   NEWS_CATEGORIES,
   type ArticleChatModelTier,
   type FeedMode,
+  type FeedSort,
   type NewsItem,
   type PortfolioInsight,
 } from "@/lib/types";
@@ -56,6 +57,18 @@ const recencyOptions = [
   { label: "Past 2 hours", maxMinutes: 120 },
 ];
 
+const personalSortOptions: Array<{ label: string; value: FeedSort }> = [
+  { label: "Match", value: "match" },
+  { label: "Most Recent", value: "recent" },
+  { label: "Hot", value: "hot" },
+];
+
+const marketSortOptions: Array<{ label: string; value: FeedSort }> = [
+  { label: "Most Recent", value: "recent" },
+  { label: "Hot", value: "hot" },
+  { label: "Oldest", value: "oldest" },
+];
+
 const sourceTypeOptions = [
   { label: "All sources", value: "" },
   { label: "SEC Filings", value: "edgar" },
@@ -73,6 +86,14 @@ const DEFAULT_CHAT_ACTIVITY: ArticleChatActivityState = {
 };
 const REALTIME_REFRESH_DEBOUNCE_MS = 800;
 type FeedChatContext = "story" | "general";
+
+function defaultSortForMode(mode: FeedMode): FeedSort {
+  return mode === "market" ? "recent" : "match";
+}
+
+function isFeedSort(value: unknown): value is FeedSort {
+  return value === "match" || value === "recent" || value === "hot" || value === "oldest";
+}
 
 export function FeedView({
   portfolioId,
@@ -93,7 +114,8 @@ export function FeedView({
   allowedModelTiers?: ArticleChatModelTier[];
   defaultModelTier?: ArticleChatModelTier;
 }) {
-  const [mode, setMode] = useState<FeedMode>(() => initialTicker ? "market" : "personal");
+  const initialMode: FeedMode = initialTicker ? "market" : "personal";
+  const [mode, setMode] = useState<FeedMode>(() => initialMode);
   const [feed, setFeed] = useState<NewsItem[]>(() => initialFeedPayload?.feed ?? []);
   const [isInitialLoading, setIsInitialLoading] = useState(() => !initialFeedPayload);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -121,6 +143,14 @@ export function FeedView({
   // Shared filters
   const [selectedCategory, setSelectedCategory] = useState("All categories");
   const [selectedRecency, setSelectedRecency] = useState(recencyOptions[0].label);
+  const [selectedSort, setSelectedSort] = useState<FeedSort>(() =>
+    initialMode === "personal"
+      ? initialFeedPayload?.appliedSort ?? defaultSortForMode("personal")
+      : defaultSortForMode("market"),
+  );
+  const [sortNotice, setSortNotice] = useState<string | null>(() =>
+    initialMode === "personal" ? initialFeedPayload?.sortNotice ?? null : null,
+  );
   const [page, setPage] = useState(() => initialFeedPayload?.page ?? 1);
   const [totalCount, setTotalCount] = useState(
     () => initialFeedPayload?.totalCount ?? 0,
@@ -135,7 +165,7 @@ export function FeedView({
   const [selectedChatTier, setSelectedChatTier] = useState<ArticleChatModelTier>(
     defaultModelTier,
   );
-  const [pendingStoryId, setPendingStoryId] = useState<string | null>(null);
+  const [pendingStory, setPendingStory] = useState<NewsItem | null>(null);
   const [switchConfirmOpen, setSwitchConfirmOpen] = useState(false);
   const [isDesktopChatLayout, setIsDesktopChatLayout] = useState(
     () =>
@@ -147,6 +177,7 @@ export function FeedView({
   const loadingRef = useRef(false);
   const queuedSilentRefreshRef = useRef(false);
   const realtimeRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const skipNextFeedFetchRef = useRef(false);
   const hasLoadedFeedRef = useRef(Boolean(initialFeedPayload));
   const initialFetchHandledRef = useRef(false);
   const initialSymbolAppliedRef = useRef(false);
@@ -193,6 +224,7 @@ export function FeedView({
     selectedSector,
     selectedCategory,
     selectedRecency,
+    selectedSort,
     selectedSourceType,
     appliedTickerQuery,
   ]);
@@ -226,6 +258,7 @@ export function FeedView({
         params.set("mode", mode);
         if (portfolioId) params.set("portfolioId", portfolioId);
         params.set("maxMinutes", String(recencyMax));
+        params.set("sort", selectedSort);
         params.set("page", String(page));
         params.set("pageSize", String(FEED_PAGE_SIZE));
         if (mode === "personal") {
@@ -271,6 +304,11 @@ export function FeedView({
         setTotalCount(
           typeof data.totalCount === "number" ? data.totalCount : newFeed.length,
         );
+        setSortNotice(typeof data.sortNotice === "string" ? data.sortNotice : null);
+        if (isFeedSort(data.appliedSort) && data.appliedSort !== selectedSort) {
+          skipNextFeedFetchRef.current = true;
+          setSelectedSort(data.appliedSort);
+        }
         if (typeof data.page === "number") {
           setPage(data.page);
         }
@@ -299,6 +337,7 @@ export function FeedView({
           return;
         }
         setError(message);
+        setSortNotice(null);
         setFeed([]);
         setTotalCount(0);
         hasLoadedFeedRef.current = false;
@@ -323,12 +362,18 @@ export function FeedView({
       selectedCategory,
       selectedHolding,
       selectedRecency,
+      selectedSort,
       selectedSector,
       selectedSourceType,
     ],
   );
 
   useEffect(() => {
+    if (skipNextFeedFetchRef.current) {
+      skipNextFeedFetchRef.current = false;
+      return;
+    }
+
     const shouldUseInitialPayload =
       !initialFetchHandledRef.current &&
       Boolean(initialFeedPayload) &&
@@ -338,6 +383,8 @@ export function FeedView({
       selectedSector === "All sectors" &&
       selectedCategory === "All categories" &&
       selectedRecency === recencyOptions[0].label &&
+      selectedSort ===
+        (initialFeedPayload?.appliedSort ?? defaultSortForMode("personal")) &&
       selectedSourceType === sourceTypeOptions[0].label &&
       appliedTickerQuery.trim().length === 0;
 
@@ -359,6 +406,7 @@ export function FeedView({
     selectedCategory,
     selectedHolding,
     selectedRecency,
+    selectedSort,
     selectedSector,
     selectedSourceType,
   ]);
@@ -408,6 +456,22 @@ export function FeedView({
     };
   }, [portfolioId, mode, scheduleSilentRefresh]);
 
+  const trackStoryOpen = useCallback((newsItemId: string | undefined) => {
+    if (!newsItemId) return;
+
+    void (async () => {
+      try {
+        await fetch("/api/feed/open", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ newsItemId }),
+        });
+      } catch {
+        // Tracking should never block feed interactions.
+      }
+    })();
+  }, []);
+
   function handleModeChange(newMode: FeedMode) {
     setMode(newMode);
     setSelectedHolding("All holdings");
@@ -417,6 +481,8 @@ export function FeedView({
     setAppliedTickerQuery("");
     setSelectedCategory("All categories");
     setSelectedRecency(recencyOptions[0].label);
+    setSelectedSort(defaultSortForMode(newMode));
+    setSortNotice(null);
     setPage(1);
     setTotalCount(0);
     setSelectedStoryId(null);
@@ -502,6 +568,7 @@ export function FeedView({
     if (portfolioSymbols.length === 0) return "All portfolio";
     return `All portfolio (${portfolioSymbols.length} holding${portfolioSymbols.length === 1 ? "" : "s"})`;
   }, [portfolioSymbols]);
+  const sortOptions = mode === "market" ? marketSortOptions : personalSortOptions;
   const totalPages = Math.max(1, Math.ceil(totalCount / FEED_PAGE_SIZE));
   const visibleStories = filteredStories;
   const hasActiveMarketFilters =
@@ -510,6 +577,11 @@ export function FeedView({
       selectedCategory !== "All categories" ||
       selectedRecency !== recencyOptions[0].label ||
       appliedTickerQuery.trim().length > 0);
+  const feedStatusMessage = isRefreshing
+    ? "Updating..."
+    : backgroundError
+      ? `Update paused: ${backgroundError}`
+      : sortNotice;
 
   const selectedStory = selectedStoryId
     ? visibleStories.find((s) => s.id === selectedStoryId) ??
@@ -526,7 +598,7 @@ export function FeedView({
     setChatOpen(false);
     setChatContext("story");
     setChatActivity(DEFAULT_CHAT_ACTIVITY);
-    setPendingStoryId(null);
+    setPendingStory(null);
     setSwitchConfirmOpen(false);
   }, []);
 
@@ -545,6 +617,14 @@ export function FeedView({
     };
   }, [showMobileChat]);
 
+  const selectStory = useCallback(
+    (story: NewsItem) => {
+      setSelectedStoryId(story.id);
+      trackStoryOpen(story.newsItemId);
+    },
+    [trackStoryOpen],
+  );
+
   const handleChatActivityChange = useCallback(
     (next: ArticleChatActivityState) => {
       setChatActivity(next);
@@ -553,23 +633,23 @@ export function FeedView({
   );
 
   const handleStoryOpen = useCallback(
-    (storyId: string) => {
-      if (storyId === selectedStoryId) return;
+    (story: NewsItem) => {
+      if (story.id === selectedStoryId) return;
 
       if (chatOpen && chatContext === "story" && chatHasActivity) {
-        setPendingStoryId(storyId);
+        setPendingStory(story);
         setSwitchConfirmOpen(true);
         return;
       }
 
-      setSelectedStoryId(storyId);
+      selectStory(story);
     },
-    [chatContext, chatHasActivity, chatOpen, selectedStoryId],
+    [chatContext, chatHasActivity, chatOpen, selectStory, selectedStoryId],
   );
 
   const handleCloseStory = useCallback(() => {
     setSelectedStoryId(null);
-    setPendingStoryId(null);
+    setPendingStory(null);
     setSwitchConfirmOpen(false);
     if (chatContext === "story") {
       resetChatSurface();
@@ -587,7 +667,7 @@ export function FeedView({
     setChatContext(nextContext);
     setChatOpen(true);
     setChatActivity(DEFAULT_CHAT_ACTIVITY);
-    setPendingStoryId(null);
+    setPendingStory(null);
     setSwitchConfirmOpen(false);
   }, [chatContext, chatOpen, resetChatSurface, selectedStory]);
 
@@ -596,16 +676,16 @@ export function FeedView({
   }, [handleGlobalAskAiClick]);
 
   const handleCancelStorySwitch = useCallback(() => {
-    setPendingStoryId(null);
+    setPendingStory(null);
     setSwitchConfirmOpen(false);
   }, []);
 
   const handleConfirmStorySwitch = useCallback(() => {
-    if (!pendingStoryId) return;
-    setSelectedStoryId(pendingStoryId);
-    setPendingStoryId(null);
+    if (!pendingStory) return;
+    selectStory(pendingStory);
+    setPendingStory(null);
     setSwitchConfirmOpen(false);
-  }, [pendingStoryId]);
+  }, [pendingStory, selectStory]);
 
   function resetFilters() {
     setSelectedHolding("All holdings");
@@ -615,6 +695,8 @@ export function FeedView({
     setAppliedTickerQuery("");
     setSelectedCategory("All categories");
     setSelectedRecency(recencyOptions[0].label);
+    setSelectedSort(defaultSortForMode(mode));
+    setSortNotice(null);
     setPage(1);
     setTotalCount(0);
     setSelectedStoryId(null);
@@ -656,7 +738,7 @@ export function FeedView({
           <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
             <ModeToggle mode={mode} onChange={handleModeChange} />
             {mode === "personal" ? (
-              <div className="grid flex-1 gap-4 sm:grid-cols-2 lg:max-w-xl lg:justify-self-end">
+              <div className="grid flex-1 gap-4 sm:grid-cols-2 lg:max-w-4xl lg:grid-cols-3 lg:justify-self-end">
                 <label className="block min-w-0 space-y-1.5">
                   <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
                     Select holding
@@ -670,6 +752,28 @@ export function FeedView({
                       {holdingOptions.map((opt) => (
                         <option key={opt} value={opt}>
                           {opt === "All holdings" ? holdingSummaryLabel : opt}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                  </div>
+                </label>
+                <label className="block min-w-0 space-y-1.5">
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                    Sort
+                  </span>
+                  <div className="relative">
+                    <select
+                      className={selectTriggerClass}
+                      value={selectedSort}
+                      onChange={(e) => {
+                        setSelectedSort(e.target.value as FeedSort);
+                        setSortNotice(null);
+                      }}
+                    >
+                      {sortOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
                         </option>
                       ))}
                     </select>
@@ -697,7 +801,7 @@ export function FeedView({
                 </label>
               </div>
             ) : (
-              <div className="grid flex-1 gap-4 sm:grid-cols-2 lg:max-w-4xl lg:grid-cols-4 lg:justify-self-end">
+              <div className="grid flex-1 gap-4 sm:grid-cols-2 lg:max-w-6xl lg:grid-cols-5 lg:justify-self-end">
                 <label className="block min-w-0 space-y-1.5">
                   <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
                     Source
@@ -711,6 +815,28 @@ export function FeedView({
                       {sourceTypeOptions.map((o) => (
                         <option key={o.label} value={o.label}>
                           {o.label}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                  </div>
+                </label>
+                <label className="block min-w-0 space-y-1.5">
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                    Sort
+                  </span>
+                  <div className="relative">
+                    <select
+                      className={selectTriggerClass}
+                      value={selectedSort}
+                      onChange={(e) => {
+                        setSelectedSort(e.target.value as FeedSort);
+                        setSortNotice(null);
+                      }}
+                    >
+                      {sortOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
                         </option>
                       ))}
                     </select>
@@ -830,7 +956,7 @@ export function FeedView({
           ) : null}
           <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-h-[1.25rem] text-xs font-medium text-slate-400" aria-live="polite">
-              {isRefreshing ? "Updating..." : backgroundError ? `Update paused: ${backgroundError}` : null}
+              {feedStatusMessage}
             </div>
             <button
               type="button"
@@ -859,7 +985,7 @@ export function FeedView({
                   story={story}
                   mode={mode}
                   selected={story.id === selectedStoryId}
-                  onOpen={() => handleStoryOpen(story.id)}
+                  onOpen={() => handleStoryOpen(story)}
                 />
               ))}
             </div>
@@ -951,7 +1077,7 @@ export function FeedView({
         />
       ) : null}
 
-      {switchConfirmOpen && pendingStoryId ? (
+      {switchConfirmOpen && pendingStory ? (
         <StorySwitchConfirmDialog
           onCancel={handleCancelStorySwitch}
           onConfirm={handleConfirmStorySwitch}

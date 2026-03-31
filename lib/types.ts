@@ -182,6 +182,7 @@ export type NewsSourceType =
   | "other";
 export type SourceConfidence = "high" | "standard";
 export type FeedMode = "personal" | "market";
+export type FeedSort = "match" | "recent" | "hot" | "oldest";
 
 export interface NewsItem {
   id: string;

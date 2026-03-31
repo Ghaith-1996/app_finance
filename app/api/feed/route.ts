@@ -15,7 +15,7 @@ function json(body: unknown, status = 200) {
 
 /**
  * GET /api/feed?mode=personal|market&portfolioId=...&holding=...&sector=...
- *              &category=...&maxMinutes=...&ticker=...&sourceType=...
+ *              &category=...&maxMinutes=...&sort=...&ticker=...&sourceType=...
  */
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -40,6 +40,7 @@ export async function GET(request: Request) {
     sector: searchParams.get("sector"),
     category: searchParams.get("category"),
     maxMinutes: searchParams.get("maxMinutes"),
+    sort: searchParams.get("sort"),
     ticker: searchParams.get("ticker"),
     sourceType: searchParams.get("sourceType"),
     page: parseFeedPage(searchParams.get("page")),

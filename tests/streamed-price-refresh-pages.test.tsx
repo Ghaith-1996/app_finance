@@ -7,6 +7,9 @@ const loadPortfolioPageData = vi.fn();
 const loadAnalysisPageData = vi.fn();
 const loadFullPortfolioPageData = vi.fn();
 const refreshPortfolioPricingSnapshot = vi.fn();
+const createClient = vi.fn();
+const getBillingSummaryForUser = vi.fn();
+const getCurrentUserBillingSummary = vi.fn();
 
 const ActivePortfolioValueCard = vi.fn(
   ({ initialOverview }: { initialOverview: { totalValue: number } }) => (
@@ -24,6 +27,15 @@ vi.mock("@/lib/server/page-loaders", () => ({
 
 vi.mock("@/lib/actions/portfolio", () => ({
   refreshPortfolioPricingSnapshot,
+}));
+
+vi.mock("@/lib/supabase/server", () => ({
+  createClient,
+}));
+
+vi.mock("@/lib/billing/subscriptions", () => ({
+  getBillingSummaryForUser,
+  getCurrentUserBillingSummary,
 }));
 
 vi.mock("@/components/app/active-portfolio-value-card", () => ({
@@ -74,6 +86,15 @@ vi.mock("@/components/app/refresh-prices-button", () => ({
 describe("portfolio value surfaces render cached data and manual refresh controls", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    createClient.mockResolvedValue({
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: null },
+        }),
+      },
+    });
+    getBillingSummaryForUser.mockResolvedValue(null);
+    getCurrentUserBillingSummary.mockResolvedValue(null);
     refreshPortfolioPricingSnapshot.mockResolvedValue({
       status: "no_quotes",
       updated: 0,
@@ -121,6 +142,8 @@ describe("portfolio value surfaces render cached data and manual refresh control
         ],
         portfolioId: "portfolio-1",
         mode: "personal",
+        appliedSort: "match",
+        sortNotice: null,
         portfolioSymbols: ["AAPL"],
         portfolioSectors: ["Technology"],
         watchlistSymbols: ["TSLA"],

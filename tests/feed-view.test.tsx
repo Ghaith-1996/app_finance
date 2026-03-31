@@ -60,7 +60,7 @@ vi.mock("@/lib/ingest-hint", () => ({
 }));
 
 import { FeedView } from "@/components/app/feed-view";
-import type { NewsItem } from "@/lib/types";
+import type { FeedSort, NewsItem } from "@/lib/types";
 import type { FeedResponsePayload } from "@/lib/server/feed";
 
 function createDeferred<T>() {
@@ -89,6 +89,25 @@ const makeFeedItem = (overrides: Partial<NewsItem> = {}): NewsItem => ({
   sourceConfidence: "standard",
   metadata: {},
   angle: "",
+  ...overrides,
+});
+
+const makeFeedPayload = (
+  feed: NewsItem[],
+  overrides: Partial<FeedResponsePayload> = {},
+): FeedResponsePayload => ({
+  feed,
+  portfolioId: "p1",
+  mode: "personal",
+  appliedSort: "match",
+  sortNotice: null,
+  portfolioSymbols: ["AAPL"],
+  portfolioSectors: ["Technology"],
+  watchlistSymbols: [],
+  page: 1,
+  pageSize: 50,
+  totalCount: feed.length,
+  totalPages: 1,
   ...overrides,
 });
 
@@ -136,18 +155,9 @@ describe("FeedView", () => {
     const items = [makeFeedItem({ id: "story-1", headline: "Hydrated story" })];
     global.fetch = vi.fn();
 
-    const initialFeedPayload: FeedResponsePayload = {
-      feed: items,
-      portfolioId: "p1",
-      mode: "personal",
-      portfolioSymbols: ["AAPL"],
-      portfolioSectors: ["Technology"],
+    const initialFeedPayload = makeFeedPayload(items, {
       watchlistSymbols: ["TSLA"],
-      page: 1,
-      pageSize: 50,
-      totalCount: 1,
-      totalPages: 1,
-    };
+    });
 
     await act(async () => {
       render(<FeedView portfolioId="p1" initialFeedPayload={initialFeedPayload} />);
@@ -159,18 +169,12 @@ describe("FeedView", () => {
   });
 
   it("fetches once after hydration when initialSymbol selects a specific holding", async () => {
-    const initialFeedPayload: FeedResponsePayload = {
-      feed: [makeFeedItem({ id: "story-1", headline: "Hydrated story", holdings: ["AAPL"] })],
-      portfolioId: "p1",
-      mode: "personal",
-      portfolioSymbols: ["AAPL", "MSFT"],
-      portfolioSectors: ["Technology"],
-      watchlistSymbols: [],
-      page: 1,
-      pageSize: 50,
-      totalCount: 1,
-      totalPages: 1,
-    };
+    const initialFeedPayload = makeFeedPayload(
+      [makeFeedItem({ id: "story-1", headline: "Hydrated story", holdings: ["AAPL"] })],
+      {
+        portfolioSymbols: ["AAPL", "MSFT"],
+      },
+    );
 
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -202,6 +206,132 @@ describe("FeedView", () => {
       expect(global.fetch).toHaveBeenCalledWith(
         expect.stringContaining("holding=MSFT"),
       );
+    });
+  });
+
+  it("shows mode-specific sort options", async () => {
+    const initialFeedPayload = makeFeedPayload([
+      makeFeedItem({ id: "story-1", headline: "Hydrated story" }),
+    ]);
+
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () =>
+        makeFeedPayload(
+          [makeFeedItem({ id: "story-2", headline: "Market story" })],
+          {
+            mode: "market",
+            appliedSort: "recent",
+          },
+        ),
+    });
+
+    await act(async () => {
+      render(<FeedView portfolioId="p1" initialFeedPayload={initialFeedPayload} />);
+    });
+
+    const personalSort = screen.getByLabelText(/sort/i) as HTMLSelectElement;
+    expect(Array.from(personalSort.options).map((option) => option.text)).toEqual([
+      "Match",
+      "Most Recent",
+      "Hot",
+    ]);
+
+    fireEvent.click(screen.getByRole("button", { name: /full market/i }));
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining("mode=market"),
+      );
+    });
+
+    const marketSort = screen.getByLabelText(/sort/i) as HTMLSelectElement;
+    expect(Array.from(marketSort.options).map((option) => option.text)).toEqual([
+      "Most Recent",
+      "Hot",
+      "Oldest",
+    ]);
+  });
+
+  it("falls back from hot to recent and shows the no-hot notice", async () => {
+    const initialFeedPayload = makeFeedPayload([
+      makeFeedItem({ id: "story-1", headline: "Hydrated story" }),
+    ]);
+
+    global.fetch = vi.fn().mockImplementation((input: string) => {
+      if (input.startsWith("/api/feed?")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () =>
+            makeFeedPayload(
+              [makeFeedItem({ id: "story-1", headline: "Hydrated story" })],
+              {
+                appliedSort: "recent",
+                sortNotice: "No hot news yet. Showing most recent instead.",
+              },
+            ),
+        });
+      }
+
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ ok: true }),
+      });
+    });
+
+    await act(async () => {
+      render(<FeedView portfolioId="p1" initialFeedPayload={initialFeedPayload} />);
+    });
+
+    fireEvent.change(screen.getByLabelText(/sort/i), {
+      target: { value: "hot" as FeedSort },
+    });
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining("sort=hot"),
+      );
+    });
+
+    expect(await screen.findByText("No hot news yet. Showing most recent instead.")).toBeTruthy();
+    expect((screen.getByLabelText(/sort/i) as HTMLSelectElement).value).toBe("recent");
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("tracks story opens only when the selected story changes", async () => {
+    const initialFeedPayload = makeFeedPayload([
+      makeFeedItem({ id: "story-1", newsItemId: "news-1", headline: "First story" }),
+      makeFeedItem({ id: "story-2", newsItemId: "news-2", headline: "Second story" }),
+    ]);
+
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true }),
+    });
+
+    await act(async () => {
+      render(<FeedView portfolioId="p1" initialFeedPayload={initialFeedPayload} />);
+    });
+
+    fireEvent.click(screen.getAllByText("First story")[0]);
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        "/api/feed/open",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({ newsItemId: "news-1" }),
+        }),
+      );
+    });
+
+    fireEvent.click(screen.getAllByText("First story")[0]);
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByText("Second story"));
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -260,6 +390,12 @@ describe("FeedView", () => {
           json: async () => ({ threadId: "thread-1", messages: [] }),
         });
       }
+      if (url === "/api/feed/open") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ ok: true, detailOpenCount: 1 }),
+        });
+      }
       throw new Error(`Unexpected fetch: ${url}`);
     });
     global.fetch = fetchMock;
@@ -283,7 +419,7 @@ describe("FeedView", () => {
       await vi.advanceTimersByTimeAsync(800);
     });
 
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
 
     expect(screen.queryByText(/loading feed/i)).toBeNull();
     expect(screen.getAllByText("Persistent story").length).toBeGreaterThan(0);

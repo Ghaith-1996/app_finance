@@ -35,6 +35,7 @@ function createSupabaseMock(
   marketMatchMode: "tag" | "impact" = "tag",
   watchlistSymbols: string[] = [],
   marketRows?: Array<Record<string, unknown>>,
+  feedRows?: Array<Record<string, unknown>>,
 ) {
   const resolvedMarketRows = marketRows ?? [
     {
@@ -55,6 +56,40 @@ function createSupabaseMock(
       source_type: "newsapi",
       metadata: {},
       raw_content: "content",
+      detail_open_count: 0,
+    },
+  ];
+  const resolvedFeedRows = feedRows ?? [
+    {
+      id: "feed-1",
+      relevance_score: 81,
+      sentiment: "neutral",
+      impact: "Medium",
+      holdings: ["AAPL"],
+      sectors: ["Technology"],
+      ai_summary: "summary",
+      why_it_matters: "Apple may benefit from stronger device demand.",
+      matched_stock_tags: ["AAPL"],
+      match_reason_codes: matchReasonCodes,
+      match_sources: matchSources,
+      display_effect: "bullish",
+      source_confidence: "standard",
+      news_items: {
+        id: "news-1",
+        headline: "Apple demand improves",
+        source: "Wire",
+        url: null,
+        published_at: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
+        angle: null,
+        category: "technology",
+        stock_tags: ["AAPL"],
+        global_summary: "global summary",
+        overall_effect: "bullish",
+        ticker_impacts: [{ symbol: "AAPL", effect: "bullish" }],
+        source_type: "newsapi",
+        metadata: {},
+        detail_open_count: 0,
+      },
     },
   ];
 
@@ -95,40 +130,8 @@ function createSupabaseMock(
       }
 
       if (table === "feed_items") {
-        const feedRows = [
-          {
-            id: "feed-1",
-            relevance_score: 81,
-            sentiment: "neutral",
-            impact: "Medium",
-            holdings: ["AAPL"],
-            sectors: ["Technology"],
-            ai_summary: "summary",
-            why_it_matters: "Apple may benefit from stronger device demand.",
-            matched_stock_tags: ["AAPL"],
-            match_reason_codes: matchReasonCodes,
-            match_sources: matchSources,
-            display_effect: "bullish",
-            source_confidence: "standard",
-            news_items: {
-              id: "news-1",
-              headline: "Apple demand improves",
-              source: "Wire",
-              url: null,
-              published_at: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
-              angle: null,
-              category: "technology",
-              stock_tags: ["AAPL"],
-              global_summary: "global summary",
-              overall_effect: "bullish",
-              ticker_impacts: [{ symbol: "AAPL", effect: "bullish" }],
-              source_type: "newsapi",
-              metadata: {},
-            },
-          },
-        ];
         return {
-          select: () => createAwaitableBuilder(feedRows),
+          select: () => createAwaitableBuilder(resolvedFeedRows),
         };
       }
 
@@ -174,6 +177,8 @@ describe("GET /api/feed personal mode", () => {
     const res = await GET(new Request("http://localhost/api/feed?mode=personal&portfolioId=p1"));
     const body = await res.json();
 
+    expect(body.appliedSort).toBe("match");
+    expect(body.sortNotice).toBeNull();
     expect(body.feed[0].matchReasonCodes).toEqual(["held_ticker_tag"]);
     expect(body.feed[0].matchSources).toEqual(["portfolio"]);
     expect(body.portfolioSymbols).toEqual(["AAPL"]);
@@ -201,6 +206,263 @@ describe("GET /api/feed personal mode", () => {
 
     expect(body.feed[0].matchSources).toEqual(["watchlist"]);
     expect(body.feed[0].matchReasonCodes).toEqual(["watchlist_ticker_tag"]);
+  });
+
+  it("sorts the personal feed by most recent when requested", async () => {
+    currentSupabaseMock = createSupabaseMock(
+      ["held_ticker_tag"],
+      ["portfolio"],
+      "tag",
+      [],
+      undefined,
+      [
+        {
+          id: "feed-older",
+          relevance_score: 98,
+          sentiment: "neutral",
+          impact: "Medium",
+          holdings: ["AAPL"],
+          sectors: ["Technology"],
+          ai_summary: "summary",
+          why_it_matters: "Older higher-match story.",
+          matched_stock_tags: ["AAPL"],
+          match_reason_codes: ["held_ticker_tag"],
+          match_sources: ["portfolio"],
+          display_effect: "bullish",
+          source_confidence: "standard",
+          news_items: {
+            id: "news-older",
+            headline: "Older higher-match story",
+            source: "Wire",
+            url: null,
+            published_at: new Date(Date.now() - 90 * 60 * 1000).toISOString(),
+            angle: null,
+            category: "technology",
+            stock_tags: ["AAPL"],
+            global_summary: "global summary",
+            overall_effect: "bullish",
+            ticker_impacts: [],
+            source_type: "newsapi",
+            metadata: {},
+            detail_open_count: 1,
+          },
+        },
+        {
+          id: "feed-newer",
+          relevance_score: 72,
+          sentiment: "neutral",
+          impact: "Medium",
+          holdings: ["AAPL"],
+          sectors: ["Technology"],
+          ai_summary: "summary",
+          why_it_matters: "Newer lower-match story.",
+          matched_stock_tags: ["AAPL"],
+          match_reason_codes: ["held_ticker_tag"],
+          match_sources: ["portfolio"],
+          display_effect: "bullish",
+          source_confidence: "standard",
+          news_items: {
+            id: "news-newer",
+            headline: "Newer lower-match story",
+            source: "Wire",
+            url: null,
+            published_at: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
+            angle: null,
+            category: "technology",
+            stock_tags: ["AAPL"],
+            global_summary: "global summary",
+            overall_effect: "bullish",
+            ticker_impacts: [],
+            source_type: "newsapi",
+            metadata: {},
+            detail_open_count: 0,
+          },
+        },
+      ],
+    );
+
+    const res = await GET(
+      new Request("http://localhost/api/feed?mode=personal&portfolioId=p1&sort=recent"),
+    );
+    const body = await res.json();
+
+    expect(body.appliedSort).toBe("recent");
+    expect(body.feed.map((item: { headline: string }) => item.headline)).toEqual([
+      "Newer lower-match story",
+      "Older higher-match story",
+    ]);
+  });
+
+  it("sorts the personal feed by hot using detail_open_count", async () => {
+    currentSupabaseMock = createSupabaseMock(
+      ["held_ticker_tag"],
+      ["portfolio"],
+      "tag",
+      [],
+      undefined,
+      [
+        {
+          id: "feed-hot",
+          relevance_score: 70,
+          sentiment: "neutral",
+          impact: "Medium",
+          holdings: ["AAPL"],
+          sectors: ["Technology"],
+          ai_summary: "summary",
+          why_it_matters: "Most opened story.",
+          matched_stock_tags: ["AAPL"],
+          match_reason_codes: ["held_ticker_tag"],
+          match_sources: ["portfolio"],
+          display_effect: "bullish",
+          source_confidence: "standard",
+          news_items: {
+            id: "news-hot",
+            headline: "Most opened story",
+            source: "Wire",
+            url: null,
+            published_at: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+            angle: null,
+            category: "technology",
+            stock_tags: ["AAPL"],
+            global_summary: "global summary",
+            overall_effect: "bullish",
+            ticker_impacts: [],
+            source_type: "newsapi",
+            metadata: {},
+            detail_open_count: 11,
+          },
+        },
+        {
+          id: "feed-recent",
+          relevance_score: 95,
+          sentiment: "neutral",
+          impact: "Medium",
+          holdings: ["AAPL"],
+          sectors: ["Technology"],
+          ai_summary: "summary",
+          why_it_matters: "Recent but cooler story.",
+          matched_stock_tags: ["AAPL"],
+          match_reason_codes: ["held_ticker_tag"],
+          match_sources: ["portfolio"],
+          display_effect: "bullish",
+          source_confidence: "standard",
+          news_items: {
+            id: "news-recent",
+            headline: "Recent but cooler story",
+            source: "Wire",
+            url: null,
+            published_at: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
+            angle: null,
+            category: "technology",
+            stock_tags: ["AAPL"],
+            global_summary: "global summary",
+            overall_effect: "bullish",
+            ticker_impacts: [],
+            source_type: "newsapi",
+            metadata: {},
+            detail_open_count: 3,
+          },
+        },
+      ],
+    );
+
+    const res = await GET(
+      new Request("http://localhost/api/feed?mode=personal&portfolioId=p1&sort=hot"),
+    );
+    const body = await res.json();
+
+    expect(body.appliedSort).toBe("hot");
+    expect(body.sortNotice).toBeNull();
+    expect(body.feed.map((item: { headline: string }) => item.headline)).toEqual([
+      "Most opened story",
+      "Recent but cooler story",
+    ]);
+  });
+
+  it("falls back from hot to most recent when no personal stories have click data", async () => {
+    currentSupabaseMock = createSupabaseMock(
+      ["held_ticker_tag"],
+      ["portfolio"],
+      "tag",
+      [],
+      undefined,
+      [
+        {
+          id: "feed-older",
+          relevance_score: 99,
+          sentiment: "neutral",
+          impact: "Medium",
+          holdings: ["AAPL"],
+          sectors: ["Technology"],
+          ai_summary: "summary",
+          why_it_matters: "Older story.",
+          matched_stock_tags: ["AAPL"],
+          match_reason_codes: ["held_ticker_tag"],
+          match_sources: ["portfolio"],
+          display_effect: "bullish",
+          source_confidence: "standard",
+          news_items: {
+            id: "news-older",
+            headline: "Older story",
+            source: "Wire",
+            url: null,
+            published_at: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+            angle: null,
+            category: "technology",
+            stock_tags: ["AAPL"],
+            global_summary: "global summary",
+            overall_effect: "bullish",
+            ticker_impacts: [],
+            source_type: "newsapi",
+            metadata: {},
+            detail_open_count: 0,
+          },
+        },
+        {
+          id: "feed-newer",
+          relevance_score: 40,
+          sentiment: "neutral",
+          impact: "Medium",
+          holdings: ["AAPL"],
+          sectors: ["Technology"],
+          ai_summary: "summary",
+          why_it_matters: "Newer story.",
+          matched_stock_tags: ["AAPL"],
+          match_reason_codes: ["held_ticker_tag"],
+          match_sources: ["portfolio"],
+          display_effect: "bullish",
+          source_confidence: "standard",
+          news_items: {
+            id: "news-newer",
+            headline: "Newer story",
+            source: "Wire",
+            url: null,
+            published_at: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
+            angle: null,
+            category: "technology",
+            stock_tags: ["AAPL"],
+            global_summary: "global summary",
+            overall_effect: "bullish",
+            ticker_impacts: [],
+            source_type: "newsapi",
+            metadata: {},
+            detail_open_count: 0,
+          },
+        },
+      ],
+    );
+
+    const res = await GET(
+      new Request("http://localhost/api/feed?mode=personal&portfolioId=p1&sort=hot"),
+    );
+    const body = await res.json();
+
+    expect(body.appliedSort).toBe("recent");
+    expect(body.sortNotice).toBe("No hot news yet. Showing most recent instead.");
+    expect(body.feed.map((item: { headline: string }) => item.headline)).toEqual([
+      "Newer story",
+      "Older story",
+    ]);
   });
 
   it("includes watchlistSymbols in response", async () => {
@@ -246,6 +508,16 @@ describe("GET /api/feed personal mode", () => {
 });
 
 describe("GET /api/feed market mode", () => {
+  it("defaults the market feed to most recent sorting", async () => {
+    currentSupabaseMock = createSupabaseMock(["held_ticker_tag"]);
+
+    const res = await GET(new Request("http://localhost/api/feed?mode=market&portfolioId=p1"));
+    const body = await res.json();
+
+    expect(body.appliedSort).toBe("recent");
+    expect(body.sortNotice).toBeNull();
+  });
+
   it("marks market stories as portfolio matches when ticker impacts mention a held stock", async () => {
     currentSupabaseMock = createSupabaseMock(["held_ticker_tag"], null, "impact");
 
@@ -337,6 +609,136 @@ describe("GET /api/feed market mode", () => {
     expect(body.totalPages).toBe(1);
   });
 
+  it("sorts the market feed by hot and then by most recent on ties", async () => {
+    currentSupabaseMock = createSupabaseMock(
+      null,
+      null,
+      "tag",
+      [],
+      [
+        {
+          id: "news-market-1",
+          headline: "Warm story",
+          source: "Wire",
+          url: null,
+          published_at: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+          angle: null,
+          category: "technology",
+          stock_tags: ["AAPL"],
+          global_summary: "global summary",
+          overall_effect: "bullish",
+          ticker_impacts: [],
+          source_type: "newsapi",
+          metadata: {},
+          raw_content: "content",
+          detail_open_count: 9,
+        },
+        {
+          id: "news-market-2",
+          headline: "Hotter story",
+          source: "Wire",
+          url: null,
+          published_at: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
+          angle: null,
+          category: "technology",
+          stock_tags: ["AAPL"],
+          global_summary: "global summary",
+          overall_effect: "bullish",
+          ticker_impacts: [],
+          source_type: "newsapi",
+          metadata: {},
+          raw_content: "content",
+          detail_open_count: 14,
+        },
+        {
+          id: "news-market-3",
+          headline: "Same clicks, newer story",
+          source: "Wire",
+          url: null,
+          published_at: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
+          angle: null,
+          category: "technology",
+          stock_tags: ["AAPL"],
+          global_summary: "global summary",
+          overall_effect: "bullish",
+          ticker_impacts: [],
+          source_type: "newsapi",
+          metadata: {},
+          raw_content: "content",
+          detail_open_count: 9,
+        },
+      ],
+    );
+
+    const res = await GET(
+      new Request("http://localhost/api/feed?mode=market&portfolioId=p1&sort=hot"),
+    );
+    const body = await res.json();
+
+    expect(body.appliedSort).toBe("hot");
+    expect(body.feed.map((item: { headline: string }) => item.headline)).toEqual([
+      "Hotter story",
+      "Same clicks, newer story",
+      "Warm story",
+    ]);
+  });
+
+  it("sorts the market feed by oldest when requested", async () => {
+    currentSupabaseMock = createSupabaseMock(
+      null,
+      null,
+      "tag",
+      [],
+      [
+        {
+          id: "news-market-1",
+          headline: "Newest story",
+          source: "Wire",
+          url: null,
+          published_at: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
+          angle: null,
+          category: "technology",
+          stock_tags: ["AAPL"],
+          global_summary: "global summary",
+          overall_effect: "bullish",
+          ticker_impacts: [],
+          source_type: "newsapi",
+          metadata: {},
+          raw_content: "content",
+          detail_open_count: 2,
+        },
+        {
+          id: "news-market-2",
+          headline: "Oldest story",
+          source: "Wire",
+          url: null,
+          published_at: new Date(Date.now() - 120 * 60 * 1000).toISOString(),
+          angle: null,
+          category: "technology",
+          stock_tags: ["AAPL"],
+          global_summary: "global summary",
+          overall_effect: "bullish",
+          ticker_impacts: [],
+          source_type: "newsapi",
+          metadata: {},
+          raw_content: "content",
+          detail_open_count: 0,
+        },
+      ],
+    );
+
+    const res = await GET(
+      new Request("http://localhost/api/feed?mode=market&portfolioId=p1&sort=oldest"),
+    );
+    const body = await res.json();
+
+    expect(body.appliedSort).toBe("oldest");
+    expect(body.feed.map((item: { headline: string }) => item.headline)).toEqual([
+      "Oldest story",
+      "Newest story",
+    ]);
+  });
+
   it("paginates the market feed after applying filters", async () => {
     const pagedRows = Array.from({ length: 55 }, (_, index) => ({
       id: `news-market-${index + 1}`,
@@ -353,6 +755,7 @@ describe("GET /api/feed market mode", () => {
       source_type: "newsapi",
       metadata: {},
       raw_content: "content",
+      detail_open_count: 0,
     }));
     currentSupabaseMock = createSupabaseMock(null, null, "tag", [], pagedRows);
 

@@ -937,7 +937,7 @@ describe("FeedView", () => {
     expect(screen.queryByTestId("story-chat-sidebar")).toBeNull();
   });
 
-  it("loads and sends article chat messages in the separate desktop sidebar", async () => {
+  it("loads and sends article chat messages in the desktop detail slot", async () => {
     const story = makeFeedItem({
       id: "feed-1",
       newsItemId: "news-1",
@@ -995,6 +995,7 @@ describe("FeedView", () => {
     });
 
     const sidebar = await screen.findByTestId("story-chat-sidebar");
+    expect(screen.queryByText(/article detail/i)).toBeNull();
     expect(screen.queryByTestId("story-chat-sheet")).toBeNull();
     expect(global.fetch).toHaveBeenCalledWith(
       expect.stringContaining("/api/article-chat?portfolioId=p1&newsItemId=news-1"),

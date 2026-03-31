@@ -312,45 +312,46 @@ export function ArticleChatPanel({
             <label className="block text-sm font-medium text-slate-400" htmlFor={`article-chat-${newsItemId ?? "general"}`}>
               {textareaLabel}
             </label>
-            <textarea
-              id={`article-chat-${newsItemId ?? "general"}`}
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              rows={4}
-              placeholder={textareaPlaceholder}
-              className="w-full rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-slate-200 outline-none transition focus:border-brand/40"
-            />
-            <TurnstileBlock turnstile={turnstile} action="article-chat" />
-            <div className="flex items-center justify-between gap-3">
-              {error ? (
-                <div className="min-w-0 flex-1 space-y-1">
-                  <p className="text-sm text-red-400">{error}</p>
-                  {errorCode === "turnstile_failed" && (
-                    <p className="text-xs text-slate-500">Your verification expired. Wait for it to refresh, then re-send.</p>
-                  )}
-                  {errorCode === "provider_auth" && (
-                    <p className="text-xs text-slate-500">Check that the selected AI tier is configured correctly in the server environment.</p>
-                  )}
-                  {errorCode === "provider_timeout" && (
-                    <p className="text-xs text-slate-500">The AI service may be overloaded. Wait a moment and try again.</p>
-                  )}
-                  {errorCode === "provider_bad_response" && (
-                    <p className="text-xs text-slate-500">Try rephrasing your question or try again shortly.</p>
-                  )}
-                  {errorCode === "plan_upgrade_required" && (
-                    <p className="text-xs text-slate-500">Upgrade your plan in Billing to unlock that model tier.</p>
-                  )}
-                </div>
-              ) : <span />}
+            <div className="flex items-end gap-3">
+              <textarea
+                id={`article-chat-${newsItemId ?? "general"}`}
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+                rows={3}
+                placeholder={textareaPlaceholder}
+                className="min-h-[104px] flex-1 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-slate-200 outline-none transition focus:border-brand/40"
+              />
               <Button
                 type="button"
                 onClick={() => void sendMessage(draft)}
                 disabled={sending || !draft.trim() || disabled || !turnstile.canSubmit}
+                className="shrink-0 self-end px-4"
               >
                 {sending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <SendHorizonal className="mr-2 h-4 w-4" />}
                 Send
               </Button>
             </div>
+            <TurnstileBlock turnstile={turnstile} action="article-chat" />
+            {error ? (
+              <div className="min-w-0 flex-1 space-y-1">
+                <p className="text-sm text-red-400">{error}</p>
+                {errorCode === "turnstile_failed" && (
+                  <p className="text-xs text-slate-500">Your verification expired. Wait for it to refresh, then re-send.</p>
+                )}
+                {errorCode === "provider_auth" && (
+                  <p className="text-xs text-slate-500">Check that the selected AI tier is configured correctly in the server environment.</p>
+                )}
+                {errorCode === "provider_timeout" && (
+                  <p className="text-xs text-slate-500">The AI service may be overloaded. Wait a moment and try again.</p>
+                )}
+                {errorCode === "provider_bad_response" && (
+                  <p className="text-xs text-slate-500">Try rephrasing your question or try again shortly.</p>
+                )}
+                {errorCode === "plan_upgrade_required" && (
+                  <p className="text-xs text-slate-500">Upgrade your plan in Billing to unlock that model tier.</p>
+                )}
+              </div>
+            ) : null}
           </div>
         </>
       )}

@@ -11,11 +11,6 @@ import { Panel } from "@/components/ui/panel";
 import { loadFeedPageData } from "@/lib/server/page-loaders";
 import { createClient } from "@/lib/supabase/server";
 
-function parseCoverageCount(coverage: string): number {
-  const match = coverage.match(/^(\d+)/);
-  return match ? Number(match[1]) : 0;
-}
-
 function analysisPulseFill(lastAnalyzedAt: string): number {
   if (lastAnalyzedAt === "Never") return 12;
   if (lastAnalyzedAt.includes("Just now")) return 98;
@@ -47,6 +42,8 @@ export default async function FeedPage({
     portfolioOverview,
     portfolioInsights,
     initialFeedPayload,
+    marketStoryCount24h,
+    matchedStoryCount24h,
   } = await loadFeedPageData();
   const supabase = await createClient();
   const {
@@ -54,7 +51,6 @@ export default async function FeedPage({
   } = await supabase.auth.getUser();
   const billingSummary = user ? await getBillingSummaryForUser(user.id, user.email) : null;
 
-  const storyCount = parseCoverageCount(portfolioOverview.coverage);
   const pulsePct = analysisPulseFill(portfolioOverview.lastAnalyzedAt);
 
   return (
@@ -79,15 +75,18 @@ export default async function FeedPage({
               Intelligence coverage
             </p>
             <p className="text-3xl font-semibold tracking-tight text-white">
-              {storyCount}
+              {marketStoryCount24h}
             </p>
-            <p className="text-sm text-slate-500">high-signal stories today</p>
+            <p className="text-sm text-slate-500">market stories in the last 24 hours</p>
             <div className="pt-1">
               <span className="inline-flex items-center gap-2 rounded-lg border border-brand/25 bg-brand/10 px-3 py-1 text-xs font-semibold text-brand">
                 <span className="h-2 w-2 rounded-full bg-brand" />
                 Feed ready
               </span>
             </div>
+            <p className="text-sm text-slate-400">
+              {matchedStoryCount24h} matched to your portfolio
+            </p>
           </Panel>
 
           <ActivePortfolioValueCard

@@ -94,7 +94,10 @@ describe("portfolio value surfaces render cached data and manual refresh control
       },
     });
     getBillingSummaryForUser.mockResolvedValue(null);
-    getCurrentUserBillingSummary.mockResolvedValue(null);
+    getCurrentUserBillingSummary.mockResolvedValue({
+      allowedModelTiers: ["free", "premium", "ultimate"],
+      defaultModelTier: "free",
+    });
     refreshPortfolioPricingSnapshot.mockResolvedValue({
       status: "no_quotes",
       updated: 0,
@@ -106,6 +109,8 @@ describe("portfolio value surfaces render cached data and manual refresh control
     loadFeedPageData.mockResolvedValue({
       showOnboardingNav: false,
       portfolioId: "portfolio-1",
+      marketStoryCount24h: 330,
+      matchedStoryCount24h: 30,
       portfolioOverview: {
         totalValue: 12345,
         dayChange: 1.2,
@@ -279,6 +284,9 @@ describe("portfolio value surfaces render cached data and manual refresh control
 
     expect(loadFeedPageData).toHaveBeenCalledTimes(1);
     expect(screen.getByText("Intelligence coverage")).toBeTruthy();
+    expect(screen.getByText("330")).toBeTruthy();
+    expect(screen.getByText("market stories in the last 24 hours")).toBeTruthy();
+    expect(screen.getByText("30 matched to your portfolio")).toBeTruthy();
     expect(screen.getByText("Active value 12345")).toBeTruthy();
     expect(screen.getByText("Feed view")).toBeTruthy();
     expect(ActivePortfolioValueCard).toHaveBeenCalledWith(

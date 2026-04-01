@@ -7,6 +7,7 @@ import {
   type FeedResponsePayload,
   resolveFeedPayload,
 } from "@/lib/server/feed";
+import { newsWindowCutoffIso } from "@/lib/services/news/pool-snapshot";
 import type {
   Holding,
   PortfolioFeedHighlight,
@@ -249,6 +250,36 @@ async function loadFeedItemCount(
   return count ?? 0;
 }
 
+export async function loadMarketStoryCount24h(
+  supabase: ServerSupabase,
+): Promise<number> {
+  const cutoff = newsWindowCutoffIso();
+  const { count } = await supabase
+    .from("news_items")
+    .select("id", { count: "exact", head: true })
+    .gte("published_at", cutoff);
+
+  return count ?? 0;
+}
+
+export async function loadMatchedStoryCount24hForRun(
+  supabase: ServerSupabase,
+  portfolioId: string,
+  analysisRunId: string | null,
+): Promise<number> {
+  if (!analysisRunId) return 0;
+
+  const cutoff = newsWindowCutoffIso();
+  const { count } = await supabase
+    .from("feed_items")
+    .select("id, news_items!inner(published_at)", { count: "exact", head: true })
+    .eq("portfolio_id", portfolioId)
+    .eq("analysis_run_id", analysisRunId)
+    .gte("news_items.published_at", cutoff);
+
+  return count ?? 0;
+}
+
 async function loadPortfolioInsightsForRun(
   supabase: ServerSupabase,
   analysisRunId: string | null,
@@ -406,6 +437,8 @@ export async function loadFeedPageData(): Promise<{
   portfolioOverview: PortfolioOverview;
   portfolioInsights: PortfolioInsight[];
   initialFeedPayload: FeedResponsePayload | null;
+  marketStoryCount24h: number;
+  matchedStoryCount24h: number;
 }> {
   const timer = createTimingLogger("/feed");
   const context = await resolveAuthenticatedPageContext("/feed:context");
@@ -420,19 +453,24 @@ export async function loadFeedPageData(): Promise<{
       portfolioOverview: FEED_OVERVIEW_FALLBACK,
       portfolioInsights: [],
       initialFeedPayload: null,
+      marketStoryCount24h: 0,
+      matchedStoryCount24h: 0,
     };
   }
 
   const portfolio = context.portfolios[0] ?? null;
   const portfolioId = portfolio?.id ?? null;
   if (!portfolioId) {
-    const initialFeedResult = await resolveFeedPayload({
-      supabase: context.supabase,
-      userId: context.userId,
-      mode: "personal",
-      page: 1,
-      pageSize: DEFAULT_FEED_PAGE_SIZE,
-    });
+    const [initialFeedResult, marketStoryCount24h] = await Promise.all([
+      resolveFeedPayload({
+        supabase: context.supabase,
+        userId: context.userId,
+        mode: "personal",
+        page: 1,
+        pageSize: DEFAULT_FEED_PAGE_SIZE,
+      }),
+      loadMarketStoryCount24h(context.supabase),
+    ]);
     timer.mark("resolve context/feed payload");
     timer.done();
     return {
@@ -442,14 +480,16 @@ export async function loadFeedPageData(): Promise<{
       portfolioOverview: FEED_OVERVIEW_FALLBACK,
       portfolioInsights: [],
       initialFeedPayload: initialFeedResult.ok ? initialFeedResult.data : null,
+      marketStoryCount24h,
+      matchedStoryCount24h: 0,
     };
   }
 
-  const [holdingRows, latestRun, feedCount, watchlistRows] = await Promise.all([
+  const [holdingRows, latestRun, watchlistRows, marketStoryCount24h] = await Promise.all([
     loadHoldingRows(context.supabase, portfolioId),
     loadLatestAnalysisRun(context.supabase, portfolioId),
-    loadFeedItemCount(context.supabase, portfolioId),
     context.supabase.from("watchlist_items").select("symbol").eq("user_id", context.userId),
+    loadMarketStoryCount24h(context.supabase),
   ]);
   timer.mark("overview/feed context");
 
@@ -468,7 +508,7 @@ export async function loadFeedPageData(): Promise<{
     ),
   ];
 
-  const [portfolioInsights, initialFeedResult] = await Promise.all([
+  const [portfolioInsights, initialFeedResult, matchedStoryCount24h] = await Promise.all([
     loadPortfolioInsightsForRun(context.supabase, latestRun?.id ?? null),
     resolveFeedPayload({
       supabase: context.supabase,
@@ -482,6 +522,11 @@ export async function loadFeedPageData(): Promise<{
       pageSize: DEFAULT_FEED_PAGE_SIZE,
       contextValidated: true,
     }),
+    loadMatchedStoryCount24hForRun(
+      context.supabase,
+      portfolioId,
+      latestRun?.id ?? null,
+    ),
   ]);
   timer.mark("feed payload/insights");
 
@@ -493,11 +538,13 @@ export async function loadFeedPageData(): Promise<{
     portfolioOverview: buildPortfolioOverview(holdings, {
       lastSyncedAt: portfolio.lastSyncedAt,
       lastAnalyzedAt: latestRun?.completedAt ?? null,
-      feedCount,
+      feedCount: matchedStoryCount24h,
       emptyCoverageLabel: "0 high-signal stories",
     }),
     portfolioInsights,
     initialFeedPayload: initialFeedResult.ok ? initialFeedResult.data : null,
+    marketStoryCount24h,
+    matchedStoryCount24h,
   };
 }
 

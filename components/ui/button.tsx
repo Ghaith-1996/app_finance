@@ -26,9 +26,9 @@ export function buttonStyles({
     variant === "primary" &&
       "border-brand bg-brand text-[#080c11] shadow-[0_0_20px_rgba(16,185,129,0.15)] hover:border-brand-strong hover:bg-brand-strong",
     variant === "secondary" &&
-      "border-white/10 bg-surface-raised text-slate-200 shadow-sm hover:border-white/16 hover:bg-surface-hover",
+      "border-subtle bg-surface-raised text-primary shadow-[var(--surface-shadow)] hover:border-strong hover:bg-surface-hover",
     variant === "ghost" &&
-      "border-transparent bg-transparent text-slate-400 hover:bg-white/5 hover:text-slate-200",
+      "border-transparent bg-transparent text-secondary hover:bg-surface-soft hover:text-primary",
     className,
   );
 }

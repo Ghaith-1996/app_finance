@@ -6,6 +6,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { ChevronDown, LogOut, Settings, Shield } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
+import { ThemeToggle } from "@/components/preferences/theme-toggle";
+import { usePreferences } from "@/components/providers/preferences-provider";
 import { sanitizeExternalUrl } from "@/lib/security/external-url";
 
 export function UserMenu({ showAdminLink = false }: { showAdminLink?: boolean }) {
@@ -18,6 +20,7 @@ export function UserMenu({ showAdminLink = false }: { showAdminLink?: boolean })
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const router = useRouter();
+  const { t } = usePreferences();
   const supabase = useMemo(() => createClient(), []);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -117,7 +120,7 @@ export function UserMenu({ showAdminLink = false }: { showAdminLink?: boolean })
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-3 rounded-xl px-3 py-2 transition hover:bg-white/5"
+        className="flex w-full items-center gap-3 rounded-xl px-3 py-2 transition hover:bg-surface-soft"
         aria-haspopup="menu"
         aria-expanded={open}
       >
@@ -133,39 +136,42 @@ export function UserMenu({ showAdminLink = false }: { showAdminLink?: boolean })
           </span>
         )}
         <div className="min-w-0 flex-1 text-left">
-          <p className="truncate text-sm font-medium text-slate-300">{name}</p>
+          <p className="truncate text-sm font-medium text-primary">{name}</p>
           {profile?.handle ? (
-            <p className="truncate text-xs text-slate-500">@{profile.handle}</p>
+            <p className="truncate text-xs text-secondary">@{profile.handle}</p>
           ) : null}
         </div>
-        <ChevronDown className="h-4 w-4 text-slate-500" />
+        <ChevronDown className="h-4 w-4 text-secondary" />
       </button>
 
       {open ? (
         <div
           role="menu"
-          className="absolute bottom-full left-0 z-50 mb-2 min-w-[220px] overflow-hidden rounded-xl border border-white/[0.08] bg-[#0d1520] py-1 shadow-xl shadow-black/40"
+          className="glass-surface absolute bottom-full left-0 z-50 mb-2 min-w-[240px] overflow-hidden rounded-xl border border-subtle bg-surface-raised py-1 shadow-[var(--surface-shadow)]"
         >
           <Link
             href="/settings"
             role="menuitem"
             onClick={() => setOpen(false)}
-            className="flex items-center gap-2 px-3 py-2.5 text-sm text-slate-200 transition hover:bg-white/5"
+            className="flex items-center gap-2 px-3 py-2.5 text-sm text-primary transition hover:bg-surface-soft"
           >
             <Settings className="h-4 w-4 shrink-0" />
-            Settings
+            {t("common.settings")}
           </Link>
           {showAdminLink ? (
             <Link
               href="/admin"
               role="menuitem"
               onClick={() => setOpen(false)}
-              className="flex items-center gap-2 px-3 py-2.5 text-sm text-slate-200 transition hover:bg-white/5"
+              className="flex items-center gap-2 px-3 py-2.5 text-sm text-primary transition hover:bg-surface-soft"
             >
               <Shield className="h-4 w-4 shrink-0" />
-              Admin
+              {t("common.admin")}
             </Link>
           ) : null}
+          <div className="px-3 py-2">
+            <ThemeToggle className="w-full justify-center" />
+          </div>
           <button
             type="button"
             role="menuitem"
@@ -173,7 +179,7 @@ export function UserMenu({ showAdminLink = false }: { showAdminLink?: boolean })
             className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-red-400 transition hover:bg-red-500/10"
           >
             <LogOut className="h-4 w-4 shrink-0" />
-            Sign out
+            {t("common.signOut")}
           </button>
         </div>
       ) : null}

@@ -53,6 +53,15 @@ vi.mock("@/lib/supabase/client", () => ({
 }));
 
 import { UserMenu } from "@/components/app/user-menu";
+import { PreferencesProvider } from "@/components/providers/preferences-provider";
+
+function renderMenu(props?: { showAdminLink?: boolean }) {
+  return render(
+    <PreferencesProvider initialTheme="dark" initialLocale="en">
+      <UserMenu {...props} />
+    </PreferencesProvider>,
+  );
+}
 
 describe("UserMenu", () => {
   beforeEach(() => {
@@ -94,7 +103,7 @@ describe("UserMenu", () => {
   });
 
   it("opens the profile menu and signs the user out", async () => {
-    render(<UserMenu />);
+    renderMenu();
 
     await screen.findByText("Ada Lovelace");
     expect(screen.getByText("@adal")).toBeTruthy();
@@ -105,6 +114,7 @@ describe("UserMenu", () => {
 
     const settingsLink = await screen.findByRole("menuitem", { name: /settings/i });
     expect(settingsLink).toHaveAttribute("href", "/settings");
+    expect(screen.getByRole("button", { name: /theme/i })).toBeTruthy();
 
     await act(async () => {
       fireEvent.click(screen.getByRole("menuitem", { name: /sign out/i }));
@@ -126,7 +136,7 @@ describe("UserMenu", () => {
       },
     });
 
-    render(<UserMenu />);
+    renderMenu();
 
     await screen.findByText("Ada Lovelace");
     expect(document.querySelector("img")).toBeNull();
@@ -134,7 +144,7 @@ describe("UserMenu", () => {
   });
 
   it("shows an admin link when the server marks the viewer as admin", async () => {
-    render(<UserMenu showAdminLink />);
+    renderMenu({ showAdminLink: true });
 
     await screen.findByText("Ada Lovelace");
 

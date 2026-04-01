@@ -1,8 +1,10 @@
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app/app-shell";
+import { PreferencesPanel } from "@/components/app/preferences-panel";
 import { BillingSettingsPanel } from "@/components/app/billing-settings-panel";
 import { ProfileForm } from "@/components/app/profile-form";
 import { Badge } from "@/components/ui/badge";
+import { getTranslations } from "@/lib/i18n/server";
 import { getBillingSummaryForUser } from "@/lib/billing/subscriptions";
 import { getCurrentUserProfile, saveCurrentUserProfile } from "@/lib/actions/profile";
 import { isAdminUser } from "@/lib/security/admin";
@@ -24,6 +26,7 @@ export default async function SettingsPage({
   }
 
   const profile = await getCurrentUserProfile();
+  const { t } = await getTranslations();
   const showOnboardingNav = await loadOnboardingNavState();
   const showAdminLink = isAdminUser(user);
   const billingSummary = await getBillingSummaryForUser(user.id, user.email);
@@ -34,22 +37,23 @@ export default async function SettingsPage({
   return (
     <AppShell
       eyebrow=""
-      title="Settings"
-      description="Update the profile information shown around the app."
+      title={t("settingsPage.title")}
+      description={t("settingsPage.description")}
       activePath="/settings"
       backHref="/home"
-      backLabel="Back to home"
+      backLabel={t("common.backToHome")}
       showOnboardingNav={showOnboardingNav}
       showAdminLink={showAdminLink}
     >
       <div className="space-y-6">
         {billingMessage === "success" ? (
           <Badge tone="success" className="w-fit">
-            Stripe checkout completed. Billing access will unlock after the webhook sync finishes.
+            {t("settingsPage.billingSuccess")}
           </Badge>
         ) : null}
 
         <BillingSettingsPanel billingSummary={billingSummary} />
+        <PreferencesPanel />
 
         <ProfileForm
           initialProfile={
@@ -59,10 +63,10 @@ export default async function SettingsPage({
               handle: "",
             }
           }
-          title="Profile settings"
-          description="Manage your name and username."
-          submitLabel="Save changes"
-          successMessage="Profile updated."
+          title={t("settingsPage.profileTitle")}
+          description={t("settingsPage.profileDescription")}
+          submitLabel={t("common.saveChanges")}
+          successMessage={t("settingsPage.profileUpdated")}
           onSubmit={saveCurrentUserProfile}
         />
       </div>

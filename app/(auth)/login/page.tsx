@@ -3,15 +3,20 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
+
+import { LocaleSelect } from "@/components/preferences/locale-select";
+import { ThemeToggle } from "@/components/preferences/theme-toggle";
+import { usePreferences } from "@/components/providers/preferences-provider";
 import { buttonStyles } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
+import { createClient } from "@/lib/supabase/client";
 
 export default function LoginPage() {
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get("redirectTo") ?? "/portfolio";
   const error = searchParams.get("error");
   const [loading, setLoading] = useState<string | null>(null);
+  const { t } = usePreferences();
 
   const supabase = useMemo(() => createClient(), []);
 
@@ -37,36 +42,31 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background px-6 py-12">
       <div className="w-full max-w-md space-y-8">
+        <div className="flex justify-center gap-3">
+          <LocaleSelect />
+          <ThemeToggle />
+        </div>
+
         <div className="text-center">
-          <Link
-            href="/"
-            className="inline-flex items-center gap-3 text-white no-underline"
-          >
+          <Link href="/" className="inline-flex items-center gap-3 text-primary no-underline">
             <span className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-brand/15 text-lg font-semibold text-brand">
               PF
             </span>
             <div className="text-left">
-              <p className="text-xs uppercase tracking-[0.22em] text-slate-500">
-                Pulsefolio
-              </p>
-              <p className="text-base font-semibold text-white">
-                Personal AI finance
-              </p>
+              <p className="text-xs uppercase tracking-[0.22em] text-secondary">Pulsefolio</p>
+              <p className="text-base font-semibold text-primary">{t("login.tagline")}</p>
             </div>
           </Link>
         </div>
+
         <Panel className="space-y-6 p-8">
           <div className="space-y-2 text-center">
-            <h1 className="text-2xl font-semibold tracking-tight text-white">
-              Sign in
-            </h1>
-            <p className="text-sm text-slate-400">
-              Use your Google or GitHub account to continue.
-            </p>
+            <h1 className="text-2xl font-semibold tracking-tight text-primary">{t("login.title")}</h1>
+            <p className="text-sm text-secondary">{t("login.description")}</p>
           </div>
           {error ? (
             <div className="rounded-xl border border-rose-500/25 bg-rose-500/10 px-4 py-3 text-sm text-rose-400">
-              Sign-in failed. Please try again.
+              {t("login.failed")}
             </div>
           ) : null}
           <div className="flex flex-col gap-3">
@@ -76,11 +76,10 @@ export default function LoginPage() {
               disabled={!!loading}
               className={buttonStyles({
                 size: "lg",
-                className:
-                  "w-full disabled:opacity-70",
+                className: "w-full disabled:opacity-70",
               })}
             >
-              {loading === "google" ? "Redirecting…" : "Sign in with Google"}
+              {loading === "google" ? t("login.redirecting") : t("login.google")}
             </button>
             <button
               type="button"
@@ -92,13 +91,14 @@ export default function LoginPage() {
                 className: "w-full disabled:opacity-70",
               })}
             >
-              {loading === "github" ? "Redirecting…" : "Sign in with GitHub"}
+              {loading === "github" ? t("login.redirecting") : t("login.github")}
             </button>
           </div>
         </Panel>
-        <p className="text-center text-sm text-slate-600">
-          <Link href="/" className="text-slate-500 hover:text-slate-300">
-            Back to home
+
+        <p className="text-center text-sm text-muted">
+          <Link href="/" className="text-secondary hover:text-primary">
+            {t("login.backHome")}
           </Link>
         </p>
       </div>

@@ -7,6 +7,7 @@ import { AppShell } from "@/components/app/app-shell";
 import { FeedView } from "@/components/app/feed-view";
 import { buttonStyles } from "@/components/ui/button";
 import { getBillingSummaryForUser } from "@/lib/billing/subscriptions";
+import { getTranslations } from "@/lib/i18n/server";
 import { Panel } from "@/components/ui/panel";
 import { loadFeedPageData } from "@/lib/server/page-loaders";
 import { createClient } from "@/lib/supabase/server";
@@ -50,14 +51,15 @@ export default async function FeedPage({
     data: { user },
   } = await supabase.auth.getUser();
   const billingSummary = user ? await getBillingSummaryForUser(user.id, user.email) : null;
+  const { t } = await getTranslations();
 
   const pulsePct = analysisPulseFill(portfolioOverview.lastAnalyzedAt);
 
   return (
     <AppShell
-      eyebrow="Daily brief"
-      title="A personalized news feed built around what you own."
-      description="Leveraging compound analysis to distill 14,000+ daily data points into your critical performance drivers."
+      eyebrow={t("pages.feedEyebrow")}
+      title={t("pages.feedTitle")}
+      description={t("pages.feedDescription")}
       activePath="/feed"
       showOnboardingNav={showOnboardingNav}
       showAdminLink={showAdminLink}

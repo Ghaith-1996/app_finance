@@ -21,7 +21,7 @@ export function Badge({
         tone === "success" && "border-brand/25 bg-brand/10 text-emerald-400",
         tone === "warning" && "border-amber-500/25 bg-amber-500/10 text-amber-400",
         tone === "danger" && "border-rose-500/25 bg-rose-500/10 text-rose-400",
-        tone === "neutral" && "border-white/8 bg-white/5 text-slate-400",
+        tone === "neutral" && "border-subtle bg-surface-soft text-secondary",
         className,
       )}
     >

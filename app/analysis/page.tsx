@@ -8,6 +8,7 @@ import { PortfolioSnapshotPanel } from "@/components/app/portfolio-snapshot-pane
 import { Badge } from "@/components/ui/badge";
 import { buttonStyles } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
+import { getTranslations } from "@/lib/i18n/server";
 import { loadAnalysisPageData } from "@/lib/server/page-loaders";
 
 export default async function AnalysisPage({
@@ -23,12 +24,13 @@ export default async function AnalysisPage({
     portfolioOverview,
     portfolioInsights,
   } = await loadAnalysisPageData(params.portfolioId ?? null);
+  const { t } = await getTranslations();
 
   return (
     <AppShell
-      eyebrow="Analysis"
-      title="Your AI brief updates automatically"
-      description="Every 20 minutes, the system ingests new articles and matches them against your portfolio holdings and watchlist symbols."
+      eyebrow={t("pages.analysisEyebrow")}
+      title={t("pages.analysisTitle")}
+      description={t("pages.analysisDescription")}
       activePath="/analysis"
       showOnboardingNav={showOnboardingNav}
       showAdminLink={showAdminLink}

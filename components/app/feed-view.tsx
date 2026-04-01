@@ -76,7 +76,7 @@ const sourceTypeOptions = [
 ];
 
 const selectTriggerClass =
-  "w-full min-w-0 appearance-none rounded-xl border border-white/10 bg-surface-raised py-2.5 pl-3 pr-9 text-sm font-medium text-slate-200 shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20";
+  "themed-select w-full min-w-0 appearance-none rounded-xl border border-subtle bg-surface-raised py-2.5 pl-3 pr-9 text-sm font-medium text-primary shadow-[var(--surface-shadow)] focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20";
 
 const DESKTOP_CHAT_BREAKPOINT = 1280;
 const FEED_PAGE_SIZE = 50;
@@ -1115,43 +1115,43 @@ function FeedMomentumCard({ insights }: { insights: PortfolioInsight[] }) {
     : 62;
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-[#0d1117] p-6 text-white shadow-[0_24px_60px_rgba(13,17,23,0.28)]">
-      <div className="flex items-center gap-2 border-b border-white/10 pb-4">
-        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#14b8a6]/20 text-[#5eead4]">
+    <div className="glass-surface rounded-2xl border border-subtle bg-surface-raised p-6 text-primary shadow-[var(--surface-shadow)]">
+      <div className="flex items-center gap-2 border-b border-subtle pb-4">
+        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-brand/15 text-brand">
           <Zap className="h-4 w-4" />
         </span>
         <h3 className="text-base font-semibold tracking-tight">Feed momentum</h3>
       </div>
       <div className="mt-5 space-y-6">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-secondary">
             Most exposed theme
           </p>
-          <p className="mt-2 text-lg font-semibold text-white">
+          <p className="mt-2 text-lg font-semibold text-primary">
             {themeInsight?.value ?? "—"}
           </p>
           {themeInsight?.detail ? (
-            <p className="mt-1 text-sm leading-relaxed text-slate-400">
+            <p className="mt-1 text-sm leading-relaxed text-secondary">
               {themeInsight.detail}
             </p>
           ) : (
-            <p className="mt-1 text-sm text-slate-500">
+            <p className="mt-1 text-sm text-secondary">
               Run analysis to surface the theme your feed is overweighting.
             </p>
           )}
-          <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/10">
+          <div className="mt-3 h-2 overflow-hidden rounded-full bg-surface-soft">
             <div
-              className="h-full rounded-full bg-[#14b8a6]"
+              className="h-full rounded-full bg-brand"
               style={{ width: `${themePct}%` }}
             />
           </div>
         </div>
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-secondary">
             Macro watch
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            <p className="text-lg font-semibold text-white">
+            <p className="text-lg font-semibold text-primary">
               {macroInsight?.value ?? "—"}
             </p>
             {macroCritical ? (
@@ -1161,20 +1161,20 @@ function FeedMomentumCard({ insights }: { insights: PortfolioInsight[] }) {
             ) : null}
           </div>
           {macroInsight?.detail ? (
-            <p className="mt-2 text-sm leading-relaxed text-slate-400">
+            <p className="mt-2 text-sm leading-relaxed text-secondary">
               {macroInsight.detail}
             </p>
           ) : (
-            <p className="mt-2 text-sm text-slate-500">
+            <p className="mt-2 text-sm text-secondary">
               Macro drivers from your last compound analysis run will land here.
             </p>
           )}
         </div>
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-secondary">
             Fresh catalyst
           </p>
-          <p className="mt-2 text-sm leading-relaxed text-slate-200">
+          <p className="mt-2 text-sm leading-relaxed text-secondary">
             {catalystInsight?.detail ??
               "New regulatory, earnings, or M&A catalysts will appear here after the next refresh."}
           </p>
@@ -1879,3 +1879,6 @@ function formatCategoryOption(option: string): string {
   if (option.startsWith("All")) return option;
   return categoryLabel(option);
 }
+
+
+

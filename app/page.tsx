@@ -18,6 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { buttonStyles } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
 import { SectionHeading } from "@/components/ui/section-heading";
+import { getTranslations } from "@/lib/i18n/server";
 import {
   faqs,
   painPoints,
@@ -49,7 +50,9 @@ const updateCards = [
   },
 ];
 
-export default function Home() {
+export default async function Home() {
+  const { t } = await getTranslations();
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <SiteHeader />
@@ -63,18 +66,18 @@ export default function Home() {
         <FaqSection />
         <FinalCallToAction />
       </main>
-      <footer className="border-t border-white/[0.06] px-6 py-8 lg:px-8">
-        <div className="mx-auto flex max-w-7xl flex-col gap-4 text-sm text-slate-500 md:flex-row md:items-center md:justify-between">
-          <p>&copy; {new Date().getFullYear()} Pulsefolio. Portfolio-aware finance intelligence.</p>
+      <footer className="border-t border-subtle px-6 py-8 lg:px-8">
+        <div className="mx-auto flex max-w-7xl flex-col gap-4 text-sm text-secondary md:flex-row md:items-center md:justify-between">
+          <p>&copy; {new Date().getFullYear()} Pulsefolio. {t("landing.footerTagline")}</p>
           <div className="flex flex-wrap items-center gap-4">
-            <Link href="/onboarding" className="transition hover:text-slate-300">
-              Onboarding
+            <Link href="/onboarding" className="transition hover:text-primary">
+              {t("landing.footerOnboarding")}
             </Link>
-            <Link href="/feed" className="transition hover:text-slate-300">
-              Feed demo
+            <Link href="/feed" className="transition hover:text-primary">
+              {t("landing.footerFeed")}
             </Link>
-            <Link href="/portfolio" className="transition hover:text-slate-300">
-              Portfolio
+            <Link href="/portfolio" className="transition hover:text-primary">
+              {t("landing.footerPortfolio")}
             </Link>
           </div>
         </div>

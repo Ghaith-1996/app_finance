@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { completeProfileAction, getCurrentUserProfile } from "@/lib/actions/profile";
+import { getTranslations } from "@/lib/i18n/server";
 import { createClient } from "@/lib/supabase/server";
 import { ProfileForm } from "@/components/app/profile-form";
 import { isProfileComplete } from "@/lib/profile/utils";
@@ -22,6 +23,7 @@ export default async function CompleteProfilePage({
   const params = await searchParams;
   const redirectTo = sanitizeRedirect(params.redirectTo, "/portfolio");
   const profile = await getCurrentUserProfile();
+  const { t } = await getTranslations();
 
   if (isProfileComplete(profile)) {
     redirect(redirectTo);
@@ -37,9 +39,9 @@ export default async function CompleteProfilePage({
             handle: "",
           }
         }
-        title="Complete your profile"
-        description="Tell us your first name, last name, and username before entering the app."
-        submitLabel="Continue"
+        title={t("profile.completeTitle")}
+        description={t("profile.completeDescription")}
+        submitLabel={t("profile.continue")}
         redirectTo={redirectTo}
         onSubmit={completeProfileAction}
         requireTerms

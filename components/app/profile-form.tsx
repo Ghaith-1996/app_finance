@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { Loader2 } from "lucide-react";
+import { usePreferences } from "@/components/providers/preferences-provider";
 import { Panel } from "@/components/ui/panel";
 import { Button } from "@/components/ui/button";
 import type { ProfileFormValues } from "@/lib/profile/utils";
@@ -38,6 +39,7 @@ export function ProfileForm({
   successMessage,
   requireTerms,
 }: Props) {
+  const { t } = usePreferences();
   const [firstName, setFirstName] = useState(initialProfile.firstName);
   const [lastName, setLastName] = useState(initialProfile.lastName);
   const [handle, setHandle] = useState(initialProfile.handle);
@@ -49,8 +51,8 @@ export function ProfileForm({
   return (
     <Panel className="mx-auto w-full max-w-2xl space-y-6 p-8">
       <div className="space-y-2">
-        <h1 className="text-2xl font-semibold tracking-tight text-white">{title}</h1>
-        <p className="text-sm text-slate-400">{description}</p>
+        <h1 className="text-2xl font-semibold tracking-tight text-primary">{title}</h1>
+        <p className="text-sm text-secondary">{description}</p>
       </div>
 
       <form
@@ -80,40 +82,40 @@ export function ProfileForm({
       >
         <div className="grid gap-5 sm:grid-cols-2">
           <label className="space-y-2">
-            <span className="text-sm font-medium text-slate-300">First name</span>
+            <span className="text-sm font-medium text-primary">{t("profile.firstName")}</span>
             <input
               value={firstName}
               onChange={(e) => setFirstName(e.target.value)}
-              className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-slate-200 outline-none transition focus:border-brand/40"
-              placeholder="First name"
+              className="w-full rounded-xl border border-subtle bg-surface-soft px-4 py-3 text-sm text-primary outline-none transition focus:border-brand/40"
+              placeholder={t("profile.firstName")}
             />
           </label>
           <label className="space-y-2">
-            <span className="text-sm font-medium text-slate-300">Last name</span>
+            <span className="text-sm font-medium text-primary">{t("profile.lastName")}</span>
             <input
               value={lastName}
               onChange={(e) => setLastName(e.target.value)}
-              className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-slate-200 outline-none transition focus:border-brand/40"
-              placeholder="Last name"
+              className="w-full rounded-xl border border-subtle bg-surface-soft px-4 py-3 text-sm text-primary outline-none transition focus:border-brand/40"
+              placeholder={t("profile.lastName")}
             />
           </label>
         </div>
 
         <label className="space-y-2">
-          <span className="text-sm font-medium text-slate-300">Username</span>
-          <div className="flex items-center rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
-            <span className="text-sm text-slate-500">@</span>
+          <span className="text-sm font-medium text-primary">{t("profile.username")}</span>
+          <div className="flex items-center rounded-xl border border-subtle bg-surface-soft px-4 py-3">
+            <span className="text-sm text-secondary">@</span>
             <input
               value={handle}
               onChange={(e) => setHandle(e.target.value)}
-              className="w-full bg-transparent pl-2 text-sm text-slate-200 outline-none"
+              className="w-full bg-transparent pl-2 text-sm text-primary outline-none"
               placeholder="username"
               autoCapitalize="none"
               autoCorrect="off"
             />
           </div>
-          <p className="text-xs text-slate-500">
-            Use 3-20 lowercase letters, numbers, or underscores.
+          <p className="text-xs text-secondary">
+            {t("profile.usernameHint")}
           </p>
         </label>
 
@@ -126,17 +128,17 @@ export function ProfileForm({
               type="checkbox"
               checked={acceptedTerms}
               onChange={(e) => setAcceptedTerms(e.target.checked)}
-              className="mt-0.5 h-4 w-4 shrink-0 rounded border border-white/20 bg-white/[0.03] accent-brand"
+              className="mt-0.5 h-4 w-4 shrink-0 rounded border border-subtle bg-surface-soft accent-brand"
             />
-            <span className="text-sm text-slate-400">
-              I agree to the{" "}
+            <span className="text-sm text-secondary">
+              {t("profile.termsLabelStart")}{" "}
               <a
                 href="/terms"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="font-medium text-brand underline underline-offset-2 hover:text-brand-strong"
               >
-                Terms of Service
+                {t("profile.termsLink")}
               </a>
             </span>
           </label>

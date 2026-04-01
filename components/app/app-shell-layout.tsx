@@ -19,22 +19,12 @@ import {
   Upload,
 } from "lucide-react";
 
+import { ThemeToggle } from "@/components/preferences/theme-toggle";
+import { usePreferences } from "@/components/providers/preferences-provider";
 import { UserMenu } from "@/components/app/user-menu";
 import { cn } from "@/lib/utils";
 
 const STORAGE_KEY = "pulsefolio-sidebar-collapsed";
-
-const mainNav = [
-  { href: "/home", label: "Home", icon: Home },
-  { href: "/onboarding", label: "Onboarding", icon: Upload },
-  { href: "/analysis", label: "Analysis", icon: Activity },
-  { href: "/feed", label: "Feed", icon: Newspaper },
-] as const;
-
-const overviewSubItems = [
-  { href: "/portfolio/full", label: "Full portfolio" },
-  { href: "/watchlist", label: "Watchlist" },
-] as const;
 
 function isOverviewSection(pathname: string | null): boolean {
   if (!pathname) return false;
@@ -53,7 +43,7 @@ export function AppShellLayout({
   actions,
   mainClassName,
   backHref,
-  backLabel = "Back to portfolio",
+  backLabel,
   showOnboardingNav = true,
   showAdminLink = false,
 }: {
@@ -69,8 +59,21 @@ export function AppShellLayout({
   showAdminLink?: boolean;
 }) {
   const pathname = usePathname();
+  const { t } = usePreferences();
   const [collapsed, setCollapsed] = useState(false);
   const [overviewOpen, setOverviewOpen] = useState(true);
+
+  const mainNav = [
+    { href: "/home", label: t("shell.home"), icon: Home },
+    { href: "/onboarding", label: t("shell.onboarding"), icon: Upload },
+    { href: "/analysis", label: t("shell.analysis"), icon: Activity },
+    { href: "/feed", label: t("shell.feed"), icon: Newspaper },
+  ] as const;
+
+  const overviewSubItems = [
+    { href: "/portfolio/full", label: t("shell.fullPortfolio") },
+    { href: "/watchlist", label: t("shell.watchlist") },
+  ] as const;
 
   useEffect(() => {
     try {
@@ -106,8 +109,8 @@ export function AppShellLayout({
         <button
           type="button"
           onClick={() => persistCollapsed(false)}
-          className="fixed left-0 top-1/2 z-[60] hidden -translate-y-1/2 rounded-r-lg border border-l-0 border-white/[0.08] bg-surface px-1.5 py-4 text-slate-400 shadow-lg transition hover:bg-surface-raised hover:text-slate-200 lg:flex"
-          aria-label="Show navigation"
+          className="fixed left-0 top-1/2 z-[60] hidden -translate-y-1/2 rounded-r-lg border border-l-0 border-subtle bg-surface px-1.5 py-4 text-secondary shadow-[var(--surface-shadow)] transition hover:bg-surface-raised hover:text-primary lg:flex"
+          aria-label={t("shell.showNavigation")}
         >
           <PanelLeft className="h-5 w-5" />
         </button>
@@ -116,7 +119,7 @@ export function AppShellLayout({
       {/* Sidebar */}
       <aside
         className={cn(
-          "fixed left-0 top-0 z-50 hidden h-full flex-col border-r border-white/[0.06] bg-surface transition-[width,transform,opacity] duration-300 ease-out lg:flex",
+          "fixed left-0 top-0 z-50 hidden h-full flex-col border-r border-subtle bg-surface/95 backdrop-blur-xl transition-[width,transform,opacity] duration-300 ease-out lg:flex",
           collapsed ? "w-0 translate-x-[-4px] overflow-hidden border-0 opacity-0" : "w-[260px] opacity-100",
         )}
         aria-hidden={collapsed}
@@ -129,25 +132,25 @@ export function AppShellLayout({
               </span>
               <div className="min-w-0">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
-                  Observatory
+                  {t("shell.observatory")}
                 </p>
-                <p className="truncate text-sm font-semibold text-slate-200">Pulsefolio</p>
+                <p className="truncate text-sm font-semibold text-primary">Pulsefolio</p>
               </div>
             </Link>
             <button
               type="button"
               onClick={() => persistCollapsed(true)}
-              className="shrink-0 rounded-lg p-2 text-slate-500 transition hover:bg-white/5 hover:text-slate-300"
-              aria-label="Hide navigation"
-              title="Hide navigation"
+              className="shrink-0 rounded-lg p-2 text-secondary transition hover:bg-surface-soft hover:text-primary"
+              aria-label={t("shell.hideNavigation")}
+              title={t("shell.hideNavigation")}
             >
               <PanelLeftClose className="h-5 w-5" />
             </button>
           </div>
 
           <nav className="flex-1 space-y-1 overflow-y-auto px-3 pb-4">
-            <p className="mb-3 px-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-600">
-              Navigation
+            <p className="mb-3 px-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted">
+              {t("shell.navigation")}
             </p>
 
             {visibleMainNav.map((item) => {
@@ -161,7 +164,7 @@ export function AppShellLayout({
                     "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
                     isActive
                       ? "bg-brand/10 text-brand"
-                      : "text-slate-500 hover:bg-white/5 hover:text-slate-300",
+                      : "text-secondary hover:bg-surface-soft hover:text-primary",
                   )}
                 >
                   <Icon className="h-4 w-4 shrink-0" />
@@ -178,7 +181,7 @@ export function AppShellLayout({
               <div
                 className={cn(
                   "flex w-full items-center gap-1 rounded-xl px-2 py-1.5 transition-colors",
-                  isOverviewSection(pathname) ? "bg-brand/10" : "hover:bg-white/5",
+                  isOverviewSection(pathname) ? "bg-brand/10" : "hover:bg-surface-soft",
                 )}
               >
                 <Link
@@ -189,11 +192,11 @@ export function AppShellLayout({
                       ? "text-brand"
                       : isOverviewSection(pathname)
                         ? "text-brand/90"
-                        : "text-slate-500 hover:text-slate-300",
+                        : "text-secondary hover:text-primary",
                   )}
                 >
                   <OverviewIcon className="h-4 w-4 shrink-0" />
-                  <span className="truncate">Overview</span>
+                  <span className="truncate">{t("shell.overview")}</span>
                   {pathname === "/portfolio" ? (
                     <span className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-brand" />
                   ) : null}
@@ -201,9 +204,9 @@ export function AppShellLayout({
                 <button
                   type="button"
                   onClick={() => setOverviewOpen((o) => !o)}
-                  className="shrink-0 rounded-lg p-2 text-slate-500 transition hover:bg-white/5 hover:text-slate-300"
+                  className="shrink-0 rounded-lg p-2 text-secondary transition hover:bg-surface-soft hover:text-primary"
                   aria-expanded={overviewOpen}
-                  aria-label={overviewOpen ? "Collapse overview links" : "Expand overview links"}
+                  aria-label={overviewOpen ? t("shell.collapseOverviewLinks") : t("shell.expandOverviewLinks")}
                 >
                   {overviewOpen ? (
                     <ChevronDown className="h-4 w-4" aria-hidden />
@@ -213,7 +216,7 @@ export function AppShellLayout({
                 </button>
               </div>
               {overviewOpen ? (
-                <div className="ml-4 mt-1 space-y-0.5 border-l border-white/[0.06] pl-3">
+                <div className="ml-4 mt-1 space-y-0.5 border-l border-subtle pl-3">
                   {overviewSubItems.map((sub) => {
                     const isActive = pathname === sub.href;
                     return (
@@ -224,7 +227,7 @@ export function AppShellLayout({
                           "flex items-center gap-2 rounded-lg px-2 py-2 text-sm transition-colors",
                           isActive
                             ? "font-medium text-brand"
-                            : "text-slate-500 hover:text-slate-300",
+                            : "text-secondary hover:text-primary",
                         )}
                       >
                         {sub.href === "/watchlist" ? (
@@ -243,27 +246,30 @@ export function AppShellLayout({
             </div>
           </nav>
 
-          <div className="border-t border-white/[0.06] px-4 py-4">
+          <div className="border-t border-subtle px-4 py-4">
             <Link
               href="/"
-              className="mb-3 flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm text-slate-600 transition hover:bg-white/5 hover:text-slate-400"
+              className="mb-3 flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm text-muted transition hover:bg-surface-soft hover:text-secondary"
             >
               <Globe className="h-4 w-4" />
-              Landing Page
+              {t("shell.landingPage")}
             </Link>
+            <div className="mb-3 px-3">
+              <ThemeToggle className="w-full justify-center" />
+            </div>
             <UserMenu showAdminLink={showAdminLink} />
           </div>
         </div>
       </aside>
 
       {/* Mobile header */}
-      <header className="fixed left-0 right-0 top-0 z-40 flex flex-col border-b border-white/[0.06] bg-surface/95 backdrop-blur-xl lg:hidden">
+      <header className="fixed left-0 right-0 top-0 z-40 flex flex-col border-b border-subtle bg-surface/95 backdrop-blur-xl lg:hidden">
         <div className="flex items-center gap-3 px-4 py-3 sm:px-5">
           <Link href="/" className="flex items-center gap-2">
             <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-brand/15 text-xs font-bold text-brand">
               PF
             </span>
-            <span className="text-sm font-semibold text-slate-200">Pulsefolio</span>
+            <span className="text-sm font-semibold text-primary">Pulsefolio</span>
           </Link>
           <nav className="flex flex-1 items-center justify-end gap-1 overflow-x-auto pb-1">
             {visibleMainNav.map((item) => {
@@ -276,7 +282,7 @@ export function AppShellLayout({
                     "flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition",
                     pathname === item.href
                       ? "bg-brand/10 text-brand"
-                      : "text-slate-500 hover:text-slate-300",
+                      : "text-secondary hover:text-primary",
                   )}
                 >
                   <Icon className="h-3.5 w-3.5" />
@@ -290,20 +296,21 @@ export function AppShellLayout({
                 "flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition",
                 isOverviewSection(pathname)
                   ? "bg-brand/10 text-brand"
-                  : "text-slate-500 hover:text-slate-300",
+                  : "text-secondary hover:text-primary",
               )}
             >
               <LayoutDashboard className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Overview</span>
+              <span className="hidden sm:inline">{t("shell.overview")}</span>
             </Link>
+            <ThemeToggle compact />
           </nav>
         </div>
-        <div className="flex gap-4 overflow-x-auto whitespace-nowrap border-t border-white/[0.04] px-4 py-2 text-[11px] text-slate-500 sm:px-5">
+        <div className="flex gap-4 overflow-x-auto whitespace-nowrap border-t border-subtle px-4 py-2 text-[11px] text-secondary sm:px-5">
           <Link href="/portfolio/full" className={cn(pathname === "/portfolio/full" && "font-medium text-brand")}>
-            Full portfolio
+            {t("shell.fullPortfolio")}
           </Link>
           <Link href="/watchlist" className={cn(pathname === "/watchlist" && "font-medium text-brand")}>
-            Watchlist
+            {t("shell.watchlist")}
           </Link>
         </div>
       </header>
@@ -321,12 +328,12 @@ export function AppShellLayout({
             <div>
               <Link
                 href={backHref}
-                className="inline-flex items-center gap-2 text-sm font-medium text-slate-500 transition hover:text-slate-300"
+                className="inline-flex items-center gap-2 text-sm font-medium text-secondary transition hover:text-primary"
               >
-                <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/[0.06] bg-surface-raised text-slate-400 transition hover:border-white/10 hover:bg-surface-hover">
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-subtle bg-surface-raised text-secondary transition hover:border-strong hover:bg-surface-hover">
                   <ArrowLeft className="h-4 w-4" aria-hidden />
                 </span>
-                {backLabel}
+                {backLabel ?? t("shell.backToPortfolio")}
               </Link>
             </div>
           ) : null}
@@ -338,10 +345,10 @@ export function AppShellLayout({
                 </p>
               ) : null}
               <div className="space-y-2">
-                <h1 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+                <h1 className="text-3xl font-semibold tracking-tight text-primary sm:text-4xl">
                   {title}
                 </h1>
-                <p className="text-base leading-7 text-slate-500">{description}</p>
+                <p className="text-base leading-7 text-secondary">{description}</p>
               </div>
             </div>
             {actions ? <div className="flex flex-wrap gap-3">{actions}</div> : null}

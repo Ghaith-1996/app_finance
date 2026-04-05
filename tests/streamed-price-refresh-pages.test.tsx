@@ -97,6 +97,11 @@ describe("portfolio value surfaces render cached data and manual refresh control
     getCurrentUserBillingSummary.mockResolvedValue({
       allowedModelTiers: ["free", "premium", "ultimate"],
       defaultModelTier: "free",
+      aiQuotaLimit: 100,
+      aiQuotaWindow: "day",
+      aiQuotaUsed: 0,
+      aiQuotaRemaining: 100,
+      aiQuotaResetsAt: "2026-04-05T04:00:00.000Z",
     });
     refreshPortfolioPricingSnapshot.mockResolvedValue({
       status: "no_quotes",

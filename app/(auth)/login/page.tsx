@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
-import { LocaleSelect } from "@/components/preferences/locale-select";
 import { ThemeToggle } from "@/components/preferences/theme-toggle";
 import { usePreferences } from "@/components/providers/preferences-provider";
 import { buttonStyles } from "@/components/ui/button";
@@ -43,7 +42,6 @@ export default function LoginPage() {
     <div className="flex min-h-screen flex-col items-center justify-center bg-background px-6 py-12">
       <div className="w-full max-w-md space-y-8">
         <div className="flex justify-center gap-3">
-          <LocaleSelect />
           <ThemeToggle />
         </div>
 

@@ -2,8 +2,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 type Plan = "free" | "premium" | "ultimate";
 
-function createSupabaseMock(plan: Plan) {
+function createSupabaseMock(
+  plan: Plan,
+  options?: { status?: string; currentPeriodEnd?: string },
+) {
   const currentPeriodEnd = new Date(Date.now() + 86_400_000).toISOString();
+  const effectivePeriodEnd = options?.currentPeriodEnd ?? currentPeriodEnd;
   const subscriptionRows =
     plan !== "free"
       ? [
@@ -15,9 +19,9 @@ function createSupabaseMock(plan: Plan) {
             stripe_price_id: plan === "premium" ? "price_premium" : "price_ultimate",
             stripe_product_id: plan === "premium" ? "prod_premium" : "prod_ultimate",
             plan_key: plan,
-            status: "active",
+            status: options?.status ?? "active",
             current_period_start: new Date().toISOString(),
-            current_period_end: currentPeriodEnd,
+            current_period_end: effectivePeriodEnd,
             cancel_at_period_end: false,
             canceled_at: null,
             trial_start: null,
@@ -30,6 +34,28 @@ function createSupabaseMock(plan: Plan) {
       : [];
 
   return {
+    rpc(fn: string, args: Record<string, unknown>) {
+      if (fn === "get_ai_quota_status") {
+        const planKey = String(args.p_plan_key ?? plan);
+        const quotaLimit =
+          planKey === "premium" ? 5_000 : planKey === "ultimate" ? 20_000 : 100;
+        const quotaWindow = planKey === "free" ? "day" : "month";
+        return Promise.resolve({
+          data: [
+            {
+              quota_limit: quotaLimit,
+              quota_used: 0,
+              quota_remaining: quotaLimit,
+              quota_window: quotaWindow,
+              resets_at: currentPeriodEnd,
+            },
+          ],
+          error: null,
+        });
+      }
+
+      throw new Error(`unexpected rpc ${fn}`);
+    },
     from(table: string) {
       if (table === "billing_customers") {
         return {
@@ -94,6 +120,8 @@ describe("billing subscriptions", () => {
     const summary = await getBillingSummaryForUser("user-1");
 
     expect(summary.planKey).toBe("premium");
+    expect(summary.aiQuotaLimit).toBe(5_000);
+    expect(summary.aiQuotaWindow).toBe("month");
     expect(summary).not.toHaveProperty("stripeCustomerId");
     expect(summary).not.toHaveProperty("stripeSubscriptionId");
   });
@@ -118,5 +146,20 @@ describe("billing subscriptions", () => {
     expect(summary.allowedModelTiers).toEqual(["free", "premium", "ultimate"]);
     expect(summary.defaultModelTier).toBe("ultimate");
     expect(summary.hasAdminModelAccess).toBe(true);
+    expect(summary.aiQuotaLimit).toBe(100);
+    expect(summary.aiQuotaWindow).toBe("day");
+  });
+
+  it("falls back to free-tier quota metadata when a paid subscription is no longer entitled", async () => {
+    currentSupabase = createSupabaseMock("premium", {
+      status: "past_due",
+      currentPeriodEnd: new Date(Date.now() - 86_400_000).toISOString(),
+    });
+
+    const summary = await getBillingSummaryForUser("user-1");
+
+    expect(summary.planKey).toBe("free");
+    expect(summary.aiQuotaLimit).toBe(100);
+    expect(summary.aiQuotaWindow).toBe("day");
   });
 });

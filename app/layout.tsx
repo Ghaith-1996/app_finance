@@ -1,12 +1,11 @@
 import type { Metadata } from "next";
-import { cookies, headers } from "next/headers";
+import { cookies } from "next/headers";
 
 import {
   PreferenceScript,
   PreferencesProvider,
 } from "@/components/providers/preferences-provider";
-import { detectLocaleFromLanguageTag } from "@/lib/preferences";
-import { isLocale, isTheme, LOCALE_COOKIE_KEY, THEME_COOKIE_KEY } from "@/lib/preferences";
+import { isTheme, THEME_COOKIE_KEY } from "@/lib/preferences";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -21,14 +20,9 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const cookieStore = await cookies();
-  const headerStore = await headers();
   const themeCookie = cookieStore.get(THEME_COOKIE_KEY)?.value;
-  const localeCookie = cookieStore.get(LOCALE_COOKIE_KEY)?.value;
-
   const initialTheme = isTheme(themeCookie) ? themeCookie : "dark";
-  const initialLocale = isLocale(localeCookie)
-    ? localeCookie
-    : detectLocaleFromLanguageTag(headerStore.get("accept-language"));
+  const initialLocale = "en";
 
   return (
     <html
@@ -48,3 +42,5 @@ export default async function RootLayout({
     </html>
   );
 }
+
+

@@ -49,7 +49,7 @@ describe("PreferencesProvider", () => {
     });
   });
 
-  it("falls back to browser preferences and applies them to the document", async () => {
+  it("forces english locale and applies theme", async () => {
     render(
       <PreferencesProvider initialTheme="dark" initialLocale="en">
         <PreferenceProbe />
@@ -57,16 +57,16 @@ describe("PreferencesProvider", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId("locale")).toHaveTextContent("fr");
+      expect(screen.getByTestId("locale")).toHaveTextContent("en");
       expect(screen.getByTestId("theme")).toHaveTextContent("dark");
     });
 
-    expect(document.documentElement.lang).toBe("fr");
+    expect(document.documentElement.lang).toBe("en");
     expect(document.documentElement.dataset.theme).toBe("dark");
-    expect(screen.getByTestId("settings-label")).toHaveTextContent("Paramètres");
+    expect(screen.getByTestId("settings-label")).toHaveTextContent("Settings");
   });
 
-  it("updates theme and locale and persists the latest values", async () => {
+  it("updates theme and keeps locale pinned to english", async () => {
     render(
       <PreferencesProvider initialTheme="dark" initialLocale="en">
         <PreferenceProbe />
@@ -84,4 +84,3 @@ describe("PreferencesProvider", () => {
     expect(window.localStorage.getItem("pulsefolio-locale")).toBe("en");
   });
 });
-

@@ -2,7 +2,6 @@
 
 import { Panel } from "@/components/ui/panel";
 import { usePreferences } from "@/components/providers/preferences-provider";
-import { LocaleSelect } from "@/components/preferences/locale-select";
 import type { Theme } from "@/lib/preferences";
 import { cn } from "@/lib/utils";
 
@@ -14,11 +13,11 @@ export function PreferencesPanel() {
   return (
     <Panel className="space-y-6">
       <div className="space-y-2">
-        <h2 className="text-2xl font-semibold tracking-tight text-primary">{t("preferences.title")}</h2>
-        <p className="text-sm text-secondary">{t("preferences.description")}</p>
+        <h2 className="text-2xl font-semibold tracking-tight text-primary">Theme preferences</h2>
+        <p className="text-sm text-secondary">Choose how the app looks on this device.</p>
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="grid gap-5">
         <div className="space-y-3 rounded-2xl border border-subtle bg-surface-soft px-5 py-4">
           <div className="space-y-1">
             <p className="text-sm font-semibold text-primary">{t("preferences.themeLabel")}</p>
@@ -40,16 +39,6 @@ export function PreferencesPanel() {
                 {option === "light" ? t("common.light") : t("common.dark")}
               </button>
             ))}
-          </div>
-        </div>
-
-        <div className="space-y-3 rounded-2xl border border-subtle bg-surface-soft px-5 py-4">
-          <div className="space-y-1">
-            <p className="text-sm font-semibold text-primary">{t("preferences.languageLabel")}</p>
-            <p className="text-sm text-secondary">{t("preferences.languageDescription")}</p>
-          </div>
-          <div>
-            <LocaleSelect className="w-full justify-between" />
           </div>
         </div>
       </div>

@@ -12,8 +12,6 @@ import {
 
 import { createTranslator } from "@/lib/i18n";
 import {
-  detectLocaleFromLanguageTag,
-  isLocale,
   isTheme,
   LOCALE_COOKIE_KEY,
   LOCALE_STORAGE_KEY,
@@ -53,7 +51,7 @@ function applyDocumentPreferences(theme: Theme, locale: Locale) {
 
 export function PreferenceScript({
   initialTheme,
-  initialLocale,
+  initialLocale: _initialLocale,
 }: {
   initialTheme: Theme;
   initialLocale: Locale;
@@ -65,25 +63,23 @@ export function PreferenceScript({
       var themeCookie = ${JSON.stringify(THEME_COOKIE_KEY)};
       var localeCookie = ${JSON.stringify(LOCALE_COOKIE_KEY)};
       var fallbackTheme = ${JSON.stringify(initialTheme)};
-      var fallbackLocale = ${JSON.stringify(initialLocale)};
       var rawTheme = null;
-      var rawLocale = null;
       try {
         rawTheme = window.localStorage.getItem(themeKey);
-        rawLocale = window.localStorage.getItem(localeKey);
       } catch (_) {}
       var theme = rawTheme === "light" || rawTheme === "dark"
         ? rawTheme
         : (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : fallbackTheme === "light" ? "light" : "dark");
-      var locale = rawLocale === "en" || rawLocale === "fr"
-        ? rawLocale
-        : ((navigator.language || fallbackLocale).toLowerCase().indexOf("fr") === 0 ? "fr" : fallbackLocale === "fr" ? "fr" : "en");
+      var locale = "en";
       var root = document.documentElement;
       root.dataset.theme = theme;
       root.lang = locale;
       root.style.colorScheme = theme;
       document.cookie = themeCookie + "=" + theme + "; path=/; max-age=${PREFERENCE_COOKIE_MAX_AGE}; samesite=lax";
       document.cookie = localeCookie + "=" + locale + "; path=/; max-age=${PREFERENCE_COOKIE_MAX_AGE}; samesite=lax";
+      try {
+        window.localStorage.setItem(localeKey, locale);
+      } catch (_) {}
     })();
   `;
 
@@ -93,23 +89,20 @@ export function PreferenceScript({
 export function PreferencesProvider({
   children,
   initialTheme,
-  initialLocale,
+  initialLocale: _initialLocale,
 }: {
   children: ReactNode;
   initialTheme: Theme;
   initialLocale: Locale;
 }) {
   const [theme, setThemeState] = useState<Theme>(initialTheme);
-  const [locale, setLocaleState] = useState<Locale>(initialLocale);
+  const [locale, setLocaleState] = useState<Locale>("en");
 
   useEffect(() => {
     try {
       const storedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
-      const storedLocale = window.localStorage.getItem(LOCALE_STORAGE_KEY);
       const nextTheme = isTheme(storedTheme) ? storedTheme : resolveBrowserTheme();
-      const nextLocale = isLocale(storedLocale)
-        ? storedLocale
-        : detectLocaleFromLanguageTag(window.navigator.language);
+      const nextLocale: Locale = "en";
 
       setThemeState(nextTheme);
       setLocaleState(nextLocale);
@@ -137,7 +130,8 @@ export function PreferencesProvider({
     writeCookie(THEME_COOKIE_KEY, nextTheme);
   }, []);
 
-  const setLocale = useCallback((nextLocale: Locale) => {
+  const setLocale = useCallback((_nextLocale: Locale) => {
+    const nextLocale: Locale = "en";
     setLocaleState(nextLocale);
     try {
       window.localStorage.setItem(LOCALE_STORAGE_KEY, nextLocale);

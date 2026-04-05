@@ -23,6 +23,7 @@ const PAID_PLANS: PaidPlanCard[] = [
     headline: "Free + premium model access",
     features: [
       "Access to free and premium model tiers",
+      "5,000 AI requests per month",
       "Premium responses routed to Mistral",
       "Billing changes managed in Stripe's customer portal",
     ],
@@ -32,6 +33,7 @@ const PAID_PLANS: PaidPlanCard[] = [
     headline: "All models, including ultimate",
     features: [
       "Access to free, premium, and ultimate model tiers",
+      "20,000 AI requests per month",
       "Ultimate responses routed to Azure",
       "Best fit when you want the top reasoning tier everywhere in the app",
     ],
@@ -138,7 +140,7 @@ export default async function PricingPage({
               </p>
               <h2 className="text-3xl font-semibold tracking-tight text-white">$0</h2>
               <p className="text-sm leading-7 text-slate-400">
-                Access to the free model tier only.
+                Access to the free model tier only, with 100 AI requests per day.
               </p>
             </div>
 

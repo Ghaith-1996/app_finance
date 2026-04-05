@@ -10,6 +10,11 @@ import {
   type PlanKey,
 } from "@/lib/billing/plans";
 import {
+  getDefaultAIQuotaSummary,
+  loadAIQuotaSummary,
+  type AIQuotaSummary,
+} from "@/lib/billing/ai-usage";
+import {
   loadBillingCustomerByUserId,
   loadSubscriptionsForUser,
   type SubscriptionRow,
@@ -29,7 +34,7 @@ export type BillingSummary = {
   hasPaidAccess: boolean;
   hasUsedTrial: boolean;
   hasAdminModelAccess: boolean;
-};
+} & AIQuotaSummary;
 
 export type BillingState = BillingSummary & {
   stripeCustomerId: string | null;
@@ -99,6 +104,7 @@ export function buildBillingState(input: {
     hasPaidAccess,
     hasUsedTrial: input.rows.some((row) => !!row.trial_end),
     hasAdminModelAccess: false,
+    ...getDefaultAIQuotaSummary(planKey),
   };
 }
 
@@ -133,6 +139,11 @@ function toBillingSummary(state: BillingState): BillingSummary {
     hasPaidAccess: state.hasPaidAccess,
     hasUsedTrial: state.hasUsedTrial,
     hasAdminModelAccess: state.hasAdminModelAccess,
+    aiQuotaLimit: state.aiQuotaLimit,
+    aiQuotaWindow: state.aiQuotaWindow,
+    aiQuotaUsed: state.aiQuotaUsed,
+    aiQuotaRemaining: state.aiQuotaRemaining,
+    aiQuotaResetsAt: state.aiQuotaResetsAt,
   };
 }
 
@@ -146,11 +157,17 @@ export async function getBillingStateForUser(
     loadSubscriptionsForUser(serviceSupabase, userId),
   ]);
 
+  const baseState = buildBillingState({
+    customerId: customer?.stripe_customer_id ?? null,
+    rows,
+  });
+  const quotaSummary = await loadAIQuotaSummary(serviceSupabase, userId, baseState.planKey);
+
   return applyAdminModelAccess(
-    buildBillingState({
-      customerId: customer?.stripe_customer_id ?? null,
-      rows,
-    }),
+    {
+      ...baseState,
+      ...quotaSummary,
+    },
     { id: userId, email: userEmail ?? null },
   );
 }

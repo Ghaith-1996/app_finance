@@ -158,7 +158,7 @@ export async function createPost(body: string, turnstileToken?: string): Promise
   if (!user) return { ok: false, error: "Unauthorized" };
 
   // Per-user rate limiting
-  const rateCheck = communityPostLimiter.check(user.id);
+  const rateCheck = await communityPostLimiter.check(user.id);
   if (!rateCheck.allowed) return { ok: false, error: "Too many posts. Please wait a moment." };
 
   const trimmed = body.trim();
@@ -253,7 +253,7 @@ export async function createComment(postId: string, body: string, turnstileToken
   if (!user) return { ok: false, error: "Unauthorized" };
 
   // Per-user rate limiting
-  const rateCheck = communityCommentLimiter.check(user.id);
+  const rateCheck = await communityCommentLimiter.check(user.id);
   if (!rateCheck.allowed) return { ok: false, error: "Too many comments. Please wait a moment." };
 
   const trimmed = body.trim();

@@ -226,6 +226,12 @@ export function PortfolioCopilotPanel({
               {errorCode === "turnstile_failed" && (
                 <p className="text-xs text-slate-500">Your verification expired. Wait for it to refresh, then re-send.</p>
               )}
+              {errorCode === "rate_limited" && (
+                <p className="text-xs text-slate-500">You hit the minute-level safety limit. Wait a moment, then try again.</p>
+              )}
+              {errorCode === "quota_exceeded" && (
+                <p className="text-xs text-slate-500">You have used this plan's AI allowance for the current reset window.</p>
+              )}
               {errorCode === "plan_upgrade_required" && (
                 <p className="text-xs text-slate-500">Upgrade your plan in Billing to unlock that model tier.</p>
               )}

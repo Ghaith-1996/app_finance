@@ -15,6 +15,10 @@ function formatBillingDate(value: string | null): string {
   }).format(new Date(value));
 }
 
+function formatQuotaWindow(window: BillingSummary["aiQuotaWindow"]): string {
+  return window === "day" ? "daily" : "monthly";
+}
+
 export function BillingSettingsPanel({
   billingSummary,
 }: {
@@ -40,7 +44,7 @@ export function BillingSettingsPanel({
             {PLAN_LABELS[billingSummary.planKey]} plan
           </h2>
           <p className="max-w-2xl text-sm leading-7 text-slate-400">
-            Model access: {allowedTiers.join(", ")}.
+            Model access: {allowedTiers.join(", ")}. AI usage: {billingSummary.aiQuotaUsed.toLocaleString()} / {billingSummary.aiQuotaLimit.toLocaleString()} {formatQuotaWindow(billingSummary.aiQuotaWindow)} requests.
           </p>
         </div>
         <Badge tone={billingSummary.hasPaidAccess ? "brand" : "neutral"}>
@@ -54,7 +58,7 @@ export function BillingSettingsPanel({
         </Badge>
       ) : null}
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-4">
         <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-4">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
             Current plan
@@ -77,6 +81,17 @@ export function BillingSettingsPanel({
           </p>
           <p className="mt-2 text-sm leading-7 text-slate-400">
             Stripe Checkout starts new subscriptions. Existing paid subscriptions are updated in the billing portal.
+          </p>
+        </div>
+        <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-4">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+            AI quota
+          </p>
+          <p className="mt-2 text-lg font-semibold text-white">
+            {billingSummary.aiQuotaRemaining.toLocaleString()} left
+          </p>
+          <p className="mt-1 text-xs text-slate-500">
+            Resets {formatBillingDate(billingSummary.aiQuotaResetsAt)}
           </p>
         </div>
       </div>

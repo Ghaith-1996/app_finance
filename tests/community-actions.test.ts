@@ -1,6 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const searchSymbols = vi.fn();
+const { searchSymbols, mockCommunityPostCheck } = vi.hoisted(() => ({
+  searchSymbols: vi.fn(),
+  mockCommunityPostCheck: vi.fn().mockResolvedValue({
+    allowed: true,
+    remaining: 9,
+    resetsAt: "2026-04-04T12:01:00.000Z",
+  }),
+}));
+const { mockVerifyTurnstileToken } = vi.hoisted(() => ({
+  mockVerifyTurnstileToken: vi.fn().mockResolvedValue({ success: true }),
+}));
 
 vi.mock("@/lib/services/finnhub", () => ({
   FinnhubError: class FinnhubError extends Error {
@@ -14,6 +24,23 @@ vi.mock("@/lib/services/finnhub", () => ({
     }
   },
   searchSymbols,
+}));
+
+vi.mock("@/lib/security/turnstile", () => ({
+  verifyTurnstileToken: (...args: unknown[]) => mockVerifyTurnstileToken(...args),
+}));
+
+vi.mock("@/lib/security/rate-limit", () => ({
+  communityPostLimiter: {
+    check: (...args: unknown[]) => mockCommunityPostCheck(...args),
+  },
+  communityCommentLimiter: {
+    check: vi.fn().mockResolvedValue({
+      allowed: true,
+      remaining: 19,
+      resetsAt: "2026-04-04T12:01:00.000Z",
+    }),
+  },
 }));
 
 const insertPost = vi.fn();
@@ -57,6 +84,12 @@ import { createPost } from "@/lib/actions/community";
 describe("community post validation", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockCommunityPostCheck.mockResolvedValue({
+      allowed: true,
+      remaining: 9,
+      resetsAt: "2026-04-04T12:01:00.000Z",
+    });
+    mockVerifyTurnstileToken.mockResolvedValue({ success: true });
 
     authGetUser.mockResolvedValue({
       data: {

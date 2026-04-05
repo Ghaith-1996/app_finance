@@ -1,100 +1,148 @@
-/**
- * In-memory sliding-window rate limiter.
- *
- * Suitable for single-instance deployments (e.g. Vercel serverless per
- * isolate).  For horizontal scaling, replace the backing store with
- * Upstash Redis or similar.
- *
- * Usage:
- *   const limiter = createRateLimiter({ windowMs: 60_000, maxRequests: 20 });
- *   const check = limiter.check(userId);
- *   if (!check.allowed) return new Response("Too many requests", { status: 429 });
- */
+import "server-only";
 
-interface RateLimiterOptions {
-  /** Window length in milliseconds. */
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+import { createServiceClient } from "@/lib/supabase/service";
+
+export interface RateLimiterOptions {
+  limiterKey: string;
   windowMs: number;
-  /** Maximum requests per window per key. */
   maxRequests: number;
+  consume?: (input: {
+    key: string;
+    limiterKey: string;
+    windowMs: number;
+    maxRequests: number;
+  }) => Promise<RateLimitResult>;
 }
 
-interface RateLimitResult {
+export interface RateLimitResult {
   allowed: boolean;
-  /** Milliseconds until the current window resets (present when blocked). */
   retryAfterMs?: number;
-  /** Remaining requests in the current window. */
   remaining: number;
+  resetsAt: string;
 }
 
-interface WindowEntry {
-  count: number;
-  windowStart: number;
+type RateLimitRpcRow = {
+  allowed?: boolean | null;
+  remaining?: number | string | null;
+  retry_after_ms?: number | string | null;
+  resets_at?: string | null;
+};
+
+type ServiceClient = ReturnType<typeof createServiceClient>;
+type RpcCapableClient = Pick<SupabaseClient, "rpc"> | ServiceClient;
+
+function getRpcRow<T>(data: T[] | T | null): T | null {
+  if (!data) return null;
+  return Array.isArray(data) ? (data[0] ?? null) : data;
 }
 
-const CLEANUP_INTERVAL_MS = 60_000;
+function readNumber(value: number | string | null | undefined, fallback: number): number {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return fallback;
+}
+
+function buildFallbackResult(windowMs: number, maxRequests: number): RateLimitResult {
+  return {
+    allowed: true,
+    remaining: Math.max(0, maxRequests - 1),
+    retryAfterMs: undefined,
+    resetsAt: new Date(Date.now() + windowMs).toISOString(),
+  };
+}
+
+function normalizeRateLimitResult(
+  row: RateLimitRpcRow | null,
+  windowMs: number,
+  maxRequests: number,
+): RateLimitResult {
+  const fallback = buildFallbackResult(windowMs, maxRequests);
+  return {
+    allowed: row?.allowed !== false,
+    remaining: readNumber(row?.remaining, fallback.remaining),
+    retryAfterMs: row?.retry_after_ms == null ? undefined : readNumber(row.retry_after_ms, 0),
+    resetsAt: row?.resets_at?.trim() || fallback.resetsAt,
+  };
+}
+
+export async function consumeRateLimit(
+  supabase: RpcCapableClient,
+  input: {
+    key: string;
+    limiterKey: string;
+    windowMs: number;
+    maxRequests: number;
+  },
+): Promise<RateLimitResult> {
+  const { data, error } = await supabase.rpc("consume_rate_limit", {
+    p_user_id: input.key,
+    p_limiter_key: input.limiterKey,
+    p_window_seconds: Math.max(1, Math.ceil(input.windowMs / 1000)),
+    p_max_requests: input.maxRequests,
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return normalizeRateLimitResult(
+    getRpcRow<RateLimitRpcRow>(data),
+    input.windowMs,
+    input.maxRequests,
+  );
+}
 
 export function createRateLimiter(opts: RateLimiterOptions) {
-  const { windowMs, maxRequests } = opts;
-  const store = new Map<string, WindowEntry>();
-  let lastCleanup = Date.now();
+  const consumer =
+    opts.consume ??
+    (async (input: {
+      key: string;
+      limiterKey: string;
+      windowMs: number;
+      maxRequests: number;
+    }) => consumeRateLimit(createServiceClient(), input));
 
-  function cleanup() {
-    const now = Date.now();
-    if (now - lastCleanup < CLEANUP_INTERVAL_MS) return;
-    lastCleanup = now;
-    for (const [key, entry] of store) {
-      if (now - entry.windowStart >= windowMs) {
-        store.delete(key);
-      }
-    }
-  }
-
-  function check(key: string): RateLimitResult {
-    cleanup();
-    const now = Date.now();
-    const entry = store.get(key);
-
-    if (!entry || now - entry.windowStart >= windowMs) {
-      store.set(key, { count: 1, windowStart: now });
-      return { allowed: true, remaining: maxRequests - 1 };
-    }
-
-    if (entry.count >= maxRequests) {
-      const retryAfterMs = windowMs - (now - entry.windowStart);
-      return { allowed: false, retryAfterMs, remaining: 0 };
-    }
-
-    entry.count++;
-    return { allowed: true, remaining: maxRequests - entry.count };
-  }
-
-  return { check };
+  return {
+    check(key: string): Promise<RateLimitResult> {
+      return consumer({
+        key,
+        limiterKey: opts.limiterKey,
+        windowMs: opts.windowMs,
+        maxRequests: opts.maxRequests,
+      });
+    },
+  };
 }
 
-// ---------------------------------------------------------------------------
-// Pre-configured limiters scoped to specific surfaces
-// ---------------------------------------------------------------------------
-
-/** AI chat endpoints: 20 requests per 60 seconds per user */
-export const aiChatLimiter = createRateLimiter({
+/** AI endpoints: 10 requests per 60 seconds per user */
+export const aiBurstLimiter = createRateLimiter({
+  limiterKey: "ai_shared",
   windowMs: 60_000,
-  maxRequests: 20,
+  maxRequests: 10,
 });
 
 /** Analysis run: 5 requests per 60 seconds per user */
 export const analysisRunLimiter = createRateLimiter({
+  limiterKey: "analysis_run",
   windowMs: 60_000,
   maxRequests: 5,
 });
 
 /** Community posts: 10 per 60 seconds per user */
 export const communityPostLimiter = createRateLimiter({
+  limiterKey: "community_post",
   windowMs: 60_000,
   maxRequests: 10,
 });
 
 /** Community comments: 20 per 60 seconds per user */
 export const communityCommentLimiter = createRateLimiter({
+  limiterKey: "community_comment",
   windowMs: 60_000,
   maxRequests: 20,
 });

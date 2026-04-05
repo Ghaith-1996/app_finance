@@ -347,6 +347,12 @@ export function ArticleChatPanel({
                 {errorCode === "provider_bad_response" && (
                   <p className="text-xs text-slate-500">Try rephrasing your question or try again shortly.</p>
                 )}
+                {errorCode === "rate_limited" && (
+                  <p className="text-xs text-slate-500">You hit the minute-level safety limit. Wait a moment, then try again.</p>
+                )}
+                {errorCode === "quota_exceeded" && (
+                  <p className="text-xs text-slate-500">You have used this plan's AI allowance for the current reset window.</p>
+                )}
                 {errorCode === "plan_upgrade_required" && (
                   <p className="text-xs text-slate-500">Upgrade your plan in Billing to unlock that model tier.</p>
                 )}

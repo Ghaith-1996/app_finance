@@ -21,7 +21,7 @@ export async function POST(request: Request) {
   }
 
   // Per-user rate limiting
-  const rateCheck = analysisRunLimiter.check(user.id);
+  const rateCheck = await analysisRunLimiter.check(user.id);
   if (!rateCheck.allowed) {
     return new Response(
       JSON.stringify({ error: "Too many requests. Please wait a moment.", code: "rate_limited" }),

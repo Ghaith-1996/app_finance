@@ -15,6 +15,17 @@ vi.mock("@/lib/security/turnstile", () => ({
 // ---------------------------------------------------------------------------
 const mockAnswerArticleQuestion = vi.fn();
 const mockAnswerPortfolioQuestion = vi.fn();
+const mockAssertUserCanUseAI = vi.fn().mockResolvedValue(undefined);
+const mockCommunityPostCheck = vi.fn().mockResolvedValue({
+  allowed: true,
+  remaining: 9,
+  resetsAt: "2026-04-04T12:01:00.000Z",
+});
+const mockCommunityCommentCheck = vi.fn().mockResolvedValue({
+  allowed: true,
+  remaining: 19,
+  resetsAt: "2026-04-04T12:01:00.000Z",
+});
 vi.mock("@/lib/services/ai", async () => {
   const actual = await vi.importActual<typeof import("@/lib/services/ai")>(
     "@/lib/services/ai",
@@ -39,6 +50,25 @@ vi.mock("@/lib/services/portfolio", () => ({
     coverage: "Moderate",
     primaryGoal: "Growth",
   }),
+}));
+
+vi.mock("@/lib/security/ai-access", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/security/ai-access")>(
+    "@/lib/security/ai-access",
+  );
+  return {
+    ...actual,
+    assertUserCanUseAI: (...args: unknown[]) => mockAssertUserCanUseAI(...args),
+  };
+});
+
+vi.mock("@/lib/security/rate-limit", () => ({
+  communityPostLimiter: {
+    check: (...args: unknown[]) => mockCommunityPostCheck(...args),
+  },
+  communityCommentLimiter: {
+    check: (...args: unknown[]) => mockCommunityCommentCheck(...args),
+  },
 }));
 
 const mockSupabase = {
@@ -95,6 +125,17 @@ describe("POST /api/article-chat — Turnstile gate", () => {
     vi.clearAllMocks();
     mockAnswerArticleQuestion.mockReset();
     mockAnswerPortfolioQuestion.mockReset();
+    mockAssertUserCanUseAI.mockResolvedValue(undefined);
+    mockCommunityPostCheck.mockResolvedValue({
+      allowed: true,
+      remaining: 9,
+      resetsAt: "2026-04-04T12:01:00.000Z",
+    });
+    mockCommunityCommentCheck.mockResolvedValue({
+      allowed: true,
+      remaining: 19,
+      resetsAt: "2026-04-04T12:01:00.000Z",
+    });
   });
 
   async function callRoute(body: Record<string, unknown>) {
@@ -163,6 +204,7 @@ describe("POST /api/portfolio-copilot — Turnstile gate", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockAnswerPortfolioQuestion.mockReset();
+    mockAssertUserCanUseAI.mockResolvedValue(undefined);
   });
 
   async function callRoute(body: Record<string, unknown>) {
@@ -209,6 +251,11 @@ describe("POST /api/portfolio-copilot — Turnstile gate", () => {
 describe("createPost — Turnstile gate", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockCommunityPostCheck.mockResolvedValue({
+      allowed: true,
+      remaining: 9,
+      resetsAt: "2026-04-04T12:01:00.000Z",
+    });
   });
 
   it("rejects post creation when Turnstile fails", async () => {
@@ -276,6 +323,11 @@ describe("createPost — Turnstile gate", () => {
 describe("createComment — Turnstile gate", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockCommunityCommentCheck.mockResolvedValue({
+      allowed: true,
+      remaining: 19,
+      resetsAt: "2026-04-04T12:01:00.000Z",
+    });
   });
 
   it("rejects comment creation when Turnstile fails", async () => {

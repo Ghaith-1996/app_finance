@@ -4,7 +4,6 @@ import Link from "next/link";
 
 import { ArrowRight } from "lucide-react";
 
-import { LocaleSelect } from "@/components/preferences/locale-select";
 import { ThemeToggle } from "@/components/preferences/theme-toggle";
 import { usePreferences } from "@/components/providers/preferences-provider";
 import { buttonStyles } from "@/components/ui/button";
@@ -39,7 +38,6 @@ export function SiteHeader() {
           </a>
         </nav>
         <div className="flex items-center gap-3">
-          <LocaleSelect compact className="hidden lg:inline-flex" />
           <ThemeToggle compact className="hidden sm:inline-flex" />
           <Link
             href="/feed"

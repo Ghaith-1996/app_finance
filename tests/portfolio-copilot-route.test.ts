@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { BillingAccessError } from "@/lib/billing/subscriptions";
+import { AIUsageAccessError } from "@/lib/security/ai-access";
 
 vi.mock("@/lib/security/turnstile", () => ({
   verifyTurnstileToken: vi.fn().mockResolvedValue({ success: true }),
@@ -6,6 +8,7 @@ vi.mock("@/lib/security/turnstile", () => ({
 }));
 
 const mockAnswerPortfolioQuestion = vi.fn();
+const mockAssertUserCanUseAI = vi.fn();
 const mockComputePortfolioOverview = vi.fn().mockResolvedValue({
   totalValue: 85000,
   dayChange: 920,
@@ -22,6 +25,16 @@ const mockGetAIProviderById = vi.fn(
 vi.mock("@/lib/services/portfolio", () => ({
   computePortfolioOverview: (...args: unknown[]) => mockComputePortfolioOverview(...args),
 }));
+
+vi.mock("@/lib/security/ai-access", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/security/ai-access")>(
+    "@/lib/security/ai-access",
+  );
+  return {
+    ...actual,
+    assertUserCanUseAI: (...args: unknown[]) => mockAssertUserCanUseAI(...args),
+  };
+});
 
 vi.mock("@/lib/services/ai", async () => {
   const actual = await vi.importActual<typeof import("@/lib/services/ai")>(
@@ -174,6 +187,8 @@ import { POST } from "@/app/api/portfolio-copilot/route";
 describe("POST /api/portfolio-copilot", () => {
   beforeEach(() => {
     mockAnswerPortfolioQuestion.mockReset();
+    mockAssertUserCanUseAI.mockReset();
+    mockAssertUserCanUseAI.mockResolvedValue(undefined);
     mockComputePortfolioOverview.mockClear();
     mockGetAIProviderById.mockClear();
     currentSupabase = createSupabaseMock({});
@@ -199,6 +214,14 @@ describe("POST /api/portfolio-copilot", () => {
   });
 
   it("rejects premium requests for free users", async () => {
+    mockAssertUserCanUseAI.mockRejectedValue(
+      new BillingAccessError({
+        currentPlan: "free",
+        requiredPlan: "premium",
+        requestedTier: "premium",
+      }),
+    );
+
     const req = new Request("http://localhost/api/portfolio-copilot", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -218,7 +241,6 @@ describe("POST /api/portfolio-copilot", () => {
   });
 
   it("uses the premium provider for premium users", async () => {
-    currentSupabase = createSupabaseMock({ currentPlan: "premium" });
     mockAnswerPortfolioQuestion.mockResolvedValue("Mistral answer");
 
     const req = new Request("http://localhost/api/portfolio-copilot", {
@@ -237,7 +259,6 @@ describe("POST /api/portfolio-copilot", () => {
   });
 
   it("uses the ultimate provider for ultimate users", async () => {
-    currentSupabase = createSupabaseMock({ currentPlan: "ultimate" });
     mockAnswerPortfolioQuestion.mockResolvedValue("Azure answer");
 
     const req = new Request("http://localhost/api/portfolio-copilot", {
@@ -256,7 +277,6 @@ describe("POST /api/portfolio-copilot", () => {
   });
 
   it("allows admin users to request the ultimate provider without a paid plan", async () => {
-    process.env.ADMIN_USER_IDS = "user-1";
     mockAnswerPortfolioQuestion.mockResolvedValue("Admin Azure answer");
 
     const req = new Request("http://localhost/api/portfolio-copilot", {
@@ -272,5 +292,67 @@ describe("POST /api/portfolio-copilot", () => {
     const res = await POST(req);
     expect(res.status).toBe(200);
     expect(mockGetAIProviderById).toHaveBeenCalledWith("azure");
+  });
+
+  it("returns 429 with retry metadata when the durable burst limit is hit", async () => {
+    mockAssertUserCanUseAI.mockRejectedValue(
+      new AIUsageAccessError({
+        code: "rate_limited",
+        message: "Too many requests. Please wait a moment.",
+        retryAfterMs: 10_000,
+        resetsAt: "2026-04-04T12:01:00.000Z",
+      }),
+    );
+
+    const req = new Request("http://localhost/api/portfolio-copilot", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        portfolioId: "p1",
+        message: "What should I watch?",
+      }),
+    });
+
+    const res = await POST(req);
+    const body = (await res.json()) as { code?: string; retryAfterMs?: number };
+    expect(res.status).toBe(429);
+    expect(body.code).toBe("rate_limited");
+    expect(body.retryAfterMs).toBe(10_000);
+  });
+
+  it("returns 429 with quota metadata when the durable quota is exhausted", async () => {
+    mockAssertUserCanUseAI.mockRejectedValue(
+      new AIUsageAccessError({
+        code: "quota_exceeded",
+        message: "You have reached your AI usage limit for the current billing window.",
+        quotaWindow: "month",
+        quotaLimit: 5_000,
+        quotaUsed: 5_000,
+        resetsAt: "2026-05-01T04:00:00.000Z",
+      }),
+    );
+
+    const req = new Request("http://localhost/api/portfolio-copilot", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        portfolioId: "p1",
+        message: "What should I watch?",
+        modelTier: "premium",
+      }),
+    });
+
+    const res = await POST(req);
+    const body = (await res.json()) as {
+      code?: string;
+      quotaWindow?: string;
+      quotaLimit?: number;
+      quotaUsed?: number;
+    };
+    expect(res.status).toBe(429);
+    expect(body.code).toBe("quota_exceeded");
+    expect(body.quotaWindow).toBe("month");
+    expect(body.quotaLimit).toBe(5_000);
+    expect(body.quotaUsed).toBe(5_000);
   });
 });

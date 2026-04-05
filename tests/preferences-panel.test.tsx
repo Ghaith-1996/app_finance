@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -21,25 +21,16 @@ describe("PreferencesPanel", () => {
     document.documentElement.dataset.theme = "dark";
   });
 
-  it("lets the user change theme and locale", async () => {
+  it("shows theme controls only and lets the user change theme", () => {
     render(
       <PreferencesProvider initialTheme="dark" initialLocale="en">
         <PreferencesPanel />
       </PreferencesProvider>,
     );
 
+    expect(screen.queryByRole("combobox")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /light/i }));
     expect(document.documentElement.dataset.theme).toBe("light");
-
-    fireEvent.change(screen.getByRole("combobox"), {
-      target: { value: "fr" },
-    });
-
-    await waitFor(() => {
-      expect(document.documentElement.lang).toBe("fr");
-    });
-
-    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(refresh).toHaveBeenCalledTimes(0);
   });
 });
-

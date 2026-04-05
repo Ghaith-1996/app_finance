@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AIChatError } from "@/lib/services/ai/ai-chat-errors";
+import { BillingAccessError } from "@/lib/billing/subscriptions";
+import { AIUsageAccessError } from "@/lib/security/ai-access";
 
 // Always-pass Turnstile mock for route tests
 vi.mock("@/lib/security/turnstile", () => ({
@@ -10,6 +12,7 @@ vi.mock("@/lib/security/turnstile", () => ({
 
 const mockAnswerArticleQuestion = vi.fn();
 const mockAnswerPortfolioQuestion = vi.fn();
+const mockAssertUserCanUseAI = vi.fn();
 const mockComputePortfolioOverview = vi.fn().mockResolvedValue({
   totalValue: 125000,
   dayChange: 1400,
@@ -25,6 +28,16 @@ const mockGetAIProviderById = vi.fn((_id: "azure" | "anthropic" | "openai" | "op
 vi.mock("@/lib/services/portfolio", () => ({
   computePortfolioOverview: (...args: unknown[]) => mockComputePortfolioOverview(...args),
 }));
+
+vi.mock("@/lib/security/ai-access", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/security/ai-access")>(
+    "@/lib/security/ai-access",
+  );
+  return {
+    ...actual,
+    assertUserCanUseAI: (...args: unknown[]) => mockAssertUserCanUseAI(...args),
+  };
+});
 
 vi.mock("@/lib/services/ai", async () => {
   const actual = await vi.importActual<typeof import("@/lib/services/ai")>("@/lib/services/ai");
@@ -174,6 +187,10 @@ function createSupabaseMock(opts: {
         return {
           select: () => ({
             eq: () => ({
+              maybeSingle: async () => ({
+                data: { id: "n1" },
+                error: null,
+              }),
               single: async () => ({
                 data: {
                   headline: "H",
@@ -282,6 +299,8 @@ describe("POST /api/article-chat", () => {
     messageRows.length = 0;
     mockAnswerArticleQuestion.mockReset();
     mockAnswerPortfolioQuestion.mockReset();
+    mockAssertUserCanUseAI.mockReset();
+    mockAssertUserCanUseAI.mockResolvedValue(undefined);
     mockComputePortfolioOverview.mockClear();
     mockGetAIProviderById.mockClear();
     currentSupabase = createSupabaseMock({});
@@ -354,6 +373,14 @@ describe("POST /api/article-chat", () => {
   });
 
   it("returns 403 when a free user requests the premium tier", async () => {
+    mockAssertUserCanUseAI.mockRejectedValue(
+      new BillingAccessError({
+        currentPlan: "free",
+        requiredPlan: "premium",
+        requestedTier: "premium",
+      }),
+    );
+
     const req = new Request("http://localhost/api/article-chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -374,7 +401,6 @@ describe("POST /api/article-chat", () => {
   });
 
   it("uses the premium tier provider when modelTier is premium", async () => {
-    currentSupabase = createSupabaseMock({ currentPlan: "premium" });
     mockAnswerArticleQuestion.mockResolvedValue("Premium-tier answer.");
 
     const req = new Request("http://localhost/api/article-chat", {
@@ -394,7 +420,6 @@ describe("POST /api/article-chat", () => {
   });
 
   it("uses the ultimate tier provider when modelTier is ultimate", async () => {
-    currentSupabase = createSupabaseMock({ currentPlan: "ultimate" });
     mockAnswerArticleQuestion.mockResolvedValue("Ultimate-tier answer.");
 
     const req = new Request("http://localhost/api/article-chat", {
@@ -414,7 +439,6 @@ describe("POST /api/article-chat", () => {
   });
 
   it("allows admin users to request the ultimate tier without a paid plan", async () => {
-    process.env.ADMIN_USER_IDS = "user-1";
     mockAnswerArticleQuestion.mockResolvedValue("Admin answer.");
 
     const req = new Request("http://localhost/api/article-chat", {
@@ -521,5 +545,87 @@ describe("POST /api/article-chat", () => {
     expect(insertAssistantCalls).toBe(1);
     const body = (await res.json()) as { messages?: Array<{ role: string; content: string }> };
     expect(body.messages?.some((m) => m.role === "assistant" && m.content.includes("real answer"))).toBe(true);
+  });
+
+  it("returns 429 with retry metadata when the durable burst limit is hit", async () => {
+    mockAssertUserCanUseAI.mockRejectedValue(
+      new AIUsageAccessError({
+        code: "rate_limited",
+        message: "Too many requests. Please wait a moment.",
+        retryAfterMs: 12_000,
+        resetsAt: "2026-04-04T12:01:00.000Z",
+      }),
+    );
+
+    const req = new Request("http://localhost/api/article-chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        portfolioId: "p1",
+        newsItemId: "n1",
+        message: "What matters here?",
+      }),
+    });
+
+    const res = await POST(req);
+    const body = (await res.json()) as { code?: string; retryAfterMs?: number };
+    expect(res.status).toBe(429);
+    expect(body.code).toBe("rate_limited");
+    expect(body.retryAfterMs).toBe(12_000);
+    expect(mockGetAIProviderById).not.toHaveBeenCalled();
+  });
+
+  it("returns 429 with quota metadata when the durable quota is exhausted", async () => {
+    mockAssertUserCanUseAI.mockRejectedValue(
+      new AIUsageAccessError({
+        code: "quota_exceeded",
+        message: "You have reached your AI usage limit for the current billing window.",
+        quotaWindow: "day",
+        quotaLimit: 100,
+        quotaUsed: 100,
+        resetsAt: "2026-04-05T04:00:00.000Z",
+      }),
+    );
+
+    const req = new Request("http://localhost/api/article-chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        portfolioId: "p1",
+        newsItemId: "n1",
+        message: "What matters here?",
+      }),
+    });
+
+    const res = await POST(req);
+    const body = (await res.json()) as {
+      code?: string;
+      quotaWindow?: string;
+      quotaLimit?: number;
+      quotaUsed?: number;
+    };
+    expect(res.status).toBe(429);
+    expect(body.code).toBe("quota_exceeded");
+    expect(body.quotaWindow).toBe("day");
+    expect(body.quotaLimit).toBe(100);
+    expect(body.quotaUsed).toBe(100);
+  });
+
+  it("checks durable AI access exactly once even when the provider later fails", async () => {
+    mockAnswerArticleQuestion.mockRejectedValue(new AIChatError("provider_unavailable", "down"));
+
+    const req = new Request("http://localhost/api/article-chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        portfolioId: "p1",
+        newsItemId: "n1",
+        message: "What is the risk?",
+      }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(503);
+    expect(mockAssertUserCanUseAI).toHaveBeenCalledTimes(1);
   });
 });

@@ -5,7 +5,6 @@ import {
 } from "@/lib/billing/plans";
 import {
   BillingAccessError,
-  assertUserCanUseModelTier,
 } from "@/lib/billing/subscriptions";
 import {
   AIChatError,
@@ -15,8 +14,11 @@ import {
 import type { AIChatErrorCode } from "@/lib/services/ai";
 import { computePortfolioOverview } from "@/lib/services/portfolio";
 import { createClient } from "@/lib/supabase/server";
+import {
+  AIUsageAccessError,
+  assertUserCanUseAI,
+} from "@/lib/security/ai-access";
 import { verifyTurnstileToken, getClientIp } from "@/lib/security/turnstile";
-import { aiChatLimiter } from "@/lib/security/rate-limit";
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -78,14 +80,6 @@ export async function POST(request: Request) {
     return json({ error: turnstileResult.message, code: "turnstile_failed" }, 403);
   }
 
-  // Per-user rate limiting
-  const rateCheck = aiChatLimiter.check(user.id);
-  if (!rateCheck.allowed) {
-    return json(
-      { error: "Too many requests. Please wait a moment.", code: "rate_limited" },
-      429,
-    );
-  }
 
   const portfolioId = body.portfolioId?.trim();
   const message = body.message?.trim();
@@ -118,8 +112,19 @@ export async function POST(request: Request) {
     return json({ error: "modelTier must be 'free', 'premium', or 'ultimate'" }, 400);
   }
 
+  const { data: portfolio } = await supabase
+    .from("portfolios")
+    .select("id, name")
+    .eq("id", portfolioId)
+    .eq("user_id", user.id)
+    .single();
+
+  if (!portfolio) {
+    return json({ error: "Portfolio not found" }, 404);
+  }
+
   try {
-    await assertUserCanUseModelTier(user, modelTier);
+    await assertUserCanUseAI(user, modelTier, "portfolio_copilot");
   } catch (error) {
     if (error instanceof BillingAccessError) {
       return json(
@@ -133,18 +138,21 @@ export async function POST(request: Request) {
         403,
       );
     }
+    if (error instanceof AIUsageAccessError) {
+      return json(
+        {
+          error: error.message,
+          code: error.code,
+          retryAfterMs: error.retryAfterMs,
+          quotaWindow: error.quotaWindow,
+          quotaLimit: error.quotaLimit,
+          quotaUsed: error.quotaUsed,
+          resetsAt: error.resetsAt,
+        },
+        429,
+      );
+    }
     throw error;
-  }
-
-  const { data: portfolio } = await supabase
-    .from("portfolios")
-    .select("id, name")
-    .eq("id", portfolioId)
-    .eq("user_id", user.id)
-    .single();
-
-  if (!portfolio) {
-    return json({ error: "Portfolio not found" }, 404);
   }
 
   try {

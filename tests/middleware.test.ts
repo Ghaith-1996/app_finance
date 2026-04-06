@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
-const getSession = vi.fn();
 const getUser = vi.fn();
 const profileMaybeSingle = vi.fn();
 const createServerClient = vi.fn(
@@ -16,7 +15,6 @@ const createServerClient = vi.fn(
     },
   ) => ({
     auth: {
-      getSession,
       getUser,
     },
     from(_table: string) {
@@ -44,12 +42,10 @@ vi.mock("@supabase/ssr", () => ({
   ) => createServerClient(url, key, options),
 }));
 
-function mockAuthenticatedSession() {
-  getSession.mockResolvedValue({
+function mockAuthenticatedUser() {
+  getUser.mockResolvedValue({
     data: {
-      session: {
-        user: { id: "user-1" },
-      },
+      user: { id: "user-1" },
     },
   });
 }
@@ -62,20 +58,19 @@ describe("middleware", () => {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "anon-key";
   });
 
-  it("uses session-based auth checks for protected routes", async () => {
-    getSession.mockResolvedValue({ data: { session: null } });
+  it("uses getUser() auth checks for protected routes", async () => {
+    getUser.mockResolvedValue({ data: { user: null } });
 
     const { middleware } = await import("@/middleware");
     const response = await middleware(new NextRequest("http://localhost/feed"));
 
     expect(createServerClient).toHaveBeenCalledTimes(1);
-    expect(getSession).toHaveBeenCalledTimes(1);
-    expect(getUser).not.toHaveBeenCalled();
+    expect(getUser).toHaveBeenCalledTimes(1);
     expect(response.headers.get("location")).toContain("/login");
   });
 
   it("treats /admin as a protected path", async () => {
-    getSession.mockResolvedValue({ data: { session: null } });
+    getUser.mockResolvedValue({ data: { user: null } });
 
     const { middleware } = await import("@/middleware");
     const response = await middleware(new NextRequest("http://localhost/admin"));
@@ -84,7 +79,7 @@ describe("middleware", () => {
   });
 
   it("redirects authenticated users with incomplete profile to /complete-profile", async () => {
-    mockAuthenticatedSession();
+    mockAuthenticatedUser();
     profileMaybeSingle.mockResolvedValue({
       data: {
         first_name: "Ada",
@@ -101,7 +96,7 @@ describe("middleware", () => {
   });
 
   it("redirects authenticated users who have not accepted ToS to /complete-profile", async () => {
-    mockAuthenticatedSession();
+    mockAuthenticatedUser();
     profileMaybeSingle.mockResolvedValue({
       data: {
         first_name: "Ada",
@@ -118,7 +113,7 @@ describe("middleware", () => {
   });
 
   it("allows authenticated users with complete profile through protected routes", async () => {
-    mockAuthenticatedSession();
+    mockAuthenticatedUser();
     profileMaybeSingle.mockResolvedValue({
       data: {
         first_name: "Ada",
@@ -135,7 +130,7 @@ describe("middleware", () => {
   });
 
   it("does not check profile completeness for /complete-profile", async () => {
-    mockAuthenticatedSession();
+    mockAuthenticatedUser();
     // profileMaybeSingle should NOT be called for exempt paths
     profileMaybeSingle.mockResolvedValue({ data: null });
 

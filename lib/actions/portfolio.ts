@@ -920,7 +920,7 @@ export async function getPortfolioInsights(portfolioId: string) {
     .from("analysis_runs")
     .select("id")
     .eq("portfolio_id", portfolioId)
-    .eq("status", "complete")
+    .in("status", ["complete", "degraded"])
     .order("completed_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -961,7 +961,7 @@ export async function getPortfolioFeedHighlights(portfolioId: string) {
     .from("analysis_runs")
     .select("id")
     .eq("portfolio_id", portfolioId)
-    .eq("status", "complete")
+    .in("status", ["complete", "degraded"])
     .order("completed_at", { ascending: false })
     .limit(1)
     .maybeSingle();

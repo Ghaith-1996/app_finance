@@ -18,8 +18,10 @@ export function emptyPortfolioMatchAssessment(): PortfolioMatchAssessment {
 }
 
 export function parseNumericRelevance(raw: string | null | undefined): number {
-  const cleaned = String(raw ?? "").replace(/\D/g, "");
-  const parsed = parseInt(cleaned, 10);
+  const match = String(raw ?? "").match(/-?\d+(?:\.\d+)?/);
+  if (!match) return 0;
+
+  const parsed = Number(match[0]);
   if (Number.isNaN(parsed)) return 0;
   return Math.min(100, Math.max(0, parsed));
 }

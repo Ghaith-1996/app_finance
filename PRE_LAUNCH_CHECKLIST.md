@@ -42,6 +42,14 @@ Verify RLS is enabled on all user-facing tables:
 - `article_chat_threads`
 - `article_chat_messages`
 
+Verify internal server-only RLS posture is intentional (no authenticated-user policies):
+- `billing_customers`
+- `subscriptions`
+- `billing_events`
+- `ai_usage_counters`
+- `rate_limit_events`
+- Confirm app access to these tables is service-role only (`lib/supabase/service.ts`) and any Supabase linter warning for missing authenticated policies is explicitly accepted as an internal-only pattern.
+
 ## API Provider Quotas
 
 - [ ] Finnhub: free tier is 60 calls/minute — verify watchlist search + refresh stays within limits
@@ -100,4 +108,3 @@ After deploy, verify each flow manually:
 - Article chat depends on a configured AI provider
 - The GitHub scheduler depends on `python -m workers.news_ingestion.cron_runner`, so the runner environment and repository secrets must be verified in production rather than assumed
 - GitHub scheduled workflows run in UTC on the default branch and can be delayed during high-load periods
-

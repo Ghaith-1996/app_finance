@@ -2,13 +2,20 @@ import "server-only";
 
 import type { User } from "@supabase/supabase-js";
 
-import { consumeAIQuota, type AIQuotaSummary } from "@/lib/billing/ai-usage";
+import {
+  consumeAIQuotaForUser,
+  type AIQuotaSummary,
+} from "@/lib/billing/ai-usage";
 import {
   BillingAccessError,
   getBillingSummaryForUser,
   type BillingSummary,
 } from "@/lib/billing/subscriptions";
-import { requiredPlanForTier } from "@/lib/billing/plans";
+import {
+  allowedModelTiersForPlan,
+  defaultModelTierForPlan,
+  requiredPlanForTier,
+} from "@/lib/billing/plans";
 import { aiBurstLimiter } from "@/lib/security/rate-limit";
 import type { ArticleChatModelTier } from "@/lib/types";
 
@@ -57,7 +64,11 @@ export async function assertUserCanUseAI(
   tier: ArticleChatModelTier,
   _surface: AIUsageSurface,
 ): Promise<BillingSummary> {
-  const summary = await getBillingSummaryForUser(user.id, user.email);
+  const summary = await getBillingSummaryForUser(
+    user.id,
+    user.email,
+    user as Pick<User, "id" | "email" | "email_confirmed_at" | "user_metadata">,
+  );
 
   if (!summary.allowedModelTiers.includes(tier)) {
     throw new BillingAccessError({
@@ -77,12 +88,21 @@ export async function assertUserCanUseAI(
     });
   }
 
-  const quotaCheck = await consumeAIQuota({
+  const quotaCheck = await consumeAIQuotaForUser({
     userId: user.id,
-    planKey: summary.planKey,
+    requestedTier: tier,
+    allowTierOverride: summary.hasAdminModelAccess,
   });
 
   if (!quotaCheck.allowed) {
+    if (quotaCheck.denialCode === "plan_upgrade_required") {
+      throw new BillingAccessError({
+        currentPlan: quotaCheck.effectivePlanKey,
+        requiredPlan: quotaCheck.requiredPlanKey ?? requiredPlanForTier(tier),
+        requestedTier: tier,
+      });
+    }
+
     throw new AIUsageAccessError({
       code: "quota_exceeded",
       message: "You have reached your AI usage limit for the current billing window.",
@@ -93,5 +113,14 @@ export async function assertUserCanUseAI(
     });
   }
 
-  return mergeQuotaSummary(summary, quotaCheck);
+  const effectiveSummary = summary.hasAdminModelAccess
+    ? summary
+    : {
+        ...summary,
+        planKey: quotaCheck.effectivePlanKey,
+        allowedModelTiers: allowedModelTiersForPlan(quotaCheck.effectivePlanKey),
+        defaultModelTier: defaultModelTierForPlan(quotaCheck.effectivePlanKey),
+      };
+
+  return mergeQuotaSummary(effectiveSummary, quotaCheck);
 }

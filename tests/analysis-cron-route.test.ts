@@ -62,7 +62,7 @@ function buildMockSupabase({
                 selectedPortfolioId = value;
               }
               return {
-                eq: () => ({
+                in: () => ({
                   order: () => ({
                     limit: () => ({
                       maybeSingle: () => {
@@ -264,6 +264,29 @@ describe("POST /api/analysis/cron", () => {
       skipped: false,
       runId: "run-1",
       error: "analysis failed internally",
+      code: null,
+      meta: null,
+    });
+  });
+
+  it("skips when runAnalysis reports an in-progress run", async () => {
+    mockRunAnalysis.mockResolvedValue({
+      runId: null,
+      error: "An analysis run is already in progress for this portfolio.",
+      code: "analysis_already_running",
+      meta: null,
+    });
+
+    const res = await POST(makePostRequest("test-secret", { portfolioId: "p1" }));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+
+    expect(body).toEqual({
+      portfolioId: "p1",
+      skipped: true,
+      runId: null,
+      error: null,
+      code: "analysis_already_running",
       meta: null,
     });
   });

@@ -9,7 +9,10 @@ import type {
   Sentiment,
 } from "./provider";
 import { assertNonEmptyArticleChatReply } from "./ai-chat-errors";
-import { ARTICLE_CHAT_MAX_TOKENS } from "./constants";
+import {
+  ARTICLE_CHAT_MAX_TOKENS,
+  PORTFOLIO_COPILOT_MAX_TOKENS,
+} from "./constants";
 import { stubAIProvider } from "./stub-provider";
 import {
   parseNumericRelevance,
@@ -167,7 +170,7 @@ export function createOpenAIProvider(): IAIProvider {
         const text = await chat(
           key,
           [{ role: "system", content: p.system }, { role: "user", content: p.user }],
-          450,
+          PORTFOLIO_COPILOT_MAX_TOKENS,
         );
         return text ?? (await stubAIProvider.answerPortfolioQuestion(context));
       } catch {

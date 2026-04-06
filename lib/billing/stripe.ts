@@ -8,6 +8,11 @@ const STRIPE_API_VERSION = "2026-03-25.dahlia";
 
 let stripeClient: Stripe | null = null;
 
+const DEFAULT_LOCALHOST_APP_ORIGINS = [
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+];
+
 function requireStripeEnv(name: string): string {
   const value = process.env[name]?.trim();
   if (!value) {
@@ -48,22 +53,55 @@ export function planFromStripePriceId(priceId: string | null | undefined): PaidP
   return null;
 }
 
-export function getAppBaseUrl(request?: Request): string {
-  if (request) {
-    const origin = new URL(request.url).origin;
-    if (origin) {
-      return origin.replace(/\/+$/, "");
+function normalizeAbsoluteHttpUrl(value: string | undefined | null): string | null {
+  const raw = value?.trim();
+  if (!raw) return null;
+
+  try {
+    const parsed = new URL(raw);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return null;
     }
-  }
 
-  const configured =
-    process.env.NEXT_PUBLIC_SITE_URL?.trim() ||
-    process.env.NEXT_PUBLIC_APP_URL?.trim() ||
-    "";
-
-  if (configured) {
-    return configured.replace(/\/+$/, "");
+    const pathname = parsed.pathname.replace(/\/+$/, "");
+    const pathSuffix = pathname && pathname !== "/" ? pathname : "";
+    return `${parsed.origin}${pathSuffix}`;
+  } catch {
+    return null;
   }
+}
+
+function parseTrustedOriginAllowlist(): Set<string> {
+  const fromEnv = (process.env.APP_TRUSTED_ORIGINS ?? "")
+    .split(",")
+    .map((value) => normalizeAbsoluteHttpUrl(value))
+    .filter((value): value is string => !!value);
+
+  const defaults = process.env.NODE_ENV === "production" ? [] : DEFAULT_LOCALHOST_APP_ORIGINS;
+  return new Set([...fromEnv, ...defaults]);
+}
+
+function getTrustedConfiguredBaseUrl(): string | null {
+  return (
+    normalizeAbsoluteHttpUrl(process.env.APP_BASE_URL) ??
+    normalizeAbsoluteHttpUrl(process.env.NEXT_PUBLIC_SITE_URL) ??
+    normalizeAbsoluteHttpUrl(process.env.NEXT_PUBLIC_APP_URL)
+  );
+}
+
+function getTrustedRequestOrigin(request: Request | undefined): string | null {
+  if (!request) return null;
+  const origin = normalizeAbsoluteHttpUrl(new URL(request.url).origin);
+  if (!origin) return null;
+  return parseTrustedOriginAllowlist().has(origin) ? origin : null;
+}
+
+export function getAppBaseUrl(request?: Request): string {
+  const configured = getTrustedConfiguredBaseUrl();
+  if (configured) return configured;
+
+  const trustedRequestOrigin = getTrustedRequestOrigin(request);
+  if (trustedRequestOrigin) return trustedRequestOrigin;
 
   return "http://localhost:3000";
 }

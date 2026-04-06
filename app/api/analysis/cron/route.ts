@@ -52,7 +52,7 @@ async function getLatestCompletedRun(
     .from("analysis_runs")
     .select("completed_at")
     .eq("portfolio_id", portfolioId)
-    .eq("status", "complete")
+    .in("status", ["complete", "degraded"])
     .order("completed_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -152,11 +152,26 @@ async function runAnalysisCron(request: Request) {
 
   try {
     const result = await runAnalysis(supabase, portfolioId);
+    if (result.code === "analysis_already_running") {
+      log.info("Analysis cron skipped portfolio already in progress", {
+        portfolioId,
+      });
+      return json({
+        portfolioId,
+        skipped: true,
+        runId: null,
+        error: null,
+        code: result.code,
+        meta: result.meta ?? null,
+      });
+    }
+
     const responseBody = {
       portfolioId,
       skipped: false,
       runId: result.runId,
       error: result.error,
+      code: result.code ?? null,
       meta: result.meta ?? null,
     };
 

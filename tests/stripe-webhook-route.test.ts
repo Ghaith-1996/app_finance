@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockConstructEvent = vi.fn();
-const mockHasProcessedStripeEvent = vi.fn();
-const mockInsertProcessedStripeEvent = vi.fn();
+const mockClaimStripeEvent = vi.fn();
+const mockMarkStripeEventProcessed = vi.fn();
+const mockMarkStripeEventFailed = vi.fn();
 const mockSyncStripeCustomerRecord = vi.fn();
 const mockSyncSubscriptionById = vi.fn();
 const mockSyncSubscriptionFromStripeSubscription = vi.fn();
@@ -17,8 +18,9 @@ vi.mock("@/lib/billing/stripe", () => ({
 }));
 
 vi.mock("@/lib/billing/store", () => ({
-  hasProcessedStripeEvent: (...args: unknown[]) => mockHasProcessedStripeEvent(...args),
-  insertProcessedStripeEvent: (...args: unknown[]) => mockInsertProcessedStripeEvent(...args),
+  claimStripeEvent: (...args: unknown[]) => mockClaimStripeEvent(...args),
+  markStripeEventProcessed: (...args: unknown[]) => mockMarkStripeEventProcessed(...args),
+  markStripeEventFailed: (...args: unknown[]) => mockMarkStripeEventFailed(...args),
 }));
 
 vi.mock("@/lib/billing/sync", () => ({
@@ -37,8 +39,9 @@ import { POST } from "@/app/api/stripe/webhook/route";
 describe("POST /api/stripe/webhook", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockHasProcessedStripeEvent.mockResolvedValue(false);
-    mockInsertProcessedStripeEvent.mockResolvedValue(undefined);
+    mockClaimStripeEvent.mockResolvedValue("claimed");
+    mockMarkStripeEventProcessed.mockResolvedValue(undefined);
+    mockMarkStripeEventFailed.mockResolvedValue(undefined);
     mockSyncStripeCustomerRecord.mockResolvedValue(undefined);
     mockSyncSubscriptionById.mockResolvedValue(undefined);
     mockSyncSubscriptionFromStripeSubscription.mockResolvedValue(undefined);
@@ -68,10 +71,11 @@ describe("POST /api/stripe/webhook", () => {
 
     const res = await POST(req);
     expect(res.status).toBe(200);
+    expect(mockClaimStripeEvent).toHaveBeenCalledTimes(1);
     expect(mockSyncStripeCustomerRecord).toHaveBeenCalledWith("user-1", "cus_123");
     expect(mockSyncSubscriptionById).toHaveBeenCalledWith("sub_123");
-    expect(mockInsertProcessedStripeEvent).toHaveBeenCalledTimes(1);
-    expect(mockInsertProcessedStripeEvent).toHaveBeenCalledWith(
+    expect(mockMarkStripeEventProcessed).toHaveBeenCalledTimes(1);
+    expect(mockClaimStripeEvent).toHaveBeenCalledWith(
       { kind: "service-client" },
       expect.objectContaining({
         stripeEventId: "evt_123",
@@ -91,9 +95,13 @@ describe("POST /api/stripe/webhook", () => {
       id: "evt_duplicate",
       type: "invoice.paid",
       created: 1,
-      data: { object: { subscription: "sub_123" } },
+      data: {
+        object: {
+          parent: { subscription_details: { subscription: "sub_123" } },
+        },
+      },
     });
-    mockHasProcessedStripeEvent.mockResolvedValue(true);
+    mockClaimStripeEvent.mockResolvedValue("already_processed");
 
     const req = new Request("http://localhost/api/stripe/webhook", {
       method: "POST",
@@ -106,8 +114,71 @@ describe("POST /api/stripe/webhook", () => {
     const res = await POST(req);
     expect(res.status).toBe(200);
     expect(mockSyncSubscriptionById).not.toHaveBeenCalled();
-    expect(mockInsertProcessedStripeEvent).not.toHaveBeenCalled();
+    expect(mockMarkStripeEventProcessed).not.toHaveBeenCalled();
+    expect(mockMarkStripeEventFailed).not.toHaveBeenCalled();
   });
+
+  it("returns 409 while another worker is already processing the same event", async () => {
+    mockConstructEvent.mockReturnValue({
+      id: "evt_busy",
+      type: "invoice.paid",
+      created: 1,
+      data: {
+        object: {
+          parent: { subscription_details: { subscription: "sub_123" } },
+        },
+      },
+    });
+    mockClaimStripeEvent.mockResolvedValue("in_progress");
+
+    const req = new Request("http://localhost/api/stripe/webhook", {
+      method: "POST",
+      headers: {
+        "stripe-signature": "sig",
+      },
+      body: "payload",
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(409);
+    expect(mockSyncSubscriptionById).not.toHaveBeenCalled();
+    expect(mockMarkStripeEventProcessed).not.toHaveBeenCalled();
+  });
+
+  it("marks the event as failed when downstream sync throws", async () => {
+    mockConstructEvent.mockReturnValue({
+      id: "evt_fail",
+      type: "invoice.paid",
+      created: 1,
+      data: {
+        object: {
+          parent: { subscription_details: { subscription: "sub_123" } },
+        },
+      },
+    });
+    mockSyncSubscriptionById.mockRejectedValue(new Error("subscription sync failed"));
+
+    const req = new Request("http://localhost/api/stripe/webhook", {
+      method: "POST",
+      headers: {
+        "stripe-signature": "sig",
+      },
+      body: "payload",
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(500);
+    expect(mockMarkStripeEventFailed).toHaveBeenCalledWith(
+      { kind: "service-client" },
+      expect.objectContaining({
+        stripeEventId: "evt_fail",
+        eventType: "invoice.paid",
+        errorMessage: "subscription sync failed",
+      }),
+    );
+    expect(mockMarkStripeEventProcessed).not.toHaveBeenCalled();
+  });
+
   it("ignores unhandled Stripe event types without storing payloads", async () => {
     mockConstructEvent.mockReturnValue({
       id: "evt_misc",
@@ -126,8 +197,9 @@ describe("POST /api/stripe/webhook", () => {
 
     const res = await POST(req);
     expect(res.status).toBe(200);
-    expect(mockHasProcessedStripeEvent).not.toHaveBeenCalled();
-    expect(mockInsertProcessedStripeEvent).not.toHaveBeenCalled();
+    expect(mockClaimStripeEvent).not.toHaveBeenCalled();
+    expect(mockMarkStripeEventProcessed).not.toHaveBeenCalled();
+    expect(mockMarkStripeEventFailed).not.toHaveBeenCalled();
     expect(mockSyncSubscriptionById).not.toHaveBeenCalled();
   });
 });

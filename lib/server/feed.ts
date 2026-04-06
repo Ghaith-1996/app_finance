@@ -437,7 +437,7 @@ async function buildPersonalPayload(
     .from("analysis_runs")
     .select("id")
     .eq("portfolio_id", opts.portfolioId)
-    .eq("status", "complete")
+    .in("status", ["complete", "degraded"])
     .order("completed_at", { ascending: false })
     .limit(1)
     .maybeSingle();

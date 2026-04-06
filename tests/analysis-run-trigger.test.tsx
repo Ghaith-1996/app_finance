@@ -97,4 +97,31 @@ describe("AnalysisRunTrigger", () => {
     expect(screen.getByText(/portfolio and watchlist/i)).toBeTruthy();
     expect(screen.queryByRole("button", { name: /refresh/i })).toBeNull();
   });
+
+  it("shows degraded completion messaging when run status is degraded", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        run: {
+          id: "run-1",
+          status: "degraded",
+          progress: 100,
+          startedAt: new Date().toISOString(),
+          completedAt: new Date().toISOString(),
+        },
+      }),
+    });
+
+    await act(async () => {
+      render(
+        <AnalysisRunTrigger
+          portfolioId="p1"
+          defaultOverview={{ lastAnalyzedAt: "Just now" }}
+        />,
+      );
+    });
+
+    expect(screen.getByText(/limited confidence/i)).toBeTruthy();
+    expect(screen.getByText(/results may be incomplete/i)).toBeTruthy();
+  });
 });

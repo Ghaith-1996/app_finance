@@ -6,8 +6,9 @@ import {
   requireStripeWebhookSecret,
 } from "@/lib/billing/stripe";
 import {
-  hasProcessedStripeEvent,
-  insertProcessedStripeEvent,
+  claimStripeEvent,
+  markStripeEventFailed,
+  markStripeEventProcessed,
 } from "@/lib/billing/store";
 import {
   syncStripeCustomerRecord,
@@ -166,22 +167,37 @@ export async function POST(request: Request) {
   }
 
   const serviceSupabase = createServiceClient();
-  if (await hasProcessedStripeEvent(serviceSupabase, event.id)) {
+  const auditPayload = buildEventAuditPayload(event);
+  const claimResult = await claimStripeEvent(serviceSupabase, {
+    stripeEventId: event.id,
+    eventType: event.type,
+    payload: auditPayload,
+  });
+
+  if (claimResult === "already_processed") {
     return json({ received: true, duplicate: true });
+  }
+
+  if (claimResult === "in_progress") {
+    return json({ error: "Event is already being processed. Retry shortly." }, 409);
   }
 
   try {
     await handleStripeEvent(event);
-    await insertProcessedStripeEvent(serviceSupabase, {
+    await markStripeEventProcessed(serviceSupabase, event.id);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    await markStripeEventFailed(serviceSupabase, {
       stripeEventId: event.id,
       eventType: event.type,
-      payload: buildEventAuditPayload(event),
+      payload: auditPayload,
+      errorMessage: message,
     });
-  } catch (error) {
+
     log.error("Stripe webhook processing failed", {
       eventId: event.id,
       eventType: event.type,
-      message: error instanceof Error ? error.message : "Unknown error",
+      message,
     });
     return json({ error: "Webhook processing failed." }, 500);
   }

@@ -132,7 +132,7 @@ function createSupabaseMock(opts: { currentPlan?: "free" | "premium" | "ultimate
         return {
           select: () => ({
             eq: () => ({
-              eq: () => ({
+              in: () => ({
                 order: () => ({
                   limit: () => ({
                     maybeSingle: async () => ({ data: null, error: null }),

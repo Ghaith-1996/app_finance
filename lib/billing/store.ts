@@ -30,6 +30,11 @@ export type SubscriptionRow = {
   updated_at?: string;
 };
 
+export type StripeEventProcessingState = "processing" | "processed" | "failed";
+export type StripeEventClaimResult = "claimed" | "already_processed" | "in_progress";
+
+const STRIPE_EVENT_PROCESSING_STALE_MS = 10 * 60 * 1000;
+
 type UserSupabaseClient = Awaited<ReturnType<typeof createClient>>;
 type ServiceSupabaseClient = ReturnType<typeof createServiceClient>;
 export type BillingSupabaseClient = UserSupabaseClient | ServiceSupabaseClient;
@@ -107,43 +112,148 @@ export async function upsertSubscriptionRow(
 ): Promise<void> {
   const { error } = await supabase
     .from("subscriptions")
-    .upsert(row, { onConflict: "stripe_subscription_id" });
+    .upsert(row, { onConflict: "user_id" });
 
   if (error) {
     throw new Error(error.message);
   }
 }
 
-export async function hasProcessedStripeEvent(
-  supabase: BillingSupabaseClient,
-  stripeEventId: string,
-): Promise<boolean> {
-  const { data, error } = await supabase
-    .from("billing_events")
-    .select("stripe_event_id")
-    .eq("stripe_event_id", stripeEventId)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return !!data;
-}
-
-export async function insertProcessedStripeEvent(
+export async function claimStripeEvent(
   supabase: BillingSupabaseClient,
   input: {
     stripeEventId: string;
     eventType: string;
     payload: Record<string, unknown>;
   },
-): Promise<void> {
+): Promise<StripeEventClaimResult> {
+  const nowIso = new Date().toISOString();
   const { error } = await supabase.from("billing_events").insert({
     stripe_event_id: input.stripeEventId,
     event_type: input.eventType,
     payload: input.payload,
+    processing_state: "processing",
+    processed_at: nowIso,
+    last_error: null,
   });
+
+  if (!error) return "claimed";
+
+  if ((error as { code?: string }).code !== "23505") {
+    throw new Error(error.message);
+  }
+
+  const { data: existing, error: existingError } = await supabase
+    .from("billing_events")
+    .select("processing_state, processed_at")
+    .eq("stripe_event_id", input.stripeEventId)
+    .maybeSingle();
+
+  if (existingError) {
+    throw new Error(existingError.message);
+  }
+
+  const existingRow = existing as {
+    processing_state?: StripeEventProcessingState;
+    processed_at?: string | null;
+  } | null;
+
+  if (existingRow?.processing_state === "processed") {
+    return "already_processed";
+  }
+
+  const reclaimPayload = {
+    event_type: input.eventType,
+    payload: input.payload,
+    processing_state: "processing" as const,
+    processed_at: nowIso,
+    last_error: null,
+  };
+
+  if (existingRow?.processing_state === "failed") {
+    const { data: reclaimed, error: reclaimError } = await supabase
+      .from("billing_events")
+      .update(reclaimPayload)
+      .eq("stripe_event_id", input.stripeEventId)
+      .eq("processing_state", "failed")
+      .select("stripe_event_id")
+      .maybeSingle();
+
+    if (reclaimError) {
+      throw new Error(reclaimError.message);
+    }
+
+    return reclaimed ? "claimed" : "in_progress";
+  }
+
+  const processedAtMs = existingRow?.processed_at
+    ? new Date(existingRow.processed_at).getTime()
+    : Number.NaN;
+  const staleBeforeIso = new Date(
+    Date.now() - STRIPE_EVENT_PROCESSING_STALE_MS,
+  ).toISOString();
+
+  if (
+    existingRow?.processing_state === "processing" &&
+    Number.isFinite(processedAtMs) &&
+    processedAtMs < Date.now() - STRIPE_EVENT_PROCESSING_STALE_MS
+  ) {
+    const { data: reclaimed, error: reclaimError } = await supabase
+      .from("billing_events")
+      .update(reclaimPayload)
+      .eq("stripe_event_id", input.stripeEventId)
+      .eq("processing_state", "processing")
+      .lt("processed_at", staleBeforeIso)
+      .select("stripe_event_id")
+      .maybeSingle();
+
+    if (reclaimError) {
+      throw new Error(reclaimError.message);
+    }
+
+    return reclaimed ? "claimed" : "in_progress";
+  }
+
+  return "in_progress";
+}
+
+export async function markStripeEventProcessed(
+  supabase: BillingSupabaseClient,
+  stripeEventId: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from("billing_events")
+    .update({
+      processing_state: "processed",
+      processed_at: new Date().toISOString(),
+      last_error: null,
+    })
+    .eq("stripe_event_id", stripeEventId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
+export async function markStripeEventFailed(
+  supabase: BillingSupabaseClient,
+  input: {
+    stripeEventId: string;
+    eventType: string;
+    payload: Record<string, unknown>;
+    errorMessage: string;
+  },
+): Promise<void> {
+  const { error } = await supabase
+    .from("billing_events")
+    .update({
+      event_type: input.eventType,
+      payload: input.payload,
+      processing_state: "failed",
+      processed_at: new Date().toISOString(),
+      last_error: input.errorMessage.slice(0, 1000),
+    })
+    .eq("stripe_event_id", input.stripeEventId);
 
   if (error) {
     throw new Error(error.message);

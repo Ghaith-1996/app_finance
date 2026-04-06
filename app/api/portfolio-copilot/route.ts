@@ -167,7 +167,7 @@ export async function POST(request: Request) {
         .from("analysis_runs")
         .select("id")
         .eq("portfolio_id", portfolioId)
-        .eq("status", "complete")
+        .in("status", ["complete", "degraded"])
         .order("completed_at", { ascending: false })
         .limit(1)
         .maybeSingle(),

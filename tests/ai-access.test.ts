@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { getBillingSummaryForUser, checkBurstLimit, consumeAIQuota } = vi.hoisted(() => ({
+const { getBillingSummaryForUser, checkBurstLimit, consumeAIQuotaForUser } = vi.hoisted(() => ({
   getBillingSummaryForUser: vi.fn(),
   checkBurstLimit: vi.fn(),
-  consumeAIQuota: vi.fn(),
+  consumeAIQuotaForUser: vi.fn(),
 }));
 
 vi.mock("@/lib/billing/subscriptions", async () => {
@@ -28,7 +28,7 @@ vi.mock("@/lib/billing/ai-usage", async () => {
   );
   return {
     ...actual,
-    consumeAIQuota,
+    consumeAIQuotaForUser,
   };
 });
 
@@ -62,8 +62,11 @@ describe("assertUserCanUseAI", () => {
       remaining: 9,
       resetsAt: "2026-04-04T12:01:00.000Z",
     });
-    consumeAIQuota.mockResolvedValue({
+    consumeAIQuotaForUser.mockResolvedValue({
       allowed: true,
+      denialCode: null,
+      effectivePlanKey: "free",
+      requiredPlanKey: null,
       aiQuotaLimit: 100,
       aiQuotaWindow: "day",
       aiQuotaUsed: 1,
@@ -81,9 +84,10 @@ describe("assertUserCanUseAI", () => {
 
     expect(summary.aiQuotaUsed).toBe(1);
     expect(summary.aiQuotaRemaining).toBe(99);
-    expect(consumeAIQuota).toHaveBeenCalledWith({
+    expect(consumeAIQuotaForUser).toHaveBeenCalledWith({
       userId: "user-1",
-      planKey: "free",
+      requestedTier: "free",
+      allowTierOverride: false,
     });
   });
 
@@ -97,7 +101,7 @@ describe("assertUserCanUseAI", () => {
     ).rejects.toBeInstanceOf(BillingAccessError);
 
     expect(checkBurstLimit).not.toHaveBeenCalled();
-    expect(consumeAIQuota).not.toHaveBeenCalled();
+    expect(consumeAIQuotaForUser).not.toHaveBeenCalled();
   });
 
   it("returns a durable burst-limit error", async () => {
@@ -119,12 +123,15 @@ describe("assertUserCanUseAI", () => {
       retryAfterMs: 15_000,
     });
 
-    expect(consumeAIQuota).not.toHaveBeenCalled();
+    expect(consumeAIQuotaForUser).not.toHaveBeenCalled();
   });
 
   it("blocks free users after the daily quota is exhausted", async () => {
-    consumeAIQuota.mockResolvedValue({
+    consumeAIQuotaForUser.mockResolvedValue({
       allowed: false,
+      denialCode: "quota_exceeded",
+      effectivePlanKey: "free",
+      requiredPlanKey: null,
       aiQuotaLimit: 100,
       aiQuotaWindow: "day",
       aiQuotaUsed: 100,
@@ -163,8 +170,11 @@ describe("assertUserCanUseAI", () => {
       aiQuotaRemaining: 1,
       aiQuotaResetsAt: "2026-05-01T04:00:00.000Z",
     });
-    consumeAIQuota.mockResolvedValue({
+    consumeAIQuotaForUser.mockResolvedValue({
       allowed: false,
+      denialCode: "quota_exceeded",
+      effectivePlanKey: "premium",
+      requiredPlanKey: null,
       aiQuotaLimit: 5_000,
       aiQuotaWindow: "month",
       aiQuotaUsed: 5_000,
@@ -203,8 +213,11 @@ describe("assertUserCanUseAI", () => {
       aiQuotaRemaining: 1,
       aiQuotaResetsAt: "2026-05-01T04:00:00.000Z",
     });
-    consumeAIQuota.mockResolvedValue({
+    consumeAIQuotaForUser.mockResolvedValue({
       allowed: false,
+      denialCode: "quota_exceeded",
+      effectivePlanKey: "ultimate",
+      requiredPlanKey: null,
       aiQuotaLimit: 20_000,
       aiQuotaWindow: "month",
       aiQuotaUsed: 20_000,
@@ -243,8 +256,11 @@ describe("assertUserCanUseAI", () => {
       aiQuotaRemaining: 0,
       aiQuotaResetsAt: "2026-04-05T04:00:00.000Z",
     });
-    consumeAIQuota.mockResolvedValue({
+    consumeAIQuotaForUser.mockResolvedValue({
       allowed: false,
+      denialCode: "quota_exceeded",
+      effectivePlanKey: "free",
+      requiredPlanKey: null,
       aiQuotaLimit: 100,
       aiQuotaWindow: "day",
       aiQuotaUsed: 100,
@@ -263,5 +279,43 @@ describe("assertUserCanUseAI", () => {
       quotaLimit: 100,
       quotaWindow: "day",
     });
+  });
+
+  it("re-checks plan entitlement atomically during quota consumption", async () => {
+    getBillingSummaryForUser.mockResolvedValue({
+      planKey: "premium",
+      status: "active",
+      allowedModelTiers: ["free", "premium"],
+      defaultModelTier: "premium",
+      cancelAtPeriodEnd: false,
+      currentPeriodEnd: "2026-05-01T04:00:00.000Z",
+      hasPaidAccess: true,
+      hasUsedTrial: false,
+      hasAdminModelAccess: false,
+      aiQuotaLimit: 5_000,
+      aiQuotaWindow: "month",
+      aiQuotaUsed: 0,
+      aiQuotaRemaining: 5_000,
+      aiQuotaResetsAt: "2026-05-01T04:00:00.000Z",
+    });
+    consumeAIQuotaForUser.mockResolvedValue({
+      allowed: false,
+      denialCode: "plan_upgrade_required",
+      effectivePlanKey: "free",
+      requiredPlanKey: "premium",
+      aiQuotaLimit: 100,
+      aiQuotaWindow: "day",
+      aiQuotaUsed: 0,
+      aiQuotaRemaining: 100,
+      aiQuotaResetsAt: "2026-04-05T04:00:00.000Z",
+    });
+
+    await expect(
+      assertUserCanUseAI(
+        { id: "user-1", email: "user@example.com" },
+        "premium",
+        "article_chat",
+      ),
+    ).rejects.toBeInstanceOf(BillingAccessError);
   });
 });

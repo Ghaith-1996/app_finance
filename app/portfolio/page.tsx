@@ -65,6 +65,13 @@ export default async function PortfolioPage() {
     portfolioData?.sourceType,
     sourceDisplayLabel,
   );
+  const hasCompletedAnalysis = Boolean(portfolioOverview.lastAnalyzedAt);
+  const analysisStatusLabel = hasCompletedAnalysis
+    ? "ANALYSIS READY"
+    : "ANALYSIS PENDING";
+  const analysisStatusClasses = hasCompletedAnalysis
+    ? "bg-brand/10 text-brand"
+    : "bg-amber-500/10 text-amber-300";
 
   return (
     <AppShell
@@ -106,11 +113,19 @@ export default async function PortfolioPage() {
               <p className="mt-4 text-xl sm:text-[26px] font-bold tracking-tight text-white">{portfolioOverview.lastAnalyzedAt || "Never"}</p>
             </div>
             <div className="mt-auto pt-4 flex">
-              <span className="inline-flex items-center gap-1.5 rounded-lg bg-brand/10 px-3 py-1.5 text-[11px] font-bold tracking-widest text-brand">
-                <svg className="h-3.5 w-3.5 text-brand" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
-                </svg>
-                HEALTH CHECK PASSED
+              <span
+                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-bold tracking-widest ${analysisStatusClasses}`}
+              >
+                {hasCompletedAnalysis ? (
+                  <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
+                  </svg>
+                ) : (
+                  <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l6.518 11.595c.75 1.334-.213 2.99-1.742 2.99H3.48c-1.53 0-2.492-1.656-1.743-2.99L8.257 3.1zM11 13a1 1 0 10-2 0 1 1 0 002 0zm-1-7a.75.75 0 00-.75.75v4a.75.75 0 001.5 0v-4A.75.75 0 0010 6z" clipRule="evenodd" />
+                  </svg>
+                )}
+                {analysisStatusLabel}
               </span>
             </div>
           </div>

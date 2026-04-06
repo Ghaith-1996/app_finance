@@ -9,7 +9,10 @@ import type {
   Sentiment,
 } from "./provider";
 import { assertNonEmptyArticleChatReply } from "./ai-chat-errors";
-import { ARTICLE_CHAT_MAX_TOKENS } from "./constants";
+import {
+  ARTICLE_CHAT_MAX_TOKENS,
+  PORTFOLIO_COPILOT_MAX_TOKENS,
+} from "./constants";
 import { stubAIProvider } from "./stub-provider";
 import {
   parseNumericRelevance,
@@ -161,7 +164,11 @@ export function createAnthropicProvider(): IAIProvider {
     async answerPortfolioQuestion(context: PortfolioCopilotContext) {
       try {
         const p = portfolioCopilotPrompt(context);
-        const text = await ask(key, `${p.system}\n\n${p.user}`, 450);
+        const text = await ask(
+          key,
+          `${p.system}\n\n${p.user}`,
+          PORTFOLIO_COPILOT_MAX_TOKENS,
+        );
         return text ?? (await stubAIProvider.answerPortfolioQuestion(context));
       } catch {
         return stubAIProvider.answerPortfolioQuestion(context);

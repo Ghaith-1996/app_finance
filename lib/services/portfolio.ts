@@ -55,7 +55,7 @@ export async function computePortfolioOverview(
     .from("analysis_runs")
     .select("completed_at")
     .eq("portfolio_id", portfolioId)
-    .eq("status", "complete")
+    .in("status", ["complete", "degraded"])
     .order("completed_at", { ascending: false })
     .limit(1)
     .maybeSingle();

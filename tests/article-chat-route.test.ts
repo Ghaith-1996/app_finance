@@ -226,7 +226,7 @@ function createSupabaseMock(opts: {
         return {
           select: () => ({
             eq: () => ({
-              eq: () => ({
+              in: () => ({
                 order: () => ({
                   limit: () => ({
                     maybeSingle: async () => ({ data: null, error: null }),

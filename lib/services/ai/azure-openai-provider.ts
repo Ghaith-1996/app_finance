@@ -10,7 +10,10 @@ import type {
 } from "./provider";
 import { AIChatError, assertNonEmptyArticleChatReply } from "./ai-chat-errors";
 import { stubAIProvider } from "./stub-provider";
-import { ARTICLE_CHAT_MAX_TOKENS } from "./constants";
+import {
+  ARTICLE_CHAT_MAX_TOKENS,
+  PORTFOLIO_COPILOT_MAX_TOKENS,
+} from "./constants";
 import { validateAzureConfig } from "@/lib/env";
 import { createLogger } from "@/lib/logger";
 
@@ -288,7 +291,7 @@ export function createAzureOpenAIProvider(): IAIProvider {
           model,
           request.system,
           request.input,
-          450,
+          PORTFOLIO_COPILOT_MAX_TOKENS,
           reasoningEffort,
         );
         return text ?? (await stubAIProvider.answerPortfolioQuestion(context));

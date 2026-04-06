@@ -258,7 +258,7 @@ async function loadArticlePromptContext(
     .from("analysis_runs")
     .select("id")
     .eq("portfolio_id", portfolioId)
-    .eq("status", "complete")
+    .in("status", ["complete", "degraded"])
     .order("completed_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -347,7 +347,7 @@ async function loadPortfolioQuestionContext(
         .from("analysis_runs")
         .select("id")
         .eq("portfolio_id", portfolioId)
-        .eq("status", "complete")
+        .in("status", ["complete", "degraded"])
         .order("completed_at", { ascending: false })
         .limit(1)
         .maybeSingle(),

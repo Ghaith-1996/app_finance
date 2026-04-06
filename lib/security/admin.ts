@@ -22,11 +22,25 @@ function getAdminEmails(): Set<string> {
   );
 }
 
-export function isAdminUser(user: Pick<User, "id" | "email"> | null | undefined): boolean {
+type AdminCandidate = Pick<User, "id" | "email"> &
+  Partial<Pick<User, "email_confirmed_at" | "user_metadata">>;
+
+function hasVerifiedEmail(user: AdminCandidate): boolean {
+  if (typeof user.email_confirmed_at === "string" && user.email_confirmed_at.trim()) {
+    return true;
+  }
+
+  const metadata = user.user_metadata as Record<string, unknown> | undefined;
+  return metadata?.email_verified === true || metadata?.email_verified === "true";
+}
+
+export function isAdminUser(user: AdminCandidate | null | undefined): boolean {
   if (!user) return false;
 
   const adminUserIds = getAdminUserIds();
   if (adminUserIds.has(user.id)) return true;
+
+  if (!hasVerifiedEmail(user)) return false;
 
   const email = user.email?.trim().toLowerCase();
   if (!email) return false;

@@ -28,7 +28,8 @@ export type AnalysisStage =
   | "processing_holdings"
   | "mapping_news"
   | "generating_insights"
-  | "complete";
+  | "complete"
+  | "degraded";
 
 export interface SiteStat {
   label: string;

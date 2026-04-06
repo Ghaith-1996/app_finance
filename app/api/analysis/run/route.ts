@@ -63,9 +63,21 @@ export async function POST(request: Request) {
 
   const result = await runAnalysis(supabase, portfolioId);
   if (result.error) {
+    if (result.code === "analysis_already_running") {
+      return new Response(
+        JSON.stringify({
+          error: result.error,
+          code: result.code,
+          runId: result.runId,
+          meta: result.meta ?? null,
+        }),
+        { status: 409, headers: { "Content-Type": "application/json" } },
+      );
+    }
     return new Response(
       JSON.stringify({
         error: result.error,
+        code: result.code ?? null,
         runId: result.runId,
         meta: result.meta ?? null,
       }),

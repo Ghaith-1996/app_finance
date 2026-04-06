@@ -86,7 +86,11 @@ export function AnalysisRunTrigger({
     fetchRun();
   }, [fetchRun]);
 
-  const isRunActive = !!run && run.status !== "complete" && run.status !== "failed";
+  const isRunActive =
+    !!run &&
+    run.status !== "complete" &&
+    run.status !== "degraded" &&
+    run.status !== "failed";
 
   useEffect(() => {
     if (!isRunActive) return;
@@ -115,8 +119,10 @@ export function AnalysisRunTrigger({
     };
   }, [portfolioId, fetchRun, supabase]);
 
-  const currentIndex = run?.status
-    ? STAGE_ORDER.indexOf(run.status as (typeof STAGE_ORDER)[number])
+  const normalizedStageStatus =
+    run?.status === "degraded" ? "complete" : run?.status;
+  const currentIndex = normalizedStageStatus
+    ? STAGE_ORDER.indexOf(normalizedStageStatus as (typeof STAGE_ORDER)[number])
     : -1;
 
   const completedTimeStr = run?.completedAt
@@ -136,6 +142,8 @@ export function AnalysisRunTrigger({
           <h2 className="text-3xl font-semibold text-white">
             {run?.status === "complete"
               ? "Analysis complete"
+              : run?.status === "degraded"
+                ? "Analysis completed with limited confidence"
               : run?.status === "failed"
                 ? "Analysis failed"
                 : isRunActive
@@ -145,6 +153,8 @@ export function AnalysisRunTrigger({
           <p className="max-w-2xl text-sm leading-7 text-slate-300">
             {run?.status === "complete"
               ? "Open the feed to see personalized stories matched to your portfolio and watchlist."
+              : run?.status === "degraded"
+                ? "The latest run finished, but enough AI steps failed that results may be incomplete. Re-run later for a cleaner output."
               : isRunActive
                 ? "Fetching news, enriching articles, and generating insights."
                 : "Your feed updates automatically every 20 minutes. No manual refresh needed."}

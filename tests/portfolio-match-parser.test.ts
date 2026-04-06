@@ -17,6 +17,12 @@ describe("portfolio match parsing", () => {
     expect(parseNumericRelevance("no score")).toBe(0);
   });
 
+  it("parses decimal and bounded relevance values", () => {
+    expect(parseNumericRelevance("82.5")).toBe(82.5);
+    expect(parseNumericRelevance("score=-12.25")).toBe(0);
+    expect(parseNumericRelevance("101.2")).toBe(100);
+  });
+
   it("fails closed for invalid assessment payloads", () => {
     expect(parsePortfolioMatchAssessment("", holdings)).toEqual(
       emptyPortfolioMatchAssessment(),

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 
 /**
- * Regression test: personal feed must scope to the latest completed analysis
+ * Regression test: personal feed must scope to the latest completed/degraded analysis
  * run so stale items from older runs never leak into the user-facing feed.
  *
  * We stub the Supabase client and assert that the feed route handler issues
@@ -22,10 +22,10 @@ type MockQuery = {
 function buildPersonalFeedQueries(portfolioId: string, latestRunId: string | null): MockQuery[] {
   const queries: MockQuery[] = [];
 
-  // Step 1: resolve latest completed run
+  // Step 1: resolve latest completed/degraded run
   queries.push({
     from: "analysis_runs",
-    filters: { portfolio_id: portfolioId, status: "complete" },
+    filters: { portfolio_id: portfolioId, status_in: ["complete", "degraded"] },
     orderBy: "completed_at desc",
     limit: 1,
   });
@@ -46,12 +46,12 @@ function buildPersonalFeedQueries(portfolioId: string, latestRunId: string | nul
 }
 
 describe("personal feed run scoping", () => {
-  it("queries only the latest completed analysis run", () => {
+  it("queries only the latest completed/degraded analysis run", () => {
     const queries = buildPersonalFeedQueries("port-1", "run-42");
 
     expect(queries[0]).toEqual({
       from: "analysis_runs",
-      filters: { portfolio_id: "port-1", status: "complete" },
+      filters: { portfolio_id: "port-1", status_in: ["complete", "degraded"] },
       orderBy: "completed_at desc",
       limit: 1,
     });
@@ -66,7 +66,7 @@ describe("personal feed run scoping", () => {
     });
   });
 
-  it("returns empty feed when no completed run exists", () => {
+  it("returns empty feed when no completed/degraded run exists", () => {
     const queries = buildPersonalFeedQueries("port-1", null);
 
     expect(queries).toHaveLength(1);

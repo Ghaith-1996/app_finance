@@ -9,7 +9,6 @@ import { getAIProvider } from "./ai";
 import type { HoldingContext, PortfolioMatchAssessment } from "./ai";
 import {
   containsNormalizedTerm,
-  holdingAppearsInText,
   normalizeMatchText,
 } from "./ai/holding-name-utils";
 import { resolveDirectStockMatch } from "./news/direct-match";
@@ -29,8 +28,14 @@ export interface AnalysisRunMetadata {
   latestPublishedAt24h: string | null;
   /** Rows actually scored (up to {@link ANALYSIS_NEWS_POOL_LIMIT}). */
   candidatesScored: number;
-  /** `feed_items` inserted for this run (relevance ≥ threshold). */
+  /** `feed_items` inserted for this run (relevance >= threshold). */
   feedItemsCreated: number;
+  /** AI call attempts counted for this run (insights + per-article scoring/generation). */
+  aiAttempts: number;
+  /** AI failures observed while continuing a best-effort run. */
+  aiFailures: number;
+  /** Whether the run was marked degraded due to unreliable AI output quality. */
+  degraded: boolean;
 }
 
 type AnalysisStatus =
@@ -39,7 +44,24 @@ type AnalysisStatus =
   | "mapping_news"
   | "generating_insights"
   | "complete"
+  | "degraded"
   | "failed";
+
+export type AnalysisRunErrorCode =
+  | "analysis_already_running"
+  | "portfolio_not_found"
+  | "analysis_failed";
+
+const ACTIVE_ANALYSIS_RUN_STATUSES: AnalysisStatus[] = [
+  "queued",
+  "processing_holdings",
+  "mapping_news",
+  "generating_insights",
+];
+const ANALYSIS_HISTORY_RUN_LIMIT = 3;
+const FEED_ITEM_RETENTION_DAYS = 14;
+const ANALYSIS_ACTIVE_RUN_STALE_MS = 15 * 60 * 1000;
+
 
 function toDbSentiment(s: string): "positive" | "watch" | "negative" | "neutral" {
   if (s === "positive" || s === "watch" || s === "negative" || s === "neutral") return s;
@@ -180,6 +202,7 @@ function directMatchRelevance(match: DirectStockMatch): number {
   if (match.matchedTags.length > 0 && match.matchedImpacts.length > 0) return 96;
   if (match.matchedTags.length > 0) return 92;
   if (match.matchedImpacts.length > 0) return 88;
+  if (match.matchedSymbols.length > 0) return 80;
   return 0;
 }
 
@@ -211,10 +234,93 @@ function directWhyItMatters(
   return `The article directly maps to held stock ${matchedNames.join(", ")} based on the extracted stock links.`;
 }
 
+async function purgePortfolioAnalysisHistory(
+  supabase: SupabaseClient,
+  portfolioId: string,
+): Promise<void> {
+  const { data: runRows, error: runListError } = await supabase
+    .from("analysis_runs")
+    .select("id")
+    .eq("portfolio_id", portfolioId)
+    .order("created_at", { ascending: false });
+
+  if (runListError || !runRows || runRows.length <= ANALYSIS_HISTORY_RUN_LIMIT) {
+    return;
+  }
+
+  const staleRunIds = runRows.slice(ANALYSIS_HISTORY_RUN_LIMIT).map((row) => row.id);
+  if (staleRunIds.length === 0) return;
+
+  await supabase.from("analysis_runs").delete().in("id", staleRunIds);
+}
+
+async function purgeStaleFeedItems(
+  supabase: SupabaseClient,
+): Promise<void> {
+  const cutoffIso = new Date(
+    Date.now() - FEED_ITEM_RETENTION_DAYS * 24 * 60 * 60 * 1000,
+  ).toISOString();
+
+  await supabase.from("feed_items").delete().lt("created_at", cutoffIso);
+}
+
+function getActiveRunStartedAtMs(input: {
+  updated_at?: string | null;
+  started_at?: string | null;
+  created_at?: string | null;
+}): number | null {
+  const source = input.updated_at ?? input.started_at ?? input.created_at;
+  if (!source) return null;
+  const timestamp = new Date(source).getTime();
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+async function reclaimStaleActiveAnalysisRuns(
+  supabase: SupabaseClient,
+  portfolioId: string,
+): Promise<number> {
+  const { data: activeRuns, error } = await supabase
+    .from("analysis_runs")
+    .select("id, status, updated_at, started_at, created_at")
+    .eq("portfolio_id", portfolioId)
+    .in("status", ACTIVE_ANALYSIS_RUN_STATUSES)
+    .order("created_at", { ascending: false });
+
+  if (error || !activeRuns?.length) {
+    return 0;
+  }
+
+  const staleBeforeMs = Date.now() - ANALYSIS_ACTIVE_RUN_STALE_MS;
+  const staleRunIds = activeRuns
+    .filter((run) => {
+      const startedAtMs = getActiveRunStartedAtMs(run);
+      return startedAtMs != null && startedAtMs < staleBeforeMs;
+    })
+    .map((run) => run.id);
+
+  if (staleRunIds.length === 0) {
+    return 0;
+  }
+
+  const completedAt = new Date().toISOString();
+  for (const staleRunId of staleRunIds) {
+    await supabase
+      .from("analysis_runs")
+      .update({
+        status: "failed",
+        progress: 0,
+        completed_at: completedAt,
+      })
+      .eq("id", staleRunId);
+  }
+
+  return staleRunIds.length;
+}
+
 /**
  * Score the global 24-hour news pool against a portfolio.
  *
- * Reads the newest 100 articles from news_items (last 24h), AI-scores every
+ * Reads the newest 500 articles from news_items (last 24h), AI-scores every
  * candidate against the portfolio, and persists feed_items only for articles
  * with relevance_score >= 60. No generic fallback — if nothing qualifies the
  * personal feed stays empty.
@@ -225,6 +331,7 @@ export async function runAnalysis(
 ): Promise<{
   runId: string | null;
   error: string | null;
+  code?: AnalysisRunErrorCode;
   meta?: AnalysisRunMetadata;
 }> {
   const ai = getAIProvider();
@@ -236,25 +343,72 @@ export async function runAnalysis(
     .single();
 
   if (portfolioError || !portfolio) {
-    return { runId: null, error: "Portfolio not found" };
+    return {
+      runId: null,
+      error: "Portfolio not found",
+      code: "portfolio_not_found",
+    };
   }
 
-  const { data: run, error: runError } = await supabase
-    .from("analysis_runs")
-    .insert({
-      portfolio_id: portfolioId,
-      status: "queued",
-      progress: 0,
-      started_at: new Date().toISOString(),
-    })
-    .select("id")
-    .single();
+  try {
+    await reclaimStaleActiveAnalysisRuns(supabase, portfolioId);
+  } catch {
+    // Preserve the old behavior if stale-run recovery cannot complete.
+  }
+
+  const createRun = () =>
+    supabase
+      .from("analysis_runs")
+      .insert({
+        portfolio_id: portfolioId,
+        status: "queued",
+        progress: 0,
+        started_at: new Date().toISOString(),
+      })
+      .select("id")
+      .single();
+
+  let { data: run, error: runError } = await createRun();
 
   if (runError || !run) {
-    return { runId: null, error: runError?.message ?? "Failed to create run" };
+    const isConcurrentRun =
+      (runError as { code?: string } | null)?.code === "23505";
+    if (isConcurrentRun) {
+      let reclaimedRuns = 0;
+      try {
+        reclaimedRuns = await reclaimStaleActiveAnalysisRuns(supabase, portfolioId);
+      } catch {
+        reclaimedRuns = 0;
+      }
+
+      if (reclaimedRuns > 0) {
+        const retry = await createRun();
+        run = retry.data;
+        runError = retry.error;
+      }
+    }
+  }
+
+  if (runError || !run) {
+    const isConcurrentRun =
+      (runError as { code?: string } | null)?.code === "23505";
+    if (isConcurrentRun) {
+      return {
+        runId: null,
+        error: "An analysis run is already in progress for this portfolio.",
+        code: "analysis_already_running",
+      };
+    }
+    return {
+      runId: null,
+      error: runError?.message ?? "Failed to create run",
+      code: "analysis_failed",
+    };
   }
 
   const runId = run.id;
+  let aiAttempts = 0;
+  let aiFailures = 0;
 
   const updateRun = async (status: AnalysisStatus, progress: number) => {
     await supabase
@@ -262,7 +416,7 @@ export async function runAnalysis(
       .update({
         status,
         progress,
-        ...(status === "complete" || status === "failed"
+        ...(status === "complete" || status === "degraded" || status === "failed"
           ? { completed_at: new Date().toISOString() }
           : {}),
       })
@@ -350,6 +504,12 @@ export async function runAnalysis(
 
     if (newsItems.length === 0) {
       await updateRun("complete", 100);
+      try {
+        await purgePortfolioAnalysisHistory(supabase, portfolioId);
+        await purgeStaleFeedItems(supabase);
+      } catch {
+        // Non-fatal retention cleanup failure; keep the completed run state.
+      }
       return {
         runId,
         error: null,
@@ -358,6 +518,9 @@ export async function runAnalysis(
           latestPublishedAt24h,
           candidatesScored: 0,
           feedItemsCreated: 0,
+          aiAttempts: 0,
+          aiFailures: 0,
+          degraded: false,
         },
       };
     }
@@ -372,17 +535,26 @@ export async function runAnalysis(
       angle: n.angle ?? undefined,
     }));
 
-    const insights = await ai.generateInsights(holdings, newsContexts);
+    let insights: Array<{ title: string; value: string; detail: string }> = [];
+    aiAttempts++;
+    try {
+      insights = await ai.generateInsights(holdings, newsContexts);
+    } catch {
+      aiFailures++;
+      insights = [];
+    }
 
-    await supabase.from("portfolio_insights").insert(
-      insights.map((i) => ({
-        analysis_run_id: runId,
-        portfolio_id: portfolioId,
-        title: i.title,
-        value: i.value,
-        detail: i.detail,
-      })),
-    );
+    if (insights.length > 0) {
+      await supabase.from("portfolio_insights").insert(
+        insights.map((i) => ({
+          analysis_run_id: runId,
+          portfolio_id: portfolioId,
+          title: i.title,
+          value: i.value,
+          detail: i.detail,
+        })),
+      );
+    }
 
     let feedItemsCreated = 0;
     let step = 0;
@@ -456,7 +628,16 @@ export async function runAnalysis(
           continue;
         }
 
-        const assessment = await ai.assessPortfolioMatch(article, holdings);
+        let assessment: PortfolioMatchAssessment;
+        aiAttempts++;
+        try {
+          assessment = await ai.assessPortfolioMatch(article, holdings);
+        } catch {
+          aiFailures++;
+          step++;
+          await updateRun("generating_insights", 50 + Math.floor((step / total) * 45));
+          continue;
+        }
         boostedRelevance = Math.min(100, assessment.relevanceScore + sourceBoost);
 
         if (boostedRelevance < ANALYSIS_RELEVANCE_MIN) {
@@ -488,13 +669,33 @@ export async function runAnalysis(
         if (matchedImpact) displayEffect = matchedImpact.effect;
       }
 
-      const sentiment = hasPrecomputed
-        ? effectToSentiment(displayEffect)
-        : toDbSentiment(await ai.scoreSentiment(article));
+      let sentiment: "positive" | "watch" | "negative" | "neutral" =
+        effectToSentiment(displayEffect);
+      if (!hasPrecomputed) {
+        aiAttempts++;
+        try {
+          sentiment = toDbSentiment(await ai.scoreSentiment(article));
+        } catch {
+          aiFailures++;
+        }
+      }
 
-      const aiSummary = hasPrecomputed
-        ? (news.global_summary as string)
-        : await ai.generateSummary(article, holdings);
+      let aiSummary =
+        (typeof news.global_summary === "string" && news.global_summary.trim()) ||
+        news.headline;
+      if (!hasPrecomputed) {
+        aiAttempts++;
+        try {
+          const generatedSummary = await ai.generateSummary(article, holdings);
+          if (generatedSummary?.trim()) {
+            aiSummary = generatedSummary;
+          } else {
+            aiFailures++;
+          }
+        } catch {
+          aiFailures++;
+        }
+      }
 
       await supabase.from("feed_items").insert({
         analysis_run_id: runId,
@@ -524,7 +725,18 @@ export async function runAnalysis(
       );
     }
 
-    await updateRun("complete", 100);
+    const aiFailureRate = aiAttempts > 0 ? aiFailures / aiAttempts : 0;
+    const degraded =
+      aiFailures > 0 &&
+      (aiFailureRate >= 0.25 || (candidatesScored > 0 && feedItemsCreated === 0));
+
+    await updateRun(degraded ? "degraded" : "complete", 100);
+    try {
+      await purgePortfolioAnalysisHistory(supabase, portfolioId);
+      await purgeStaleFeedItems(supabase);
+    } catch {
+      // Non-fatal retention cleanup failure; keep the completed/degraded run state.
+    }
     return {
       runId,
       error: null,
@@ -533,11 +745,14 @@ export async function runAnalysis(
         latestPublishedAt24h,
         candidatesScored,
         feedItemsCreated,
+        aiAttempts,
+        aiFailures,
+        degraded,
       },
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Analysis failed";
     await updateRun("failed", 0);
-    return { runId, error: message };
+    return { runId, error: message, code: "analysis_failed" };
   }
 }

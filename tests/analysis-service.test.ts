@@ -22,9 +22,13 @@ type AnalysisRunRow = {
 function createSupabaseMock({
   newsRows,
   holdingsRows,
+  runInsertError,
+  activeRunRows,
 }: {
   newsRows: Array<Record<string, unknown>>;
   holdingsRows?: Array<Record<string, unknown>>;
+  runInsertError?: { message: string; code?: string } | null;
+  activeRunRows?: Array<Record<string, unknown>>;
 }) {
   const insertedFeedItems: Array<Record<string, unknown>> = [];
   const insertedInsights: Array<Record<string, unknown>> = [];
@@ -50,7 +54,20 @@ function createSupabaseMock({
         return {
           insert: () => ({
             select: () => ({
-              single: async () => ({ data: { id: "run-1" }, error: null }),
+              single: async () => {
+                if (runInsertError) {
+                  return { data: null, error: runInsertError };
+                }
+                return { data: { id: "run-1" }, error: null };
+              },
+            }),
+          }),
+          select: () => ({
+            eq: () => ({
+              in: () => ({
+                order: async () => ({ data: activeRunRows ?? [], error: null }),
+              }),
+              order: async () => ({ data: [{ id: "run-1" }], error: null }),
             }),
           }),
           update: (payload: AnalysisRunRow) => ({
@@ -58,6 +75,9 @@ function createSupabaseMock({
               updatedRuns.push(payload);
               return { error: null };
             },
+          }),
+          delete: () => ({
+            in: async () => ({ error: null }),
           }),
         };
       }
@@ -151,6 +171,9 @@ function createSupabaseMock({
             insertedFeedItems.push(row);
             return { error: null };
           },
+          delete: () => ({
+            lt: async () => ({ error: null }),
+          }),
         };
       }
 
@@ -210,6 +233,106 @@ function baseNewsRow(overrides?: Partial<Record<string, unknown>>) {
 describe("runAnalysis portfolio match gating", () => {
   beforeEach(() => {
     mockGetAIProvider.mockReset();
+  });
+
+  it("returns a concurrency code when a portfolio already has an active run", async () => {
+    mockGetAIProvider.mockReturnValue(createAIProvider());
+
+    const supabase = createSupabaseMock({
+      newsRows: [baseNewsRow()],
+      runInsertError: {
+        message: "duplicate key value violates unique constraint",
+        code: "23505",
+      },
+    });
+
+    const result = await runAnalysis(supabase as never, "p1");
+
+    expect(result.runId).toBeNull();
+    expect(result.code).toBe("analysis_already_running");
+    expect(result.error).toMatch(/already in progress/i);
+  });
+
+  it("fails stale active runs before creating a replacement run", async () => {
+    mockGetAIProvider.mockReturnValue(createAIProvider());
+
+    const staleStartedAt = new Date(Date.now() - 16 * 60 * 1000).toISOString();
+    const supabase = createSupabaseMock({
+      newsRows: [baseNewsRow()],
+      activeRunRows: [
+        {
+          id: "stale-run-1",
+          status: "processing_holdings",
+          updated_at: staleStartedAt,
+          started_at: staleStartedAt,
+          created_at: staleStartedAt,
+        },
+      ],
+    });
+
+    const result = await runAnalysis(supabase as never, "p1");
+
+    expect(result.error).toBeNull();
+    expect(supabase.updatedRuns.some((row) => row.status === "failed")).toBe(true);
+  });
+
+  it("does not reclaim an active run with a fresh heartbeat", async () => {
+    mockGetAIProvider.mockReturnValue(createAIProvider());
+
+    const staleStartedAt = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+    const freshUpdatedAt = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+    const supabase = createSupabaseMock({
+      newsRows: [baseNewsRow()],
+      runInsertError: {
+        message: "duplicate key value violates unique constraint",
+        code: "23505",
+      },
+      activeRunRows: [
+        {
+          id: "active-run-1",
+          status: "generating_insights",
+          updated_at: freshUpdatedAt,
+          started_at: staleStartedAt,
+          created_at: staleStartedAt,
+        },
+      ],
+    });
+
+    const result = await runAnalysis(supabase as never, "p1");
+
+    expect(result.runId).toBeNull();
+    expect(result.code).toBe("analysis_already_running");
+    expect(supabase.updatedRuns.some((row) => row.status === "failed")).toBe(false);
+  });
+
+  it("marks runs as degraded when AI failures make results unreliable", async () => {
+    const ai = createAIProvider({
+      generateInsights: vi.fn().mockRejectedValue(new Error("provider timeout")),
+      assessPortfolioMatch: vi.fn().mockResolvedValue({
+        relevanceScore: 0,
+        whyItMatters: "",
+        matchedHoldings: [],
+        matchReasonCodes: [],
+      }),
+    });
+    mockGetAIProvider.mockReturnValue(ai);
+
+    const supabase = createSupabaseMock({
+      newsRows: [
+        baseNewsRow({
+          stock_tags: ["AAPL"],
+          ticker_impacts: [{ symbol: "AAPL", effect: "bullish" }],
+          overall_effect: "bullish",
+        }),
+      ],
+    });
+
+    const result = await runAnalysis(supabase as never, "p1");
+
+    expect(result.error).toBeNull();
+    expect(result.meta?.degraded).toBe(true);
+    expect(result.meta?.aiFailures).toBeGreaterThan(0);
+    expect(supabase.updatedRuns.some((row) => row.status === "degraded")).toBe(true);
   });
 
   it("rejects unrelated headlines with no validated portfolio evidence", async () => {
@@ -310,7 +433,7 @@ describe("runAnalysis portfolio match gating", () => {
       assessPortfolioMatch: vi.fn().mockResolvedValue({
         relevanceScore: 74,
         whyItMatters:
-          "Apple may face margin pressure because semiconductor costs are rising across the technology sector.",
+          "AAPL may face margin pressure because semiconductor costs are rising across the technology sector.",
         matchedHoldings: ["AAPL"],
         matchReasonCodes: ["sector_exposure_explicit"],
       }),

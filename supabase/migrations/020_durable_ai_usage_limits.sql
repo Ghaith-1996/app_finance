@@ -48,6 +48,7 @@ RETURNS TABLE (
   resets_at TIMESTAMPTZ
 )
 LANGUAGE plpgsql
+SET search_path = public
 AS $$
 DECLARE
   v_limit INTEGER;
@@ -123,6 +124,7 @@ RETURNS TABLE (
   resets_at TIMESTAMPTZ
 )
 LANGUAGE plpgsql
+SET search_path = public
 AS $$
 DECLARE
   v_limit INTEGER;
@@ -233,6 +235,7 @@ RETURNS TABLE (
   resets_at TIMESTAMPTZ
 )
 LANGUAGE plpgsql
+SET search_path = public
 AS $$
 DECLARE
   v_window INTERVAL := make_interval(secs => p_window_seconds);

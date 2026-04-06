@@ -110,7 +110,8 @@ export function buildBillingState(input: {
 
 function applyAdminModelAccess(
   state: BillingState,
-  user: { id: string; email?: string | null } | null,
+  user: (Pick<User, "id" | "email"> &
+    Partial<Pick<User, "email_confirmed_at" | "user_metadata">>) | null,
 ): BillingState {
   const adminCandidate = user
     ? { id: user.id, email: user.email ?? undefined }
@@ -150,6 +151,8 @@ function toBillingSummary(state: BillingState): BillingSummary {
 export async function getBillingStateForUser(
   userId: string,
   userEmail?: string | null,
+  userContext?: (Pick<User, "id" | "email"> &
+    Partial<Pick<User, "email_confirmed_at" | "user_metadata">>) | null,
 ): Promise<BillingState> {
   const serviceSupabase = createServiceClient();
   const [customer, rows] = await Promise.all([
@@ -168,15 +171,17 @@ export async function getBillingStateForUser(
       ...baseState,
       ...quotaSummary,
     },
-    { id: userId, email: userEmail ?? null },
+    userContext ?? { id: userId, email: userEmail ?? undefined },
   );
 }
 
 export async function getBillingSummaryForUser(
   userId: string,
   userEmail?: string | null,
+  userContext?: (Pick<User, "id" | "email"> &
+    Partial<Pick<User, "email_confirmed_at" | "user_metadata">>) | null,
 ): Promise<BillingSummary> {
-  return toBillingSummary(await getBillingStateForUser(userId, userEmail));
+  return toBillingSummary(await getBillingStateForUser(userId, userEmail, userContext));
 }
 
 export async function getCurrentUserBillingSummary(): Promise<BillingSummary> {
@@ -189,14 +194,14 @@ export async function getCurrentUserBillingSummary(): Promise<BillingSummary> {
     return toBillingSummary(buildBillingState({ rows: [] }));
   }
 
-  return getBillingSummaryForUser(user.id, user.email);
+  return getBillingSummaryForUser(user.id, user.email, user);
 }
 
 export async function assertUserCanUseModelTier(
   user: Pick<User, "id" | "email">,
   tier: ArticleChatModelTier,
 ): Promise<BillingSummary> {
-  const summary = await getBillingSummaryForUser(user.id, user.email);
+  const summary = await getBillingSummaryForUser(user.id, user.email, user);
 
   if (!summary.allowedModelTiers.includes(tier)) {
     throw new BillingAccessError({

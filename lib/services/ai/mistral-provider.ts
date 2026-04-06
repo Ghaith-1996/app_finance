@@ -9,7 +9,10 @@ import type {
   Sentiment,
 } from "./provider";
 import { AIChatError, assertNonEmptyArticleChatReply } from "./ai-chat-errors";
-import { ARTICLE_CHAT_MAX_TOKENS } from "./constants";
+import {
+  ARTICLE_CHAT_MAX_TOKENS,
+  PORTFOLIO_COPILOT_MAX_TOKENS,
+} from "./constants";
 import { validateMistralConfig } from "@/lib/env";
 import { createLogger } from "@/lib/logger";
 import { stubAIProvider } from "./stub-provider";
@@ -238,7 +241,13 @@ export function createMistralProvider(): IAIProvider {
       try {
         const p = portfolioCopilotPrompt(context);
         const request = msgs(p, context.history);
-        const text = await respond(key, model, request.system, request.input, 450);
+        const text = await respond(
+          key,
+          model,
+          request.system,
+          request.input,
+          PORTFOLIO_COPILOT_MAX_TOKENS,
+        );
         return text ?? (await stubAIProvider.answerPortfolioQuestion(context));
       } catch {
         return stubAIProvider.answerPortfolioQuestion(context);

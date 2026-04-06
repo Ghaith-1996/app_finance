@@ -43,11 +43,12 @@ export async function middleware(request: NextRequest) {
   );
 
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  const user = session?.user ?? null;
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+  const authenticatedUser = userError ? null : user;
 
-  if (!user && isProtectedPath(request.nextUrl.pathname)) {
+  if (!authenticatedUser && isProtectedPath(request.nextUrl.pathname)) {
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("redirectTo", request.nextUrl.pathname);
     const redirectResponse = NextResponse.redirect(loginUrl);
@@ -57,7 +58,7 @@ export async function middleware(request: NextRequest) {
     return redirectResponse;
   }
 
-  if (user && request.nextUrl.pathname === "/login") {
+  if (authenticatedUser && request.nextUrl.pathname === "/login") {
     const redirectTo = sanitizeRedirect(request.nextUrl.searchParams.get("redirectTo"), "/portfolio");
     const redirectResponse = NextResponse.redirect(new URL(redirectTo, request.url));
     response.cookies.getAll().forEach((cookie) => {
@@ -67,11 +68,15 @@ export async function middleware(request: NextRequest) {
   }
 
   // Gate: authenticated users on protected paths must have a complete profile (name + ToS)
-  if (user && isProtectedPath(request.nextUrl.pathname) && !isProfileExemptPath(request.nextUrl.pathname)) {
+  if (
+    authenticatedUser &&
+    isProtectedPath(request.nextUrl.pathname) &&
+    !isProfileExemptPath(request.nextUrl.pathname)
+  ) {
     const { data: profile } = await supabase
       .from("user_profiles")
       .select("first_name, last_name, handle, accepted_terms_at")
-      .eq("user_id", user.id)
+      .eq("user_id", authenticatedUser.id)
       .maybeSingle();
 
     const isComplete =

@@ -24,4 +24,10 @@ describe("020_durable_ai_usage_limits.sql", () => {
     expect(migration).toMatch(/CREATE OR REPLACE FUNCTION consume_rate_limit/i);
     expect(migration).toMatch(/pg_advisory_xact_lock/i);
   });
+
+  it("pins durable RPC functions to the public schema search_path", () => {
+    expect(migration).toMatch(/FUNCTION get_ai_quota_status[\s\S]*SET search_path = public/i);
+    expect(migration).toMatch(/FUNCTION consume_ai_quota[\s\S]*SET search_path = public/i);
+    expect(migration).toMatch(/FUNCTION consume_rate_limit[\s\S]*SET search_path = public/i);
+  });
 });

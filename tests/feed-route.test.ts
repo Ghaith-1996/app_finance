@@ -11,6 +11,7 @@ import { GET } from "@/app/api/feed/route";
 function createAwaitableBuilder<T>(rows: T[]) {
   const builder = {
     eq: () => builder,
+    in: () => builder,
     contains: () => builder,
     gte: () => builder,
     order: () => builder,

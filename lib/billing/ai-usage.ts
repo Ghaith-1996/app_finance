@@ -3,6 +3,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { PlanKey } from "@/lib/billing/plans";
+import type { ArticleChatModelTier } from "@/lib/types";
 import { createServiceClient } from "@/lib/supabase/service";
 
 export const AI_USAGE_TIME_ZONE = "America/Toronto";
@@ -22,6 +23,13 @@ export type AIQuotaCheckResult = AIQuotaSummary & {
   allowed: boolean;
 };
 
+export type AIQuotaAtomicCheckResult = AIQuotaSummary & {
+  allowed: boolean;
+  denialCode: "plan_upgrade_required" | "quota_exceeded" | null;
+  effectivePlanKey: PlanKey;
+  requiredPlanKey: PlanKey | null;
+};
+
 type AIQuotaRpcRow = {
   quota_limit?: number | string | null;
   quota_used?: number | string | null;
@@ -29,6 +37,9 @@ type AIQuotaRpcRow = {
   quota_window?: AIQuotaWindow | null;
   resets_at?: string | null;
   allowed?: boolean | null;
+  denial_code?: string | null;
+  effective_plan_key?: string | null;
+  required_plan_key?: string | null;
 };
 
 const AI_QUOTA_POLICY: Record<PlanKey, { limit: number; window: AIQuotaWindow }> = {
@@ -159,6 +170,13 @@ function normalizeQuotaSummary(planKey: PlanKey, row: AIQuotaRpcRow | null): AIQ
   };
 }
 
+function normalizePlanKey(value: string | null | undefined, fallback: PlanKey): PlanKey {
+  if (value === "free" || value === "premium" || value === "ultimate") {
+    return value;
+  }
+  return fallback;
+}
+
 type ServiceClient = ReturnType<typeof createServiceClient>;
 type RpcCapableClient = Pick<SupabaseClient, "rpc"> | ServiceClient;
 
@@ -210,5 +228,44 @@ export async function consumeAIQuota(input: {
   return {
     allowed: row?.allowed !== false,
     ...normalizeQuotaSummary(input.planKey, row),
+  };
+}
+
+export async function consumeAIQuotaForUser(input: {
+  userId: string;
+  requestedTier: ArticleChatModelTier;
+  allowTierOverride?: boolean;
+  surface?: string;
+}): Promise<AIQuotaAtomicCheckResult> {
+  const supabase = createServiceClient();
+  const { data, error } = await supabase.rpc("consume_ai_quota_for_user", {
+    p_user_id: input.userId,
+    p_requested_tier: input.requestedTier,
+    p_allow_tier_override: input.allowTierOverride === true,
+    p_surface: input.surface ?? AI_SHARED_SURFACE,
+    p_time_zone: AI_USAGE_TIME_ZONE,
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const row = getRpcRow<AIQuotaRpcRow>(data);
+  const effectivePlanKey = normalizePlanKey(row?.effective_plan_key ?? null, "free");
+
+  return {
+    allowed: row?.allowed !== false,
+    denialCode:
+      row?.denial_code === "plan_upgrade_required" || row?.denial_code === "quota_exceeded"
+        ? row.denial_code
+        : null,
+    effectivePlanKey,
+    requiredPlanKey:
+      row?.required_plan_key === "free" ||
+      row?.required_plan_key === "premium" ||
+      row?.required_plan_key === "ultimate"
+        ? row.required_plan_key
+        : null,
+    ...normalizeQuotaSummary(effectivePlanKey, row),
   };
 }

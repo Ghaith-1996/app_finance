@@ -52,5 +52,23 @@ describe("LoginPage", () => {
 
     expect(screen.queryByRole("combobox")).toBeNull();
   });
-});
 
+  it("links to the Terms and Privacy pages", () => {
+    onAuthStateChange.mockReturnValue({
+      data: {
+        subscription: {
+          unsubscribe: vi.fn(),
+        },
+      },
+    });
+
+    render(
+      <PreferencesProvider initialTheme="dark" initialLocale="en">
+        <LoginPage />
+      </PreferencesProvider>,
+    );
+
+    expect(screen.getByRole("link", { name: "Terms of Service" })).toHaveAttribute("href", "/terms");
+    expect(screen.getByRole("link", { name: "Privacy Policy" })).toHaveAttribute("href", "/privacy");
+  });
+});

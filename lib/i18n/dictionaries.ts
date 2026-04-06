@@ -21,6 +21,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
       dark: "Dark",
       saveChanges: "Save changes",
       backToHome: "Back to home",
+      termsOfService: "Terms of Service",
+      privacyPolicy: "Privacy Policy",
     },
     preferences: {
       title: "Preferences",
@@ -67,7 +69,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       username: "Username",
       usernameHint: "Use 3-20 lowercase letters, numbers, or underscores.",
       termsLabelStart: "I agree to the",
-      termsLink: "Terms of Service",
+      termsLabelMiddle: "and the",
       completeTitle: "Complete your profile",
       completeDescription:
         "Tell us your first name, last name, and username before entering the app.",
@@ -81,6 +83,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
       google: "Sign in with Google",
       github: "Sign in with GitHub",
       redirecting: "Redirecting...",
+      legalNoticeStart: "Review our",
+      legalNoticeMiddle: "and",
       backHome: "Back to home",
     },
     landing: {
@@ -138,6 +142,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
       dark: "Sombre",
       saveChanges: "Enregistrer",
       backToHome: "Retour à l'accueil",
+      termsOfService: "Conditions d'utilisation",
+      privacyPolicy: "Politique de confidentialité",
     },
     preferences: {
       title: "Préférences",
@@ -185,7 +191,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       username: "Nom d'utilisateur",
       usernameHint: "Utilisez 3 à 20 lettres minuscules, chiffres ou traits de soulignement.",
       termsLabelStart: "J'accepte les",
-      termsLink: "Conditions d'utilisation",
+      termsLabelMiddle: "et la",
       completeTitle: "Complétez votre profil",
       completeDescription:
         "Indiquez votre prénom, votre nom et votre identifiant avant d'entrer dans l'application.",
@@ -199,6 +205,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
       google: "Se connecter avec Google",
       github: "Se connecter avec GitHub",
       redirecting: "Redirection...",
+      legalNoticeStart: "Consultez nos",
+      legalNoticeMiddle: "et notre",
       backHome: "Retour à l'accueil",
     },
     landing: {

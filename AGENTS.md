@@ -103,6 +103,13 @@ These decisions were made in the current thread and are reflected in code/doc ch
 - app shell layout max-width widened from `1400px` to `1600px` (`components/app/app-shell-layout.tsx`), portfolio page grid ratios adjusted to give the left column more space
 - `/complete-profile` now requires first-time users to accept Terms of Service via a checkbox before completing their profile; the `ProfileForm` component accepts a `requireTerms` prop that gates the submit button
 - added `/terms` page (`app/terms/page.tsx`) with 15 legal sections covering service description, AI-generated content disclaimers, billing, privacy, limitation of liability, etc.
+- replaced the generic `/terms` copy with a fixed legal document using static effective/last-updated dates, repo-accurate Stripe billing language, and explicit operator/contact/refund/jurisdiction placeholders from `lib/legal/constants.ts`
+- added a separate public `/privacy` page plus shared legal shell/layout support in `components/legal/legal-document-shell.tsx`; login and first-time profile completion now expose both Terms and Privacy links, while the existing `accepted_terms_at` flow remains unchanged
+- durable AI usage enforcement now replaces process-local AI gating: `supabase/migrations/020_durable_ai_usage_limits.sql`, `lib/security/ai-access.ts`, `lib/security/rate-limit.ts`, and `lib/billing/ai-usage.ts` enforce server-side model-tier access, burst limits, and quota consumption through Supabase RPCs
+- article chat and portfolio copilot now share AI quotas of `100/day` on Free, `5,000/month` on Premium, and `20,000/month` on Ultimate, plus a durable burst cap of `10` requests per `60` seconds for all plans
+- billing summaries now expose `aiQuotaLimit`, `aiQuotaWindow`, `aiQuotaUsed`, `aiQuotaRemaining`, and `aiQuotaResetsAt`; settings and pricing surfaces show quota copy/usage, and analysis/community throttles now use the same durable Supabase-backed rate limiter primitive
+- added regression coverage for durable AI entitlements/quota enforcement and legal-link rendering (`tests/ai-access.test.ts`, `tests/durable-ai-usage-migration.test.ts`, updated article-chat / portfolio-copilot route tests, `tests/profile-form-legal-links.test.tsx`, and `tests/login-language-hidden.test.tsx`)
+- new deployment follow-up: apply `supabase/migrations/020_durable_ai_usage_limits.sql` in every environment before relying on the durable quota/rate-limit enforcement
 - personal feed article limits raised: `ANALYSIS_NEWS_POOL_LIMIT` 100→500 (articles scored per analysis run), `MAX_PAGE_SIZE` 100→500 (pagination cap), `DEFAULT_FEED_PAGE_SIZE` 50→100; time-based 24-hour filter unchanged
 - updated `tests/analysis-constants.test.ts` to reflect the new 500-article pool limit
 
@@ -142,8 +149,12 @@ Node scripts:
   - App Router pages and API routes
 - `components/`
   - app UI and marketing UI
+- `components/legal/`
+  - shared legal document shell used by `/terms` and `/privacy`
 - `lib/actions/`
   - server actions, mainly portfolio import/edit/read helpers
+- `lib/legal/`
+  - shared legal placeholders, static dates, and legal document constants
 - `lib/services/`
   - core business logic
 - `lib/services/cache.ts`
@@ -175,27 +186,24 @@ At the time of writing, the worktree is dirty. Do not assume all local changes a
 
 Tracked modified files visible in `git status`:
 
-- `.env.example`
-- `README.md`
-- `app/onboarding/page.tsx`
-- `components/app/app-shell.tsx`
-- `components/app/user-menu.tsx`
-- `lib/services/ai/index.ts`
-- `lib/services/analysis.ts`
-- `middleware.ts`
-- `package-lock.json`
+- `AGENTS.md`
+- `CLAUDE.md`
+- `app/(auth)/login/page.tsx`
+- `app/terms/page.tsx`
+- `components/app/profile-form.tsx`
+- `lib/i18n/dictionaries.ts`
+- `tests/login-language-hidden.test.tsx`
 
 Untracked files visible in `git status`:
 
-- `AGENTS.md`
-- `lib/services/ai/azure-openai-provider.ts`
-- `scripts/test-azure-openai.mjs`
-- multiple Python `__pycache__` files under `workers/`
+- `app/privacy/`
+- `components/legal/`
+- `lib/legal/`
+- `tests/profile-form-legal-links.test.tsx`
 
 Implications:
 
 - do not revert unrelated local changes
-- do not treat `__pycache__` files as source
 - prefer reading the current file contents before editing any of the modified files above
 
 ## Runtime Architecture
@@ -298,6 +306,7 @@ Files:
 Purpose:
 
 - sign in with Google or GitHub via Supabase OAuth
+- exposes public links to `/terms` and `/privacy` beneath the auth controls
 
 ### `/onboarding`
 
@@ -484,7 +493,7 @@ Current behavior:
 - preloads any existing/derived profile values from `user_profiles` and OAuth metadata
 - redirects completed users to the requested destination immediately
 - otherwise requires first name, last name, and username before entering the app
-- first-time users must also accept Terms of Service via a checkbox before submitting
+- first-time users must also accept Terms of Service via a checkbox before submitting; the form links to both `/terms` and `/privacy`, but only Terms acceptance is recorded in this flow
 
 ### `/settings`
 
@@ -504,7 +513,7 @@ Current behavior:
 - allows editing first name, last name, and username
 - updates `user_profiles.display_name` from `first_name + last_name`
 - reuses the same validation and save path as first-login completion
-- shows `BillingSettingsPanel` with current plan, status, renewal date, allowed model tiers, and manage/upgrade CTAs
+- shows `BillingSettingsPanel` with current plan, status, renewal date, allowed model tiers, AI quota usage/remaining/reset timing, and manage/upgrade CTAs
 - displays `billing=success` badge after Stripe checkout redirect
 - allowlisted admins see `hasAdminModelAccess` reflected in the billing UI and get an `Admin` link in the user menu
 
@@ -546,6 +555,8 @@ Current behavior:
 
 - fetches live price labels from Stripe (`stripe.prices.retrieve`) for Premium and Ultimate
 - shows feature lists per plan and CTA buttons
+- discloses AI request quotas directly on the cards: Free `100/day`, Premium `5,000/month`, Ultimate `20,000/month`
+- shows the current 7-day first-paid-subscription trial copy when the viewer has not yet used the trial
 - Premium CTA and Ultimate CTA create Stripe Checkout sessions
 - already-subscribed users on paid plans are rejected (409) by the checkout route
 - shows `billing=cancel` feedback when returning from a cancelled checkout
@@ -558,14 +569,34 @@ Files:
 
 Purpose:
 
-- public Terms of Service page linked from the first-time profile completion form
+- public Terms of Service page linked from login and the first-time profile completion flow
 
 Current behavior:
 
-- renders 15 legal sections covering service description, AI-generated content disclaimers, billing, privacy, limitation of liability, etc.
+- renders a fixed legal document with static effective/last-updated dates from `lib/legal/constants.ts`
+- aligns billing language with Stripe Checkout for new subscriptions, Stripe Customer Portal for upgrades/downgrades/cancellation, and the current 7-day first-paid-subscription trial
+- cross-links to `/privacy` and uses explicit placeholders for operator identity, contact email, mailing address, refund terms, and governing jurisdiction that must be finalized before launch
 - styled with dark theme matching the rest of the app
 - includes a "Back to home" link at the top
-- linked from the ToS checkbox on `/complete-profile` (opens in a new tab)
+- linked from `/login` and the ToS checkbox on `/complete-profile`
+
+### `/privacy`
+
+Files:
+
+- `app/privacy/page.tsx`
+- `components/legal/legal-document-shell.tsx`
+- `lib/legal/constants.ts`
+
+Purpose:
+
+- public Privacy Policy route for Canadian/Ontario-oriented disclosure
+
+Current behavior:
+
+- covers auth/profile data, portfolio/holdings/watchlist data, billing/subscription metadata, article/chat inputs, community content, essential cookies/preferences, security checks/logs, and admin/support access
+- names the actual processors/services reflected in the repo or deployment model: Supabase, Stripe, Vercel, Cloudflare Turnstile, configurable AI providers, and third-party market/news providers where applicable
+- describes cross-border processing, request-based privacy rights handling, retention/safeguards/breach notice posture, and links back to `/terms`
 
 ## API Routes
 
@@ -688,9 +719,13 @@ Behavior:
 
 - authenticated
 - requires `portfolioId`, `newsItemId`, `message`
+- verifies model-tier access plus durable AI burst/quota limits before admitting the request
 - stores user message
 - loads article + holdings + latest feed match context
 - calls `ai.answerArticleQuestion(...)` (providers do **not** fall back to the stub on failure; empty or failed generations surface as `AIChatError` / `toArticleChatError`)
+- may return **403** with `{ error, code: "plan_upgrade_required", currentPlan, requiredPlan, requestedTier }` when the requested model tier exceeds the user's effective access
+- may return **429** with `{ error, code: "rate_limited", retryAfterMs, resetsAt }` when the durable per-minute burst cap is exceeded
+- may return **429** with `{ error, code: "quota_exceeded", quotaWindow, quotaLimit, quotaUsed, resetsAt }` when the shared AI quota window is exhausted
 - on provider failure: returns **503** with `{ error, code }` (`AIChatErrorCode`), logs provider + deployment server-side; **does not** insert an assistant row
 - error codes map to distinct user-facing messages: `provider_auth` → credentials/config hint; `provider_timeout` → retry hint; `provider_bad_response` → rephrase hint; `provider_unavailable` → generic retry
 - on success: stores assistant reply and returns `{ threadId, messages }`
@@ -705,7 +740,10 @@ Behavior:
 
 - authenticated
 - requires `portfolioId` and `message`
+- verifies model-tier access plus durable AI burst/quota limits before calling the provider
 - loads portfolio overview, holdings, latest insights, and latest feed context
+- may return **403** with `{ error, code: "plan_upgrade_required", currentPlan, requiredPlan, requestedTier }`
+- may return **429** with `{ error, code: "rate_limited" | "quota_exceeded", retryAfterMs?, quotaWindow?, quotaLimit?, quotaUsed?, resetsAt? }`
 - calls `ai.answerPortfolioQuestion(...)`
 - returns `{ answer }`
 
@@ -1979,6 +2017,28 @@ Provides:
 - `check(key)` returns `{ allowed, retryAfterMs?, remaining }`
 - auto-cleans expired entries every 60 seconds
 - suitable for single-instance deployments; replace backing store with Upstash Redis for horizontal scaling
+
+Current repo state:
+
+- `lib/security/rate-limit.ts` is now a server-only durable limiter backed by the Supabase RPC `consume_rate_limit`
+- `check(key)` now returns a `Promise<{ allowed, retryAfterMs?, remaining, resetsAt }>`
+- default limiters: shared AI burst `10/60s`, analysis run `5/60s`, community post `10/60s`, community comment `20/60s`
+- limiter state survives across Vercel instances/process restarts once `supabase/migrations/020_durable_ai_usage_limits.sql` has been applied
+
+### AI Usage And Entitlements
+
+Files:
+
+- `lib/security/ai-access.ts`
+- `lib/billing/ai-usage.ts`
+- `supabase/migrations/020_durable_ai_usage_limits.sql`
+
+Provides:
+
+- `assertUserCanUseAI(user, tier, surface)` - server-only gate that checks billing tier access, durable burst rate limits, and durable quota consumption in that order
+- shared AI quota policy across article chat and portfolio copilot: Free `100/day`, Premium `5,000/month`, Ultimate `20,000/month`
+- Toronto-based quota reset boundaries via `AI_USAGE_TIME_ZONE = "America/Toronto"`
+- structured denial metadata for `plan_upgrade_required`, `rate_limited`, and `quota_exceeded` responses
 
 ### Redirect Validation
 

@@ -92,6 +92,17 @@ export default function LoginPage() {
               {loading === "github" ? t("login.redirecting") : t("login.github")}
             </button>
           </div>
+          <p className="text-center text-xs leading-6 text-secondary">
+            {t("login.legalNoticeStart")}{" "}
+            <Link href="/terms" className="text-brand underline underline-offset-2 hover:text-brand-strong">
+              {t("common.termsOfService")}
+            </Link>{" "}
+            {t("login.legalNoticeMiddle")}{" "}
+            <Link href="/privacy" className="text-brand underline underline-offset-2 hover:text-brand-strong">
+              {t("common.privacyPolicy")}
+            </Link>
+            .
+          </p>
         </Panel>
 
         <p className="text-center text-sm text-muted">

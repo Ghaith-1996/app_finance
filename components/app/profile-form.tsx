@@ -25,7 +25,7 @@ interface Props {
   >;
   redirectTo?: string;
   successMessage?: string;
-  /** Show Terms of Service checkbox (for first-time profile completion). */
+  /** Show legal acceptance checkbox (for first-time profile completion). */
   requireTerms?: boolean;
 }
 
@@ -138,7 +138,17 @@ export function ProfileForm({
                 rel="noopener noreferrer"
                 className="font-medium text-brand underline underline-offset-2 hover:text-brand-strong"
               >
-                {t("profile.termsLink")}
+                {t("common.termsOfService")}
+              </a>
+              {" "}
+              {t("profile.termsLabelMiddle")}{" "}
+              <a
+                href="/privacy"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-brand underline underline-offset-2 hover:text-brand-strong"
+              >
+                {t("common.privacyPolicy")}
               </a>
             </span>
           </label>

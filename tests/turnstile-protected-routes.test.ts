@@ -190,10 +190,13 @@ describe("POST /api/article-chat — Turnstile gate", () => {
 
     // The route may error on DB issues downstream, but it should pass the Turnstile gate
     expect(res.status).not.toBe(403);
-    expect(mockVerifyTurnstileToken).toHaveBeenCalledWith({
-      token: "valid-token",
-      remoteIp: "127.0.0.1",
-    });
+    expect(mockVerifyTurnstileToken).toHaveBeenCalledWith(
+      expect.objectContaining({
+        token: "valid-token",
+        remoteIp: "127.0.0.1",
+        expectedAction: "article-chat",
+      }),
+    );
   });
 });
 

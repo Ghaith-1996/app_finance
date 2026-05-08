@@ -108,6 +108,24 @@ describe("GET /auth/callback", () => {
     expect(response.headers.get("location")).toBe("http://localhost/home");
   });
 
+  it("preserves sanitized digest redirects with story query params", async () => {
+    mockProfile({
+      first_name: "Ada",
+      last_name: "Lovelace",
+      handle: "ada",
+      accepted_terms_at: "2026-01-01T00:00:00Z",
+    });
+
+    const response = await GET(
+      new Request("http://localhost/auth/callback?code=abc&redirectTo=%2Fdigest%2Fdigest-1%3Fstory%3Dnews-1"),
+    );
+
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toBe(
+      "http://localhost/digest/digest-1?story=news-1",
+    );
+  });
+
   it("falls back to the auth error redirect when session exchange fails", async () => {
     exchangeCodeForSession.mockResolvedValue({ error: new Error("bad code") });
 

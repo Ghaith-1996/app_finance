@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { validatePublisherUrl } from "@/lib/security/publisher-url";
+import {
+  assertSafePublicUrl,
+  validatePublisherUrl,
+} from "@/lib/security/publisher-url";
 
 describe("validatePublisherUrl", () => {
   it("allows public http and https URLs", () => {
@@ -23,5 +26,25 @@ describe("validatePublisherUrl", () => {
 
   it("rejects credential-bearing URLs", () => {
     expect(validatePublisherUrl("https://user:pass@example.com").ok).toBe(false);
+  });
+
+  it("accepts hostnames that resolve only to public IPs", async () => {
+    const result = await assertSafePublicUrl("https://example.com/article", {
+      lookupImpl: async () => [{ address: "93.184.216.34" }],
+    });
+
+    expect(result).toEqual({ ok: true });
+  });
+
+  it("rejects hostnames that resolve to blocked private or metadata IPs", async () => {
+    const privateResult = await assertSafePublicUrl("https://example.com/article", {
+      lookupImpl: async () => [{ address: "10.0.0.10" }],
+    });
+    const metadataResult = await assertSafePublicUrl("https://example.com/article", {
+      lookupImpl: async () => [{ address: "169.254.169.254" }],
+    });
+
+    expect(privateResult).toEqual({ ok: false, reason: "blocked_resolved_ip" });
+    expect(metadataResult).toEqual({ ok: false, reason: "blocked_resolved_ip" });
   });
 });

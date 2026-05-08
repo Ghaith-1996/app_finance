@@ -8,7 +8,6 @@ import {
   DollarSign,
   ExternalLink,
   Globe,
-  Loader2,
   TrendingDown,
   TrendingUp,
   Users,
@@ -130,6 +129,9 @@ export function WatchlistDetailDashboard({ symbol }: Props) {
             capabilities: { hasStats: false, hasProfile: false, hasEarnings: false, hasFinancials: false },
             warnings: [],
             error: "Failed to load details. Try again later.",
+            latestEarningsReportUrl: null,
+            latestEarningsReportSource: null,
+            latestEarningsReportDate: null,
           });
           setLoading(false);
         }
@@ -258,7 +260,12 @@ function OverviewTab({ data, up }: { data: WatchlistDetailData; up: boolean }) {
   return (
     <div className="space-y-4">
       {data.chart.length >= 2 && <PriceChartSection chart={data.chart} up={up} />}
-      <EarningsCard earnings={data.earnings} />
+      <EarningsCard
+        earnings={data.earnings}
+        latestEarningsReportUrl={data.latestEarningsReportUrl}
+        latestEarningsReportSource={data.latestEarningsReportSource}
+        latestEarningsReportDate={data.latestEarningsReportDate}
+      />
       <KeyStatsGrid data={data} />
       <EmployeesCard profile={data.profile} />
       <ProfileBlock data={data} />
@@ -320,11 +327,22 @@ function PriceChartSection({ chart, up }: { chart: ChartPoint[]; up: boolean }) 
 // Earnings card
 // ---------------------------------------------------------------------------
 
-function EarningsCard({ earnings }: { earnings: EarningsDataPoint[] }) {
-  if (earnings.length === 0) return null;
+function EarningsCard({
+  earnings,
+  latestEarningsReportUrl,
+  latestEarningsReportSource,
+  latestEarningsReportDate,
+}: {
+  earnings: EarningsDataPoint[];
+  latestEarningsReportUrl: string | null;
+  latestEarningsReportSource: WatchlistDetailData["latestEarningsReportSource"];
+  latestEarningsReportDate: string | null;
+}) {
+  if (earnings.length === 0 && !latestEarningsReportUrl) return null;
 
   const latest = [...earnings].reverse().find((e) => e.epsActual != null);
   const upcoming = [...earnings].find((e) => e.epsActual == null && e.epsEstimate != null);
+  const safeReportUrl = sanitizeExternalUrl(latestEarningsReportUrl);
 
   const chartData = earnings.filter((e) => e.epsActual != null || e.epsEstimate != null);
 
@@ -335,25 +353,55 @@ function EarningsCard({ earnings }: { earnings: EarningsDataPoint[] }) {
         Earnings
       </div>
 
-      <div className="mb-4 flex flex-wrap gap-x-5 gap-y-2">
-        {latest && (
-          <div>
-            <p className="text-[10px] text-slate-500">Last EPS</p>
-            <p className="text-sm font-bold text-white">${fmt(latest.epsActual)}</p>
-            {latest.surprise != null && (
-              <p className={cn("text-[10px] font-bold", latest.surprise >= 0 ? "text-emerald-400" : "text-red-400")}>
-                {latest.surprise >= 0 ? "+" : ""}{fmt(latest.surprise)}% surprise
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
+        <div className="flex flex-wrap gap-x-5 gap-y-2">
+          {latest && (
+            <div>
+              <p className="text-[10px] text-slate-500">Last EPS</p>
+              <p className="text-sm font-bold text-white">${fmt(latest.epsActual)}</p>
+              {latest.surprise != null && (
+                <p className={cn("text-[10px] font-bold", latest.surprise >= 0 ? "text-emerald-400" : "text-red-400")}>
+                  {latest.surprise >= 0 ? "+" : ""}{fmt(latest.surprise)}% surprise
+                </p>
+              )}
+            </div>
+          )}
+          {upcoming && (
+            <div>
+              <p className="text-[10px] text-slate-500">Next Est.</p>
+              <p className="text-sm font-bold text-white">${fmt(upcoming.epsEstimate)}</p>
+              <p className="text-[10px] text-slate-500">{upcoming.date}</p>
+            </div>
+          )}
+        </div>
+
+        {latestEarningsReportUrl ? (
+          <div className="flex min-w-[180px] flex-col items-start gap-1">
+            {safeReportUrl ? (
+              <a
+                href={safeReportUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-brand/25 bg-brand/10 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-brand transition hover:border-brand/40 hover:bg-brand/15"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                Latest earnings report
+              </a>
+            ) : (
+              <div className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                <ExternalLink className="h-3.5 w-3.5" />
+                Latest earnings report
+              </div>
+            )}
+            {(latestEarningsReportSource || latestEarningsReportDate) && (
+              <p className="text-[10px] text-slate-500">
+                {[latestEarningsReportSource?.toUpperCase() ?? null, latestEarningsReportDate]
+                  .filter(Boolean)
+                  .join(" · ")}
               </p>
             )}
           </div>
-        )}
-        {upcoming && (
-          <div>
-            <p className="text-[10px] text-slate-500">Next Est.</p>
-            <p className="text-sm font-bold text-white">${fmt(upcoming.epsEstimate)}</p>
-            <p className="text-[10px] text-slate-500">{upcoming.date}</p>
-          </div>
-        )}
+        ) : null}
       </div>
 
       {chartData.length >= 2 && (

@@ -1,0 +1,57 @@
+name: Daily Digest
+
+on:
+  schedule:
+    - cron: "0,15,30,45 13,14 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  trigger-daily-digest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate DIGEST_CRON_ENDPOINT format
+        run: |
+          set -euo pipefail
+          if [[ "${DIGEST_CRON_ENDPOINT}" != */api/notifications/daily-digest/cron ]]; then
+            echo "DIGEST_CRON_ENDPOINT must end with /api/notifications/daily-digest/cron, got: ${DIGEST_CRON_ENDPOINT}"
+            exit 1
+          fi
+        env:
+          DIGEST_CRON_ENDPOINT: ${{ secrets.DIGEST_CRON_ENDPOINT }}
+
+      - name: Trigger daily digest cron route
+        env:
+          DIGEST_CRON_ENDPOINT: ${{ secrets.DIGEST_CRON_ENDPOINT }}
+          DIGEST_CRON_SECRET: ${{ secrets.DIGEST_CRON_SECRET }}
+        run: |
+          set -euo pipefail
+
+          for name in DIGEST_CRON_ENDPOINT DIGEST_CRON_SECRET; do
+            if [ -z "${!name:-}" ]; then
+              echo "${name} secret is not set"
+              exit 1
+            fi
+          done
+
+          response_file="$(mktemp)"
+
+          http_code="$(
+            curl -sS \
+              -X POST \
+              -H "Authorization: Bearer ${DIGEST_CRON_SECRET}" \
+              -H "Accept: application/json" \
+              -o "${response_file}" \
+              -w "%{http_code}" \
+              "${DIGEST_CRON_ENDPOINT}"
+          )"
+
+          echo "HTTP ${http_code}"
+          cat "${response_file}"
+
+          if [ "${http_code}" -lt 200 ] || [ "${http_code}" -ge 300 ]; then
+            echo "Daily digest invocation failed"
+            exit 1
+          fi

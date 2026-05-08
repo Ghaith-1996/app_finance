@@ -1,5 +1,9 @@
 import "server-only";
 
+import {
+  attachLatestEarningsReportFields,
+  loadActiveEarningsReportsBySymbols,
+} from "@/lib/services/earnings-reports";
 import { isAdminUser } from "@/lib/security/admin";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -155,6 +159,9 @@ function mapHoldingFromRow(row: HoldingRow): Holding {
     quoteCurrency: row.quote_currency ?? "USD",
     quoteAsOf: row.quote_as_of ?? null,
     importSource: row.import_source ?? "manual",
+    latestEarningsReportUrl: null,
+    latestEarningsReportSource: null,
+    latestEarningsReportDate: null,
   };
 }
 
@@ -580,12 +587,19 @@ export async function loadPortfolioPageData(): Promise<{
   ]);
   timer.mark("holdings/overview context");
 
-  const [feedHighlights] = await Promise.all([
+  const [feedHighlights, reportsBySymbol] = await Promise.all([
     loadPortfolioFeedHighlightsForRun(context.supabase, portfolioId, latestRun?.id ?? null),
+    loadActiveEarningsReportsBySymbols(
+      context.supabase,
+      holdingRows.map((row) => row.symbol),
+    ),
   ]);
   timer.mark("feed highlights");
 
-  const holdings = holdingRows.map(mapHoldingFromRow);
+  const holdings = attachLatestEarningsReportFields(
+    holdingRows.map(mapHoldingFromRow),
+    reportsBySymbol,
+  );
   timer.done();
 
   return {
@@ -703,13 +717,20 @@ export async function loadFullPortfolioPageData(): Promise<{
   ]);
   timer.mark("holdings/overview context");
 
-  const [insights, feedHighlights] = await Promise.all([
+  const [insights, feedHighlights, reportsBySymbol] = await Promise.all([
     loadPortfolioInsightsForRun(context.supabase, latestRun?.id ?? null),
     loadPortfolioFeedHighlightsForRun(context.supabase, portfolioId, latestRun?.id ?? null),
+    loadActiveEarningsReportsBySymbols(
+      context.supabase,
+      holdingRows.map((row) => row.symbol),
+    ),
   ]);
   timer.mark("insights/highlights");
 
-  const holdings = holdingRows.map(mapHoldingFromRow);
+  const holdings = attachLatestEarningsReportFields(
+    holdingRows.map(mapHoldingFromRow),
+    reportsBySymbol,
+  );
   timer.done();
 
   return {

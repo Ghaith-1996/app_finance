@@ -16,6 +16,7 @@ const ALLOWED_PREFIXES = [
   "/complete-profile",
   "/onboarding",
   "/pricing",
+  "/digest",
 ];
 
 /**

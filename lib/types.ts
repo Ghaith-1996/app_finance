@@ -1,6 +1,13 @@
 export type Sentiment = "positive" | "watch" | "negative" | "neutral";
 export type ImpactLevel = "High" | "Medium" | "Low";
 export type StockEffect = "bullish" | "bearish" | "neutral";
+export type LatestEarningsReportSource = "company" | "sec";
+
+export interface LatestEarningsReportFields {
+  latestEarningsReportUrl: string | null;
+  latestEarningsReportSource: LatestEarningsReportSource | null;
+  latestEarningsReportDate: string | null;
+}
 
 export const NEWS_CATEGORIES = [
   "technology", "minerals", "energy", "healthcare", "financials",
@@ -70,7 +77,7 @@ export interface Provider {
   ctaLabel: string;
 }
 
-export interface Holding {
+export interface Holding extends LatestEarningsReportFields {
   id: string;
   symbol: string;
   company: string;

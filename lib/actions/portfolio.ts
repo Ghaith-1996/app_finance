@@ -2,6 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import {
+  attachLatestEarningsReportFields,
+  loadActiveEarningsReportsBySymbols,
+} from "@/lib/services/earnings-reports";
 import { computePortfolioOverview } from "@/lib/services/portfolio";
 import {
   parseCSV,
@@ -113,6 +117,9 @@ function mapHoldingFromDb(row: any) {
     quoteCurrency: (row.quote_currency as string) ?? "USD",
     quoteAsOf: (row.quote_as_of as string) ?? null,
     importSource: (row.import_source as string) ?? "manual",
+    latestEarningsReportUrl: null,
+    latestEarningsReportSource: null,
+    latestEarningsReportDate: null,
   };
 }
 
@@ -158,7 +165,13 @@ async function loadMappedPortfolioHoldings(
     .eq("portfolio_id", portfolioId)
     .order("created_at", { ascending: true });
 
-  return (holdingsRows ?? []).map(mapHoldingFromDb);
+  const holdings = (holdingsRows ?? []).map(mapHoldingFromDb);
+  const reportsBySymbol = await loadActiveEarningsReportsBySymbols(
+    supabase,
+    holdings.map((holding) => holding.symbol),
+  );
+
+  return attachLatestEarningsReportFields(holdings, reportsBySymbol);
 }
 
 function revalidateAll() {
@@ -555,7 +568,13 @@ export async function getPortfolio(portfolioId: string) {
     return { data: null, error: holdingsError.message };
   }
 
-  const holdings = (holdingsRows ?? []).map(mapHoldingFromDb);
+  const holdings = attachLatestEarningsReportFields(
+    (holdingsRows ?? []).map(mapHoldingFromDb),
+    await loadActiveEarningsReportsBySymbols(
+      supabase,
+      (holdingsRows ?? []).map((row) => String(row.symbol ?? "")),
+    ),
+  );
   return {
     data: {
       id: portfolio.id,

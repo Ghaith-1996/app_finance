@@ -103,6 +103,7 @@ export function FeedView({
   initialFeedPayload,
   allowedModelTiers = ["free", "premium", "ultimate"],
   defaultModelTier = "free",
+  initialGeneralChatTurnstileVerified = false,
 }: {
   portfolioId?: string | null;
   insights?: PortfolioInsight[];
@@ -113,6 +114,12 @@ export function FeedView({
   initialFeedPayload?: FeedResponsePayload | null;
   allowedModelTiers?: ArticleChatModelTier[];
   defaultModelTier?: ArticleChatModelTier;
+  /**
+   * Server-computed hint: does the current browser session already hold a
+   * Turnstile grant for the `article-chat-general + portfolioId` scope?
+   * Story-level chats always resolve their own grant via `GET /api/article-chat`.
+   */
+  initialGeneralChatTurnstileVerified?: boolean;
 }) {
   const initialMode: FeedMode = initialTicker ? "market" : "personal";
   const [mode, setMode] = useState<FeedMode>(() => initialMode);
@@ -1048,6 +1055,7 @@ export function FeedView({
             onSelectedTierChange={setSelectedChatTier}
             onClose={resetChatSurface}
             onActivityChange={handleChatActivityChange}
+            initialGeneralChatTurnstileVerified={initialGeneralChatTurnstileVerified}
           />
         ) : selectedStory && !chatOpen ? (
           <DetailPanel
@@ -1072,6 +1080,7 @@ export function FeedView({
           onSelectedTierChange={setSelectedChatTier}
           onClose={resetChatSurface}
           onActivityChange={handleChatActivityChange}
+          initialGeneralChatTurnstileVerified={initialGeneralChatTurnstileVerified}
         />
       ) : null}
 
@@ -1231,6 +1240,7 @@ function StoryChatSidebar({
   onSelectedTierChange,
   onClose,
   onActivityChange,
+  initialGeneralChatTurnstileVerified,
 }: {
   context: FeedChatContext;
   story: NewsItem | null;
@@ -1240,6 +1250,7 @@ function StoryChatSidebar({
   onSelectedTierChange: (tier: ArticleChatModelTier) => void;
   onClose: () => void;
   onActivityChange: (state: ArticleChatActivityState) => void;
+  initialGeneralChatTurnstileVerified: boolean;
 }) {
   const isStoryContext = context === "story" && story;
 
@@ -1260,6 +1271,9 @@ function StoryChatSidebar({
         onActivityChange={onActivityChange}
         showHeader={false}
         className="border-0 bg-transparent p-0"
+        initialTurnstileVerified={
+          isStoryContext ? false : initialGeneralChatTurnstileVerified
+        }
       />
     </Panel>
   );
@@ -1274,6 +1288,7 @@ function StoryChatMobileSheet({
   onSelectedTierChange,
   onClose,
   onActivityChange,
+  initialGeneralChatTurnstileVerified,
 }: {
   context: FeedChatContext;
   story: NewsItem | null;
@@ -1283,6 +1298,7 @@ function StoryChatMobileSheet({
   onSelectedTierChange: (tier: ArticleChatModelTier) => void;
   onClose: () => void;
   onActivityChange: (state: ArticleChatActivityState) => void;
+  initialGeneralChatTurnstileVerified: boolean;
 }) {
   const isStoryContext = context === "story" && story;
 
@@ -1318,6 +1334,9 @@ function StoryChatMobileSheet({
                 onActivityChange={onActivityChange}
                 showHeader={false}
                 className="border-0 bg-transparent p-0"
+                initialTurnstileVerified={
+                  isStoryContext ? false : initialGeneralChatTurnstileVerified
+                }
               />
             </div>
           </div>

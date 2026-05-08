@@ -2,6 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import {
+  latestEarningsReportFields,
+  loadActiveEarningsReportsBySymbols,
+} from "@/lib/services/earnings-reports";
 import { searchSymbols, getQuote, FinnhubError } from "@/lib/services/finnhub";
 import { getWatchlistDetail } from "@/lib/services/twelvedata";
 import { createLogger } from "@/lib/logger";
@@ -210,8 +214,19 @@ export async function getWatchlistItemDetails(symbol: string): Promise<Watchlist
       capabilities: { hasStats: false, hasProfile: false, hasEarnings: false, hasFinancials: false },
       warnings: [],
       error: "Unauthorized",
+      latestEarningsReportUrl: null,
+      latestEarningsReportSource: null,
+      latestEarningsReportDate: null,
     };
   }
 
-  return getWatchlistDetail(symbol);
+  const [detail, reportsBySymbol] = await Promise.all([
+    getWatchlistDetail(symbol),
+    loadActiveEarningsReportsBySymbols(supabase, [symbol]),
+  ]);
+
+  return {
+    ...detail,
+    ...latestEarningsReportFields(reportsBySymbol.get(symbol.trim().toUpperCase())),
+  };
 }

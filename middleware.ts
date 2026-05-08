@@ -2,7 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { sanitizeRedirect } from "@/lib/security/redirect";
 
-const protectedPaths = ["/onboarding", "/analysis", "/feed", "/portfolio", "/home", "/watchlist", "/settings", "/admin", "/complete-profile"];
+const protectedPaths = ["/onboarding", "/analysis", "/feed", "/portfolio", "/home", "/watchlist", "/settings", "/admin", "/complete-profile", "/digest"];
 
 /** Paths where an incomplete profile is acceptable (the user is actively completing it, or reading ToS). */
 const profileExemptPaths = ["/complete-profile", "/terms"];
@@ -17,6 +17,7 @@ function isProfileExemptPath(pathname: string) {
 
 export async function middleware(request: NextRequest) {
   const response = NextResponse.next({ request });
+  const redirectTarget = `${request.nextUrl.pathname}${request.nextUrl.search}`;
 
   if (
     !process.env.NEXT_PUBLIC_SUPABASE_URL ||
@@ -50,7 +51,7 @@ export async function middleware(request: NextRequest) {
 
   if (!authenticatedUser && isProtectedPath(request.nextUrl.pathname)) {
     const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("redirectTo", request.nextUrl.pathname);
+    loginUrl.searchParams.set("redirectTo", redirectTarget);
     const redirectResponse = NextResponse.redirect(loginUrl);
     response.cookies.getAll().forEach((cookie) => {
       redirectResponse.cookies.set(cookie.name, cookie.value);
@@ -87,7 +88,7 @@ export async function middleware(request: NextRequest) {
 
     if (!isComplete) {
       const completeUrl = new URL("/complete-profile", request.url);
-      completeUrl.searchParams.set("redirectTo", request.nextUrl.pathname);
+      completeUrl.searchParams.set("redirectTo", redirectTarget);
       const redirectResponse = NextResponse.redirect(completeUrl);
       response.cookies.getAll().forEach((cookie) => {
         redirectResponse.cookies.set(cookie.name, cookie.value);

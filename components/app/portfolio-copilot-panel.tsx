@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Loader2, SendHorizonal, Sparkles } from "lucide-react";
 
@@ -25,11 +25,19 @@ export function PortfolioCopilotPanel({
   watchlistSymbols,
   allowedTiers = ["free", "premium", "ultimate"],
   defaultModelTier = "free",
+  initialTurnstileVerified = false,
 }: {
   portfolioId: string;
   watchlistSymbols?: string[];
   allowedTiers?: ArticleChatModelTier[];
   defaultModelTier?: ArticleChatModelTier;
+  /**
+   * Initial "scope already passed a Turnstile challenge in this browser
+   * session" hint from the server (derived from the signed grant cookie).
+   * When `true`, the widget is hidden and the send button does not wait on
+   * a fresh challenge.
+   */
+  initialTurnstileVerified?: boolean;
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
@@ -37,6 +45,9 @@ export function PortfolioCopilotPanel({
   const [error, setError] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
   const [selectedTier, setSelectedTier] = useState<ArticleChatModelTier>(defaultModelTier);
+  const [isVerifiedForCurrentChat, setIsVerifiedForCurrentChat] = useState(
+    initialTurnstileVerified,
+  );
   const turnstile = useTurnstile();
 
   const starterQuestions = useMemo(() => STARTER_QUESTIONS, []);
@@ -54,71 +65,116 @@ export function PortfolioCopilotPanel({
     }
   }, [allowedTiers, defaultModelTier, selectedTier]);
 
-  async function sendMessage(message: string) {
-    const trimmed = message.trim();
-    if (!trimmed || sending) return;
-
-    const nextUserMessage: ChatMessage = {
-      id: crypto.randomUUID(),
-      role: "user",
-      content: trimmed,
-    };
-
-    setMessages((current) => [...current, nextUserMessage]);
+  // Scope reset: switching portfolios invalidates the previous grant for this
+  // UI. Clear local verification, drop the current conversation, and reset
+  // the widget so a fresh challenge arms for the new scope.
+  useEffect(() => {
+    setIsVerifiedForCurrentChat(initialTurnstileVerified);
+    setMessages([]);
     setDraft("");
-    setSending(true);
     setError(null);
     setErrorCode(null);
+    turnstile.reset();
+    // `turnstile.reset` is stable (useCallback); only the portfolioId and the
+    // hydrated initial value should trigger a scope reset.
+  }, [portfolioId, initialTurnstileVerified, turnstile.reset]);
 
-    try {
-      const res = await fetch("/api/portfolio-copilot", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+  const canSendForCurrentChat = isVerifiedForCurrentChat || turnstile.canSubmit;
+
+  const sendMessage = useCallback(
+    async (message: string) => {
+      const trimmed = message.trim();
+      if (!trimmed || sending) return;
+
+      const nextUserMessage: ChatMessage = {
+        id: crypto.randomUUID(),
+        role: "user",
+        content: trimmed,
+      };
+
+      setMessages((current) => [...current, nextUserMessage]);
+      setDraft("");
+      setSending(true);
+      setError(null);
+      setErrorCode(null);
+
+      try {
+        const body: {
+          portfolioId: string;
+          message: string;
+          modelTier: ArticleChatModelTier;
+          watchlistSymbols?: string[];
+          turnstileToken?: string;
+          history: Array<{ role: "user" | "assistant"; content: string }>;
+        } = {
           portfolioId,
           message: trimmed,
           modelTier: selectedTier,
           watchlistSymbols,
-          turnstileToken: turnstile.token ?? undefined,
           history: messages
             .concat(nextUserMessage)
             .slice(-10)
             .map((item) => ({ role: item.role, content: item.content })),
-        }),
-      });
-
-      const data = (await res.json().catch(() => ({}))) as {
-        answer?: string;
-        error?: string;
-        code?: string;
-      };
-
-      if (!res.ok || !data.answer) {
-        setErrorCode(data.code ?? null);
-        if (data.code === "turnstile_failed") {
-          turnstile.reset();
+        };
+        // Only attach a Turnstile token when the server has not yet granted
+        // this portfolio-copilot scope. Once granted, the signed session
+        // cookie bypasses the challenge for the rest of the browser session.
+        if (!isVerifiedForCurrentChat && turnstile.token) {
+          body.turnstileToken = turnstile.token;
         }
-        throw new Error(data.error ?? "Failed to get copilot answer");
-      }
 
-      setMessages((current) => [
-        ...current,
-        {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content: data.answer ?? "",
-        },
-      ]);
-      turnstile.reset();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to get copilot answer");
-      setMessages((current) => current.filter((item) => item.id !== nextUserMessage.id));
-      setDraft(trimmed);
-      turnstile.reset();
-    } finally {
-      setSending(false);
-    }
-  }
+        const res = await fetch("/api/portfolio-copilot", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+
+        const data = (await res.json().catch(() => ({}))) as {
+          answer?: string;
+          error?: string;
+          code?: string;
+        };
+
+        if (!res.ok || !data.answer) {
+          setErrorCode(data.code ?? null);
+          if (data.code === "turnstile_failed") {
+            // Only a real Turnstile failure should re-arm the challenge.
+            setIsVerifiedForCurrentChat(false);
+            turnstile.reset();
+          }
+          throw new Error(data.error ?? "Failed to get copilot answer");
+        }
+
+        setMessages((current) => [
+          ...current,
+          {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: data.answer ?? "",
+          },
+        ]);
+        // First successful send minted a server-side grant cookie. Mark the
+        // scope verified and leave the widget hidden; do NOT reset it, which
+        // would arm a fresh challenge on every send.
+        setIsVerifiedForCurrentChat(true);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to get copilot answer");
+        setMessages((current) => current.filter((item) => item.id !== nextUserMessage.id));
+        setDraft(trimmed);
+      } finally {
+        setSending(false);
+      }
+    },
+    [
+      isVerifiedForCurrentChat,
+      messages,
+      portfolioId,
+      selectedTier,
+      sending,
+      turnstile,
+      watchlistSymbols,
+    ],
+  );
 
   return (
     <div className="space-y-4 rounded-[2rem] border border-white/[0.06] bg-surface-raised p-5">
@@ -199,7 +255,7 @@ export function PortfolioCopilotPanel({
                   key={question}
                   type="button"
                   onClick={() => void sendMessage(question)}
-                  disabled={sending || !turnstile.canSubmit}
+                  disabled={sending || !canSendForCurrentChat}
                   className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-2 text-left text-sm text-slate-400 transition hover:border-brand/30 hover:text-slate-200"
                 >
                   {question}
@@ -218,7 +274,12 @@ export function PortfolioCopilotPanel({
           placeholder="Ask anything about your portfolio or watchlist."
           className="w-full rounded-[1.5rem] border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-slate-200 outline-none transition focus:border-brand/40"
         />
-        <TurnstileBlock turnstile={turnstile} action="portfolio-copilot" />
+        {/* Hide the challenge once the portfolio copilot scope is granted;
+            it re-appears only if the scope changes or a turnstile_failed
+            response forces a fresh challenge. */}
+        {!isVerifiedForCurrentChat && (
+          <TurnstileBlock turnstile={turnstile} action="portfolio-copilot" />
+        )}
         <div className="flex items-center justify-between gap-3">
           {error ? (
             <div className="min-w-0 flex-1 space-y-1">
@@ -240,7 +301,7 @@ export function PortfolioCopilotPanel({
           <Button
             type="button"
             onClick={() => void sendMessage(draft)}
-            disabled={sending || !draft.trim() || !turnstile.canSubmit}
+            disabled={sending || !draft.trim() || !canSendForCurrentChat}
           >
             {sending ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />

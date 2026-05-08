@@ -1,0 +1,58 @@
+name: Earnings Report Sync
+
+on:
+  schedule:
+    - cron: "17 9 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sync-earnings-reports:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate endpoint format
+        run: |
+          set -euo pipefail
+          if [[ "${EARNINGS_REPORTS_CRON_ENDPOINT}" != */api/earnings-reports/cron ]]; then
+            echo "EARNINGS_REPORTS_CRON_ENDPOINT must end with /api/earnings-reports/cron, got: ${EARNINGS_REPORTS_CRON_ENDPOINT}"
+            exit 1
+          fi
+        env:
+          EARNINGS_REPORTS_CRON_ENDPOINT: ${{ secrets.EARNINGS_REPORTS_CRON_ENDPOINT }}
+
+      - name: Trigger earnings report sync
+        env:
+          EARNINGS_REPORTS_CRON_ENDPOINT: ${{ secrets.EARNINGS_REPORTS_CRON_ENDPOINT }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+
+          for name in EARNINGS_REPORTS_CRON_ENDPOINT CRON_SECRET; do
+            if [ -z "${!name:-}" ]; then
+              echo "${name} secret is not set"
+              exit 1
+            fi
+          done
+
+          response_file="$(mktemp)"
+          http_code="$(
+            curl -sS \
+              -X POST \
+              -H "Authorization: Bearer ${CRON_SECRET}" \
+              -H "Accept: application/json" \
+              -o "${response_file}" \
+              -w "%{http_code}" \
+              "${EARNINGS_REPORTS_CRON_ENDPOINT}"
+          )"
+
+          echo "HTTP ${http_code}"
+          cat "${response_file}"
+
+          if [ "${http_code}" -lt 200 ] || [ "${http_code}" -ge 300 ]; then
+            echo "Earnings report sync invocation failed"
+            exit 1
+          fi

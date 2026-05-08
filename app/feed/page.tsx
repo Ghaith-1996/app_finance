@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 
 import { ArrowRight } from "lucide-react";
 
@@ -10,6 +11,11 @@ import { getBillingSummaryForUser } from "@/lib/billing/subscriptions";
 import { getTranslations } from "@/lib/i18n/server";
 import { Panel } from "@/components/ui/panel";
 import { loadFeedPageData } from "@/lib/server/page-loaders";
+import {
+  chatGrantCookieName,
+  hasValidChatGrantValue,
+  type ChatGrantScope,
+} from "@/lib/security/chat-turnstile-grant";
 import { createClient } from "@/lib/supabase/server";
 
 function analysisPulseFill(lastAnalyzedAt: string): number {
@@ -52,6 +58,20 @@ export default async function FeedPage({
   } = await supabase.auth.getUser();
   const billingSummary = user ? await getBillingSummaryForUser(user.id, user.email) : null;
   const { t } = await getTranslations();
+
+  // Compute initial Turnstile grant state for the general "Ask AI" chat.
+  // Only possible when we actually have a portfolio scope to key the grant on.
+  let initialGeneralChatTurnstileVerified = false;
+  if (user && portfolioId) {
+    const scope: ChatGrantScope = {
+      userId: user.id,
+      surface: "article-chat-general",
+      portfolioId,
+    };
+    const cookieStore = await cookies();
+    const rawGrant = cookieStore.get(chatGrantCookieName(scope))?.value;
+    initialGeneralChatTurnstileVerified = hasValidChatGrantValue(rawGrant, scope);
+  }
 
   const pulsePct = analysisPulseFill(portfolioOverview.lastAnalyzedAt);
 
@@ -123,6 +143,7 @@ export default async function FeedPage({
           initialFeedPayload={initialFeedPayload}
           allowedModelTiers={billingSummary?.allowedModelTiers}
           defaultModelTier={billingSummary?.defaultModelTier}
+          initialGeneralChatTurnstileVerified={initialGeneralChatTurnstileVerified}
         />
       </div>
     </AppShell>

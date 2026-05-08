@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Loader2, SendHorizonal, Sparkles } from "lucide-react";
 
@@ -46,6 +46,7 @@ export function ArticleChatPanel({
   className,
   showHeader = true,
   contextMode = "story",
+  initialTurnstileVerified = false,
 }: {
   portfolioId?: string | null;
   newsItemId?: string;
@@ -57,6 +58,12 @@ export function ArticleChatPanel({
   className?: string;
   showHeader?: boolean;
   contextMode?: ArticleChatContextMode;
+  /**
+   * Initial "chat already passed a Turnstile challenge in this browser session"
+   * hint from the server. When `true`, the widget is hidden and the send button
+   * does not wait on a fresh token.
+   */
+  initialTurnstileVerified?: boolean;
 }) {
   const [messages, setMessages] = useState<ArticleChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,6 +71,9 @@ export function ArticleChatPanel({
   const [error, setError] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
+  const [isVerifiedForCurrentChat, setIsVerifiedForCurrentChat] = useState(
+    initialTurnstileVerified,
+  );
   const turnstile = useTurnstile();
 
   const disabled = !portfolioId;
@@ -86,6 +96,15 @@ export function ArticleChatPanel({
     });
   }, [draft, messages, onActivityChange]);
 
+  // Reset verification + local widget state whenever the chat scope changes
+  // (new article, general<->story toggle, different portfolio). The server is
+  // the source of truth: if it reports the new scope as verified, we keep the
+  // widget hidden; otherwise we re-arm a fresh challenge.
+  useEffect(() => {
+    setIsVerifiedForCurrentChat(false);
+    turnstile.reset();
+  }, [portfolioId, newsItemId, isGeneralContext, turnstile.reset]);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -97,6 +116,8 @@ export function ArticleChatPanel({
       setErrorCode(null);
 
       if (!portfolioId || !newsItemId) {
+        // General chat has no thread GET; use whatever the server hydrated.
+        setIsVerifiedForCurrentChat(initialTurnstileVerified);
         setLoading(false);
         return;
       }
@@ -114,6 +135,9 @@ export function ArticleChatPanel({
         }
         if (!cancelled) {
           setMessages((data.messages ?? []) as ArticleChatMessage[]);
+          if (typeof data.turnstileVerified === "boolean") {
+            setIsVerifiedForCurrentChat(data.turnstileVerified);
+          }
         }
       } catch (err) {
         if (!cancelled) {
@@ -130,61 +154,84 @@ export function ArticleChatPanel({
     return () => {
       cancelled = true;
     };
-  }, [portfolioId, newsItemId]);
+  }, [portfolioId, newsItemId, initialTurnstileVerified]);
 
-  async function sendMessage(message: string) {
-    const trimmed = message.trim();
-    if (!trimmed || !portfolioId) return;
+  const sendMessage = useCallback(
+    async (message: string) => {
+      const trimmed = message.trim();
+      if (!trimmed || !portfolioId) return;
 
-    setSending(true);
-    setError(null);
-    setErrorCode(null);
-    try {
-      const body: {
-        portfolioId: string;
-        message: string;
-        modelTier: ArticleChatModelTier;
-        newsItemId?: string;
-        turnstileToken?: string;
-        history: Array<Pick<ArticleChatMessage, "role" | "content">>;
-      } = {
-        portfolioId,
-        message: trimmed,
-        modelTier: selectedTier,
-        turnstileToken: turnstile.token ?? undefined,
-        history: messages.map((entry) => ({ role: entry.role, content: entry.content })),
-      };
-      if (newsItemId) {
-        body.newsItemId = newsItemId;
-      }
-
-      const res = await fetch("/api/article-chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const data = (await res.json().catch(() => ({}))) as {
-        error?: string;
-        code?: string;
-        messages?: ArticleChatMessage[];
-      };
-      if (!res.ok) {
-        setErrorCode(data.code ?? null);
-        if (data.code === "turnstile_failed") {
-          turnstile.reset();
+      setSending(true);
+      setError(null);
+      setErrorCode(null);
+      try {
+        const body: {
+          portfolioId: string;
+          message: string;
+          modelTier: ArticleChatModelTier;
+          newsItemId?: string;
+          turnstileToken?: string;
+          history: Array<Pick<ArticleChatMessage, "role" | "content">>;
+        } = {
+          portfolioId,
+          message: trimmed,
+          modelTier: selectedTier,
+          history: messages.map((entry) => ({ role: entry.role, content: entry.content })),
+        };
+        // Only attach a Turnstile token when the server has not yet granted
+        // this chat scope. After the first successful send the grant cookie
+        // keeps us verified for the rest of the browser session.
+        if (!isVerifiedForCurrentChat && turnstile.token) {
+          body.turnstileToken = turnstile.token;
         }
-        throw new Error(data.error ?? "Failed to send message");
+        if (newsItemId) {
+          body.newsItemId = newsItemId;
+        }
+
+        const res = await fetch("/api/article-chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = (await res.json().catch(() => ({}))) as {
+          error?: string;
+          code?: string;
+          messages?: ArticleChatMessage[];
+        };
+        if (!res.ok) {
+          setErrorCode(data.code ?? null);
+          if (data.code === "turnstile_failed") {
+            // Fresh challenge required only on an actual Turnstile failure.
+            setIsVerifiedForCurrentChat(false);
+            turnstile.reset();
+          }
+          throw new Error(data.error ?? "Failed to send message");
+        }
+        setMessages((data.messages ?? []) as ArticleChatMessage[]);
+        setDraft("");
+        // First successful send minted a server-side grant cookie for this
+        // chat scope. Mark the scope as verified and keep the widget hidden
+        // without resetting it (that would re-arm a fresh challenge).
+        setIsVerifiedForCurrentChat(true);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to send message");
+      } finally {
+        setSending(false);
       }
-      setMessages((data.messages ?? []) as ArticleChatMessage[]);
-      setDraft("");
-      turnstile.reset();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to send message");
-      turnstile.reset();
-    } finally {
-      setSending(false);
-    }
-  }
+    },
+    [
+      isVerifiedForCurrentChat,
+      messages,
+      newsItemId,
+      portfolioId,
+      selectedTier,
+      turnstile,
+    ],
+  );
+
+  // The user can submit if the chat scope is already server-verified for this
+  // browser session, OR if the live Turnstile challenge just produced a token.
+  const canSendForCurrentChat = isVerifiedForCurrentChat || turnstile.canSubmit;
 
   const helperCopy = isGeneralContext
     ? "No article selected. Ask about your portfolio, watchlist, or today's market."
@@ -297,7 +344,7 @@ export function ArticleChatPanel({
                       key={question}
                       type="button"
                       onClick={() => void sendMessage(question)}
-                      disabled={sending || !turnstile.canSubmit}
+                      disabled={sending || !canSendForCurrentChat}
                       className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-slate-400 transition hover:border-brand/30 hover:text-slate-200"
                     >
                       {question}
@@ -324,14 +371,18 @@ export function ArticleChatPanel({
               <Button
                 type="button"
                 onClick={() => void sendMessage(draft)}
-                disabled={sending || !draft.trim() || disabled || !turnstile.canSubmit}
+                disabled={sending || !draft.trim() || disabled || !canSendForCurrentChat}
                 className="shrink-0 self-end px-4"
               >
                 {sending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <SendHorizonal className="mr-2 h-4 w-4" />}
                 Send
               </Button>
             </div>
-            <TurnstileBlock turnstile={turnstile} action="article-chat" />
+            {/* Hide the challenge once the chat scope is granted; re-show only
+                if the scope changes or a turnstile_failed forces a reset. */}
+            {!isVerifiedForCurrentChat && (
+              <TurnstileBlock turnstile={turnstile} action="article-chat" />
+            )}
             {error ? (
               <div className="min-w-0 flex-1 space-y-1">
                 <p className="text-sm text-red-400">{error}</p>

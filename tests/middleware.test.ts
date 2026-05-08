@@ -78,6 +78,19 @@ describe("middleware", () => {
     expect(response.headers.get("location")).toContain("/login?redirectTo=%2Fadmin");
   });
 
+  it("treats /digest routes as protected paths", async () => {
+    getUser.mockResolvedValue({ data: { user: null } });
+
+    const { middleware } = await import("@/middleware");
+    const response = await middleware(
+      new NextRequest("http://localhost/digest/digest-1?story=news-1"),
+    );
+
+    expect(response.headers.get("location")).toContain(
+      "/login?redirectTo=%2Fdigest%2Fdigest-1%3Fstory%3Dnews-1",
+    );
+  });
+
   it("redirects authenticated users with incomplete profile to /complete-profile", async () => {
     mockAuthenticatedUser();
     profileMaybeSingle.mockResolvedValue({
@@ -93,6 +106,27 @@ describe("middleware", () => {
     const response = await middleware(new NextRequest("http://localhost/feed"));
 
     expect(response.headers.get("location")).toContain("/complete-profile?redirectTo=%2Ffeed");
+  });
+
+  it("preserves digest query strings when redirecting incomplete profiles", async () => {
+    mockAuthenticatedUser();
+    profileMaybeSingle.mockResolvedValue({
+      data: {
+        first_name: "Ada",
+        last_name: null,
+        handle: "ada",
+        accepted_terms_at: null,
+      },
+    });
+
+    const { middleware } = await import("@/middleware");
+    const response = await middleware(
+      new NextRequest("http://localhost/digest/digest-1?story=news-1"),
+    );
+
+    expect(response.headers.get("location")).toContain(
+      "/complete-profile?redirectTo=%2Fdigest%2Fdigest-1%3Fstory%3Dnews-1",
+    );
   });
 
   it("redirects authenticated users who have not accepted ToS to /complete-profile", async () => {

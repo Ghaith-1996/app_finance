@@ -1,3 +1,5 @@
+import { NextResponse } from "next/server";
+
 import {
   PLAN_LABELS,
   parseModelTier,
@@ -18,6 +20,11 @@ import {
   AIUsageAccessError,
   assertUserCanUseAI,
 } from "@/lib/security/ai-access";
+import {
+  buildChatGrantSetCookieHeader,
+  chatGrantRequired,
+  type ChatGrantScope,
+} from "@/lib/security/chat-turnstile-grant";
 import { verifyTurnstileToken, getClientIp } from "@/lib/security/turnstile";
 
 function json(body: unknown, status = 200) {
@@ -25,6 +32,24 @@ function json(body: unknown, status = 200) {
     status,
     headers: { "Content-Type": "application/json" },
   });
+}
+
+function jsonWithCookie(body: unknown, status: number, setCookie: string) {
+  const res = NextResponse.json(body, { status });
+  res.headers.append("Set-Cookie", setCookie);
+  return res;
+}
+
+function respondWithGrant(body: unknown, status: number, scope: ChatGrantScope) {
+  try {
+    return jsonWithCookie(body, status, buildChatGrantSetCookieHeader(scope));
+  } catch {
+    // Missing TURNSTILE_SECRET_KEY or other signing failure — the grant is a
+    // best-effort optimization. Fall back to a plain response so the user is
+    // asked to complete Turnstile again on the next request rather than
+    // receiving a 500.
+    return json(body, status);
+  }
 }
 
 type ChatHistoryItem = {
@@ -72,15 +97,6 @@ export async function POST(request: Request) {
     return json({ error: "Invalid JSON body" }, 400);
   }
 
-  const turnstileResult = await verifyTurnstileToken({
-    token: body.turnstileToken,
-    remoteIp: getClientIp(request),
-  });
-  if (!turnstileResult.success) {
-    return json({ error: turnstileResult.message, code: "turnstile_failed" }, 403);
-  }
-
-
   const portfolioId = body.portfolioId?.trim();
   const message = body.message?.trim();
   const modelTier = parseModelTier(body.modelTier);
@@ -111,6 +127,29 @@ export async function POST(request: Request) {
   if (!modelTier) {
     return json({ error: "modelTier must be 'free', 'premium', or 'ultimate'" }, 400);
   }
+
+  const scope: ChatGrantScope = {
+    userId: user.id,
+    surface: "portfolio-copilot",
+    portfolioId,
+  };
+
+  // Grant-based Turnstile gating: only require a fresh challenge when the
+  // current browser session does not already hold a grant for this
+  // portfolio copilot scope.
+  let issueGrantCookie = false;
+  if (chatGrantRequired(request, scope)) {
+    const turnstileResult = await verifyTurnstileToken({
+      token: body.turnstileToken,
+      remoteIp: getClientIp(request),
+      expectedAction: "portfolio-copilot",
+    });
+    if (!turnstileResult.success) {
+      return json({ error: turnstileResult.message, code: "turnstile_failed" }, 403);
+    }
+    issueGrantCookie = true;
+  }
+
 
   const { data: portfolio } = await supabase
     .from("portfolios")
@@ -317,6 +356,9 @@ export async function POST(request: Request) {
       );
     }
 
+    if (issueGrantCookie) {
+      return respondWithGrant({ answer }, 200, scope);
+    }
     return json({ answer });
   } catch (error) {
     return json(

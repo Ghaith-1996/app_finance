@@ -3,11 +3,12 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowDown, ArrowUp, ArrowUpDown, Minus, Newspaper, Plus } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, ExternalLink, Minus, Newspaper, Plus } from "lucide-react";
 
 import type { Holding } from "@/lib/types";
 import { recordHoldingAdd, recordHoldingSale } from "@/lib/actions/portfolio";
 import { buttonStyles } from "@/components/ui/button";
+import { sanitizeExternalUrl } from "@/lib/security/external-url";
 import { cn, formatPrice } from "@/lib/utils";
 
 type SortKey =
@@ -107,6 +108,10 @@ function HoldingAdjustPanel({
   onDone: () => void;
 }) {
   const router = useRouter();
+  const price = getHoldingPrice(holding);
+  const value = getHoldingValue(holding);
+  const dayChange = holding.dailyChange ?? 0;
+  const isPositiveDay = dayChange >= 0;
   const [soldShares, setSoldShares] = useState("");
   const [addShares, setAddShares] = useState("");
   const [addPrice, setAddPrice] = useState("");
@@ -173,6 +178,51 @@ function HoldingAdjustPanel({
       <p className="mb-4 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
         Update position — {holding.symbol}
       </p>
+      <div className="mb-5 rounded-2xl border border-white/[0.06] bg-surface-raised/60 p-4">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+          Stock details
+        </p>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          <div className="rounded-xl border border-white/[0.06] bg-[#0d1520]/70 px-3 py-3">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+              Symbol
+            </p>
+            <p className="mt-1 text-sm font-semibold text-white">{holding.symbol}</p>
+          </div>
+          <div className="rounded-xl border border-white/[0.06] bg-[#0d1520]/70 px-3 py-3">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+              Company
+            </p>
+            <p className="mt-1 truncate text-sm font-semibold text-white">{holding.company}</p>
+          </div>
+          <div className="rounded-xl border border-white/[0.06] bg-[#0d1520]/70 px-3 py-3">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+              Current price
+            </p>
+            <p className="mt-1 text-sm font-semibold text-white">{formatPrice(price)}</p>
+          </div>
+          <div className="rounded-xl border border-white/[0.06] bg-[#0d1520]/70 px-3 py-3">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+              Day %
+            </p>
+            <p
+              className={cn(
+                "mt-1 text-sm font-semibold",
+                isPositiveDay ? "text-emerald-400" : "text-red-400",
+              )}
+            >
+              {isPositiveDay ? "+" : ""}
+              {dayChange.toFixed(2)}%
+            </p>
+          </div>
+          <div className="rounded-xl border border-white/[0.06] bg-[#0d1520]/70 px-3 py-3">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+              Current value
+            </p>
+            <p className="mt-1 text-sm font-semibold text-white">{formatPrice(value)}</p>
+          </div>
+        </div>
+      </div>
       <div className="grid gap-6 lg:grid-cols-2">
         <form onSubmit={submitSale} className="space-y-3 rounded-xl border border-white/[0.06] bg-surface-raised/50 p-4">
           <div className="flex items-center gap-2 text-sm font-semibold text-white">
@@ -371,6 +421,7 @@ export function PortfolioHoldingsTable({
           const isPositiveDay = dayChange >= 0;
           const isPositiveTotal = gainLoss >= 0;
           const isOpen = openId === holding.id;
+          const earningsReportUrl = sanitizeExternalUrl(holding.latestEarningsReportUrl);
 
           return (
             <div key={holding.id} className="space-y-0">
@@ -397,14 +448,38 @@ export function PortfolioHoldingsTable({
                     <p className="mt-0.5 truncate text-[10px] font-bold uppercase tracking-widest text-slate-600">
                       {holding.company}
                     </p>
-                    <Link
-                      href={`/feed?ticker=${encodeURIComponent(holding.symbol)}`}
-                      onClick={(e) => e.stopPropagation()}
-                      className="mt-1 inline-flex items-center gap-1 rounded-md border border-brand/25 bg-brand/10 px-2 py-0.5 text-[10px] font-bold text-brand transition hover:border-brand/40 hover:bg-brand/15"
-                    >
-                      <Newspaper className="h-3 w-3" />
-                      News
-                    </Link>
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                      <Link
+                        href={`/feed?ticker=${encodeURIComponent(holding.symbol)}`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="inline-flex items-center gap-1 rounded-md border border-brand/25 bg-brand/10 px-2 py-0.5 text-[10px] font-bold text-brand transition hover:border-brand/40 hover:bg-brand/15"
+                      >
+                        <Newspaper className="h-3 w-3" />
+                        News
+                      </Link>
+                      {earningsReportUrl ? (
+                        <a
+                          href={earningsReportUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-bold text-slate-300 transition hover:border-white/20 hover:text-white"
+                          aria-label={`${holding.symbol} latest earnings report`}
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                          Report
+                        </a>
+                      ) : (
+                        <span
+                          className="inline-flex items-center gap-1 rounded-md border border-white/[0.06] bg-white/[0.03] px-2 py-0.5 text-[10px] font-bold text-slate-600"
+                          aria-disabled="true"
+                          aria-label={`${holding.symbol} latest earnings report unavailable`}
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                          Report
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <div className="hidden whitespace-nowrap text-[14px] font-medium text-slate-400 md:block">

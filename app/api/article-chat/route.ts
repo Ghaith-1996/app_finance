@@ -1,3 +1,5 @@
+import { NextResponse } from "next/server";
+
 import { PLAN_LABELS } from "@/lib/billing/plans";
 import {
   BillingAccessError,
@@ -15,6 +17,12 @@ import {
   AIUsageAccessError,
   assertUserCanUseAI,
 } from "@/lib/security/ai-access";
+import {
+  buildChatGrantSetCookieHeader,
+  chatGrantRequired,
+  hasValidChatGrantCookie,
+  type ChatGrantScope,
+} from "@/lib/security/chat-turnstile-grant";
 import { verifyTurnstileToken, getClientIp } from "@/lib/security/turnstile";
 import type {
   ArticleChatMessage,
@@ -121,15 +129,38 @@ function buildEphemeralMessages(
   ];
 }
 
-type ThreadRow = {
-  id: string;
-};
+function json(body: unknown, status = 200, setCookie?: string) {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const res = new Response(JSON.stringify(body), { status, headers });
+  if (setCookie) {
+    res.headers.append("Set-Cookie", setCookie);
+  }
+  return res;
+}
 
-function json(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
+function jsonWithCookie(body: unknown, status: number, setCookie: string) {
+  const res = NextResponse.json(body, { status });
+  res.headers.append("Set-Cookie", setCookie);
+  return res;
+}
+
+/**
+ * Attempt to mint a grant cookie for the given scope and, on failure (e.g.
+ * missing TURNSTILE_SECRET_KEY), fall back to a plain JSON response. This
+ * keeps the chat flow functional even when the grant optimization cannot be
+ * issued — the user will simply be asked to complete Turnstile again on the
+ * next request.
+ */
+function respondWithGrant(body: unknown, status: number, scope: ChatGrantScope) {
+  try {
+    return jsonWithCookie(body, status, buildChatGrantSetCookieHeader(scope));
+  } catch (error) {
+    log.warn("failed to mint chat grant cookie; falling back to plain response", {
+      surface: scope.surface,
+      error: error instanceof Error ? error.message : "unknown",
+    });
+    return json(body, status);
+  }
 }
 
 async function requireAuthedContext() {
@@ -479,6 +510,31 @@ async function loadPortfolioQuestionContext(
   };
 }
 
+/**
+ * Resolve the chat-grant scope for a validated story-chat request body.
+ * `article-chat` surface requires `newsItemId`; `article-chat-general` does
+ * not.
+ */
+function resolveChatScope(
+  userId: string,
+  portfolioId: string,
+  newsItemId: string | undefined,
+): ChatGrantScope {
+  if (newsItemId) {
+    return {
+      userId,
+      surface: "article-chat",
+      portfolioId,
+      newsItemId,
+    };
+  }
+  return {
+    userId,
+    surface: "article-chat-general",
+    portfolioId,
+  };
+}
+
 export async function GET(request: Request) {
   const { supabase, user, response } = await requireAuthedContext();
   if (response) return response;
@@ -510,7 +566,9 @@ export async function GET(request: Request) {
   try {
     const threadId = await getOrCreateThread(supabase, user.id, portfolioId, newsItemId);
     const messages = await loadMessages(supabase, threadId);
-    return json({ threadId, messages });
+    const scope = resolveChatScope(user.id, portfolioId, newsItemId);
+    const turnstileVerified = hasValidChatGrantCookie(request, scope);
+    return json({ threadId, messages, turnstileVerified });
   } catch (error) {
     return json({ error: error instanceof Error ? error.message : "Failed to load chat" }, 500);
   }
@@ -534,15 +592,6 @@ export async function POST(request: Request) {
     return json({ error: "Invalid JSON body" }, 400);
   }
 
-  const turnstileResult = await verifyTurnstileToken({
-    token: body.turnstileToken,
-    remoteIp: getClientIp(request),
-  });
-  if (!turnstileResult.success) {
-    return json({ error: turnstileResult.message, code: "turnstile_failed" }, 403);
-  }
-
-
   const portfolioId = body.portfolioId?.trim();
   const newsItemId = body.newsItemId?.trim();
   const message = body.message?.trim();
@@ -554,6 +603,29 @@ export async function POST(request: Request) {
   }
   if (!modelTier) {
     return json({ error: "modelTier must be 'free', 'premium', or 'ultimate'" }, 400);
+  }
+
+  const scope = resolveChatScope(user.id, portfolioId, newsItemId);
+
+  // Turnstile: only require a fresh token when the current browser session
+  // does NOT already hold a valid grant for this exact chat scope. After a
+  // first successful verification we issue a session cookie that bypasses
+  // this branch for subsequent requests in the same scope.
+  let issueGrantCookie = false;
+  if (chatGrantRequired(request, scope)) {
+    // Both story chat and general feed chat are rendered by the same client
+    // widget which signs the challenge with `action="article-chat"`. The
+    // server-side `scope.surface` discriminates the two for grant issuance,
+    // but the Turnstile action assertion must match what the widget emits.
+    const turnstileResult = await verifyTurnstileToken({
+      token: body.turnstileToken,
+      remoteIp: getClientIp(request),
+      expectedAction: "article-chat",
+    });
+    if (!turnstileResult.success) {
+      return json({ error: turnstileResult.message, code: "turnstile_failed" }, 403);
+    }
+    issueGrantCookie = true;
   }
 
   const ownsPortfolio = await verifyPortfolioOwnership(supabase, portfolioId, user.id);
@@ -641,10 +713,14 @@ export async function POST(request: Request) {
         );
       }
 
-      return json({
+      const responseBody = {
         threadId: null,
         messages: buildEphemeralMessages(history, message, answer),
-      });
+      };
+      if (issueGrantCookie) {
+        return respondWithGrant(responseBody, 200, scope);
+      }
+      return json(responseBody);
     }
 
     const threadId = await getOrCreateThread(supabase, user.id, portfolioId, newsItemId);
@@ -714,9 +790,11 @@ export async function POST(request: Request) {
     }
 
     const messages = await loadMessages(supabase, threadId);
+    if (issueGrantCookie) {
+      return respondWithGrant({ threadId, messages }, 200, scope);
+    }
     return json({ threadId, messages });
   } catch (error) {
     return json({ error: error instanceof Error ? error.message : "Failed to send chat message" }, 500);
   }
 }
-

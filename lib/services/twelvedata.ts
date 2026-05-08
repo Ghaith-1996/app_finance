@@ -1,5 +1,8 @@
 import { cached } from "@/lib/services/cache";
 import { createLogger } from "@/lib/logger";
+import type {
+  LatestEarningsReportSource,
+} from "@/lib/types";
 
 const TD_BASE = "https://api.twelvedata.com";
 const TIMEOUT_MS = 10_000;
@@ -279,6 +282,9 @@ export interface WatchlistDetailData {
   };
   warnings: SectionWarning[];
   error: string | null;
+  latestEarningsReportUrl: string | null;
+  latestEarningsReportSource: LatestEarningsReportSource | null;
+  latestEarningsReportDate: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -309,7 +315,37 @@ function emptyDetail(symbol: string): WatchlistDetailData {
     capabilities: { hasStats: false, hasProfile: false, hasEarnings: false, hasFinancials: false },
     warnings: [],
     error: null,
+    latestEarningsReportUrl: null,
+    latestEarningsReportSource: null,
+    latestEarningsReportDate: null,
   };
+}
+
+async function getProfileForSymbol(symbol: string) {
+  return cached<TDProfile>(
+    `td:profile:${symbol}`,
+    () => get<TDProfile>("/profile", { symbol }),
+    PROFILE_CACHE_TTL,
+  );
+}
+
+export async function getCompanyWebsiteSeed(symbol: string): Promise<string | null> {
+  if (!apiKey()) return null;
+
+  const normalizedSymbol = symbol.trim().toUpperCase();
+  if (!normalizedSymbol) return null;
+
+  try {
+    const profile = await getProfileForSymbol(normalizedSymbol);
+    const website = profile?.website?.trim();
+    return website || null;
+  } catch (error) {
+    log.warn("Website seed unavailable", {
+      symbol: normalizedSymbol,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -328,7 +364,7 @@ export async function getWatchlistDetail(symbol: string): Promise<WatchlistDetai
 
   const [quoteRes, profileRes, tsRes, statsRes, earningsRes, incomeRes, balanceRes, cashFlowRes] = await Promise.allSettled([
     cached<TDQuote>(`td:quote:${sym}`, () => get<TDQuote>("/quote", { symbol: sym }), QUOTE_CACHE_TTL),
-    cached<TDProfile>(`td:profile:${sym}`, () => get<TDProfile>("/profile", { symbol: sym }), PROFILE_CACHE_TTL),
+    getProfileForSymbol(sym),
     cached<{ values?: TDTimeSeriesValue[] }>(
       `td:ts:${sym}`,
       () => get<{ values?: TDTimeSeriesValue[] }>("/time_series", { symbol: sym, interval: "1day", outputsize: "30", order: "ASC" }),

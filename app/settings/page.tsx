@@ -2,11 +2,16 @@ import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app/app-shell";
 import { PreferencesPanel } from "@/components/app/preferences-panel";
 import { BillingSettingsPanel } from "@/components/app/billing-settings-panel";
+import { NotificationSettingsPanel } from "@/components/app/notification-settings-panel";
 import { ProfileForm } from "@/components/app/profile-form";
 import { Badge } from "@/components/ui/badge";
 import { getTranslations } from "@/lib/i18n/server";
 import { getBillingSummaryForUser } from "@/lib/billing/subscriptions";
 import { getCurrentUserProfile, saveCurrentUserProfile } from "@/lib/actions/profile";
+import {
+  getCurrentUserNotificationPreferences,
+  saveCurrentUserNotificationPreferences,
+} from "@/lib/actions/notifications";
 import { isAdminUser } from "@/lib/security/admin";
 import { loadOnboardingNavState } from "@/lib/server/page-loaders";
 import { createClient } from "@/lib/supabase/server";
@@ -26,6 +31,7 @@ export default async function SettingsPage({
   }
 
   const profile = await getCurrentUserProfile();
+  const notificationPreferences = await getCurrentUserNotificationPreferences();
   const { t } = await getTranslations();
   const showOnboardingNav = await loadOnboardingNavState();
   const showAdminLink = isAdminUser(user);
@@ -53,6 +59,10 @@ export default async function SettingsPage({
         ) : null}
 
         <BillingSettingsPanel billingSummary={billingSummary} />
+        <NotificationSettingsPanel
+          initialPreferences={notificationPreferences}
+          onSubmit={saveCurrentUserNotificationPreferences}
+        />
         <PreferencesPanel />
 
         <ProfileForm

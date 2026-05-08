@@ -41,6 +41,26 @@ export function requireTwelveDataKey(): string {
   return requireEnv("TWELVE_DATA_API_KEY");
 }
 
+export function requireDigestCronSecret(): string {
+  return requireEnv("DIGEST_CRON_SECRET");
+}
+
+export function requireResendApiKey(): string {
+  return requireEnv("RESEND_API_KEY");
+}
+
+export function requireTwilioAccountSid(): string {
+  return requireEnv("TWILIO_ACCOUNT_SID");
+}
+
+export function requireTwilioAuthToken(): string {
+  return requireEnv("TWILIO_AUTH_TOKEN");
+}
+
+export function requireTwilioMessagingServiceSid(): string {
+  return requireEnv("TWILIO_MESSAGING_SERVICE_SID");
+}
+
 export function hasKey(name: string): boolean {
   return !!process.env[name];
 }

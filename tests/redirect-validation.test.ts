@@ -17,11 +17,13 @@ describe("isValidInternalRedirect", () => {
     expect(isValidInternalRedirect("/complete-profile")).toBe(true);
     expect(isValidInternalRedirect("/onboarding")).toBe(true);
     expect(isValidInternalRedirect("/pricing")).toBe(true);
+    expect(isValidInternalRedirect("/digest/digest-1")).toBe(true);
   });
 
   it("allows paths with query strings", () => {
     expect(isValidInternalRedirect("/portfolio?tab=holdings")).toBe(true);
     expect(isValidInternalRedirect("/feed?symbol=AAPL")).toBe(true);
+    expect(isValidInternalRedirect("/digest/digest-1?story=news-1")).toBe(true);
   });
 
   it("rejects absolute external URLs", () => {
@@ -58,6 +60,7 @@ describe("sanitizeRedirect", () => {
   it("returns the path when valid", () => {
     expect(sanitizeRedirect("/portfolio", "/fallback")).toBe("/portfolio");
     expect(sanitizeRedirect("/feed?symbol=AAPL", "/fallback")).toBe("/feed?symbol=AAPL");
+    expect(sanitizeRedirect("/digest/digest-1?story=news-1", "/fallback")).toBe("/digest/digest-1?story=news-1");
   });
 
   it("returns fallback for invalid paths", () => {

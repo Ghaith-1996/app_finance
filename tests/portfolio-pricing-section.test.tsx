@@ -65,6 +65,9 @@ const initialHoldings: Holding[] = [
     quoteCurrency: "USD",
     quoteAsOf: "2026-03-25T11:59:00.000Z",
     importSource: "manual",
+    latestEarningsReportUrl: null,
+    latestEarningsReportSource: null,
+    latestEarningsReportDate: null,
   },
 ];
 

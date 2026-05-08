@@ -171,6 +171,9 @@ export const manualPortfolioSeed: Holding[] = [
     quoteCurrency: "USD",
     quoteAsOf: null,
     importSource: "manual",
+    latestEarningsReportUrl: null,
+    latestEarningsReportSource: null,
+    latestEarningsReportDate: null,
   },
   {
     id: "msft",
@@ -193,6 +196,9 @@ export const manualPortfolioSeed: Holding[] = [
     quoteCurrency: "USD",
     quoteAsOf: null,
     importSource: "manual",
+    latestEarningsReportUrl: null,
+    latestEarningsReportSource: null,
+    latestEarningsReportDate: null,
   },
   {
     id: "lly",
@@ -215,6 +221,9 @@ export const manualPortfolioSeed: Holding[] = [
     quoteCurrency: "USD",
     quoteAsOf: null,
     importSource: "manual",
+    latestEarningsReportUrl: null,
+    latestEarningsReportSource: null,
+    latestEarningsReportDate: null,
   },
   {
     id: "visa",
@@ -237,6 +246,9 @@ export const manualPortfolioSeed: Holding[] = [
     quoteCurrency: "USD",
     quoteAsOf: null,
     importSource: "manual",
+    latestEarningsReportUrl: null,
+    latestEarningsReportSource: null,
+    latestEarningsReportDate: null,
   },
   {
     id: "xom",
@@ -259,6 +271,9 @@ export const manualPortfolioSeed: Holding[] = [
     quoteCurrency: "USD",
     quoteAsOf: null,
     importSource: "manual",
+    latestEarningsReportUrl: null,
+    latestEarningsReportSource: null,
+    latestEarningsReportDate: null,
   },
 ];
 
@@ -345,6 +360,9 @@ export const holdings: Holding[] = [
     quoteCurrency: "USD",
     quoteAsOf: null,
     importSource: "wealthsimple",
+    latestEarningsReportUrl: null,
+    latestEarningsReportSource: null,
+    latestEarningsReportDate: null,
   },
   {
     id: "msft-live",
@@ -367,6 +385,9 @@ export const holdings: Holding[] = [
     quoteCurrency: "USD",
     quoteAsOf: null,
     importSource: "wealthsimple",
+    latestEarningsReportUrl: null,
+    latestEarningsReportSource: null,
+    latestEarningsReportDate: null,
   },
   {
     id: "lly-live",
@@ -389,6 +410,9 @@ export const holdings: Holding[] = [
     quoteCurrency: "USD",
     quoteAsOf: null,
     importSource: "interactive_brokers",
+    latestEarningsReportUrl: null,
+    latestEarningsReportSource: null,
+    latestEarningsReportDate: null,
   },
   {
     id: "v-live",
@@ -411,6 +435,9 @@ export const holdings: Holding[] = [
     quoteCurrency: "USD",
     quoteAsOf: null,
     importSource: "wealthsimple",
+    latestEarningsReportUrl: null,
+    latestEarningsReportSource: null,
+    latestEarningsReportDate: null,
   },
   {
     id: "xom-live",
@@ -433,6 +460,9 @@ export const holdings: Holding[] = [
     quoteCurrency: "USD",
     quoteAsOf: null,
     importSource: "manual",
+    latestEarningsReportUrl: null,
+    latestEarningsReportSource: null,
+    latestEarningsReportDate: null,
   },
 ];
 

@@ -4,6 +4,12 @@ const BLOCKED_HOSTNAMES = new Set([
   "metadata.google.internal",
 ]);
 
+const BLOCKED_METADATA_IPS = new Set([
+  "100.100.100.200",
+  "169.254.169.254",
+  "169.254.170.2",
+]);
+
 const BLOCKED_IPV4_RANGES: Array<[number, number]> = [
   [ipToInt("0.0.0.0"), ipToInt("0.255.255.255")],
   [ipToInt("10.0.0.0"), ipToInt("10.255.255.255")],
@@ -33,12 +39,33 @@ export interface PublisherUrlValidationResult {
   reason?: string;
 }
 
+export type PublisherHostnameLookup = (
+  hostname: string,
+  options?: { all?: boolean; verbatim?: boolean },
+) => Promise<Array<{ address: string }>>;
+
+async function defaultHostnameLookup(
+  hostname: string,
+  options?: { all?: boolean; verbatim?: boolean },
+): Promise<Array<{ address: string }>> {
+  const { lookup } = await import("node:dns/promises");
+  const results = await lookup(hostname, {
+    all: options?.all ?? true,
+    verbatim: options?.verbatim ?? true,
+  });
+
+  return (Array.isArray(results) ? results : [results]).map((result) => ({
+    address: result.address,
+  }));
+}
+
 function ipToInt(ip: string): number {
   return ip.split(".").reduce((acc, part) => (acc << 8) + Number(part), 0) >>> 0;
 }
 
 function isBlockedIpv4(hostname: string): boolean {
   if (!/^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostname)) return false;
+  if (BLOCKED_METADATA_IPS.has(hostname)) return true;
   const parts = hostname.split(".").map(Number);
   if (parts.some((part) => Number.isNaN(part) || part < 0 || part > 255)) return true;
   const value = ipToInt(hostname);
@@ -48,6 +75,14 @@ function isBlockedIpv4(hostname: string): boolean {
 function isBlockedIpv6(hostname: string): boolean {
   const normalized = hostname.replace(/^\[|\]$/g, "").toLowerCase();
   return BLOCKED_IPV6_PATTERNS.some((pattern) => pattern.test(normalized));
+}
+
+function isIpLiteral(hostname: string): boolean {
+  return /^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostname) || hostname.includes(":");
+}
+
+function isBlockedIpAddress(hostname: string): boolean {
+  return isBlockedIpv4(hostname) || isBlockedIpv6(hostname);
 }
 
 export function validatePublisherUrl(raw: string | null | undefined): PublisherUrlValidationResult {
@@ -69,7 +104,7 @@ export function validatePublisherUrl(raw: string | null | undefined): PublisherU
     if (BLOCKED_HOSTNAMES.has(hostname) || hostname.endsWith(".localhost")) {
       return { ok: false, reason: "blocked_hostname" };
     }
-    if (isBlockedIpv4(hostname) || isBlockedIpv6(hostname)) {
+    if (isBlockedIpAddress(hostname)) {
       return { ok: false, reason: "blocked_ip" };
     }
 
@@ -77,4 +112,46 @@ export function validatePublisherUrl(raw: string | null | undefined): PublisherU
   } catch {
     return { ok: false, reason: "invalid_url" };
   }
+}
+
+export async function resolvePublicHostname(
+  hostname: string,
+  lookupImpl: PublisherHostnameLookup = defaultHostnameLookup,
+): Promise<PublisherUrlValidationResult> {
+  try {
+    const results = await lookupImpl(hostname, { all: true, verbatim: true });
+    let resolvedAny = false;
+
+    for (const result of results) {
+      const address = result.address?.trim();
+      if (!address) continue;
+
+      resolvedAny = true;
+      if (isBlockedIpAddress(address)) {
+        return { ok: false, reason: "blocked_resolved_ip" };
+      }
+    }
+
+    return resolvedAny ? { ok: true } : { ok: false, reason: "dns_resolution_failed" };
+  } catch {
+    return { ok: false, reason: "dns_resolution_failed" };
+  }
+}
+
+export async function assertSafePublicUrl(
+  raw: string | null | undefined,
+  options?: { lookupImpl?: PublisherHostnameLookup },
+): Promise<PublisherUrlValidationResult> {
+  const validation = validatePublisherUrl(raw);
+  if (!validation.ok || !raw) {
+    return validation;
+  }
+
+  const parsed = new URL(raw.trim());
+  const hostname = parsed.hostname.trim().toLowerCase();
+  if (isIpLiteral(hostname)) {
+    return { ok: true };
+  }
+
+  return resolvePublicHostname(hostname, options?.lookupImpl);
 }

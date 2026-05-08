@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 import {
   BarChart3,
   Cpu,
@@ -14,6 +15,12 @@ import { AppShell } from "@/components/app/app-shell";
 import { buttonStyles } from "@/components/ui/button";
 import { getCurrentUserBillingSummary } from "@/lib/billing/subscriptions";
 import { loadFullPortfolioPageData } from "@/lib/server/page-loaders";
+import {
+  chatGrantCookieName,
+  hasValidChatGrantValue,
+  type ChatGrantScope,
+} from "@/lib/security/chat-turnstile-grant";
+import { createClient } from "@/lib/supabase/server";
 import type {
   Holding,
   PortfolioFeedHighlight,
@@ -301,6 +308,25 @@ export default async function FullPortfolioPage() {
   const sectorCards = buildSectorCards(holdings);
   const insightSummary = buildInsightSummary(insights, feedHighlights, sectorCards);
 
+  // Compute initial Turnstile grant state for the portfolio copilot.
+  let initialCopilotTurnstileVerified = false;
+  {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user) {
+      const scope: ChatGrantScope = {
+        userId: user.id,
+        surface: "portfolio-copilot",
+        portfolioId,
+      };
+      const cookieStore = await cookies();
+      const rawGrant = cookieStore.get(chatGrantCookieName(scope))?.value;
+      initialCopilotTurnstileVerified = hasValidChatGrantValue(rawGrant, scope);
+    }
+  }
+
   return (
     <AppShell
       eyebrow=""
@@ -435,6 +461,7 @@ export default async function FullPortfolioPage() {
               portfolioId={portfolioId}
               allowedTiers={billingSummary.allowedModelTiers}
               defaultModelTier={billingSummary.defaultModelTier}
+              initialTurnstileVerified={initialCopilotTurnstileVerified}
             />
 
             <div className="rounded-[2.5rem] border border-brand/15 bg-brand/10 p-5 sm:p-8 shadow-sm">

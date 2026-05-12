@@ -24,7 +24,7 @@ export function Hero() {
 
   return (
     <section className="relative overflow-hidden px-6 pb-20 pt-16 lg:px-8 lg:pb-28 lg:pt-24">
-      <div className="mx-auto grid max-w-7xl gap-14 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
+      <div className="mx-auto grid max-w-[90rem] gap-14 lg:grid-cols-[0.86fr_1.14fr] lg:items-center xl:grid-cols-[0.78fr_1.22fr]">
         <div className="space-y-8">
           <Badge tone="brand">
             {t("landing.headerTagline")}
@@ -47,7 +47,7 @@ export function Hero() {
               <ArrowRight className="ml-2 h-4 w-4" />
             </Link>
             <Link
-              href="/feed"
+              href="/demo"
               className={buttonStyles({
                 variant: "secondary",
                 size: "lg",
@@ -101,7 +101,7 @@ export function Hero() {
         >
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.08),transparent_28%)]" />
           <div className="relative grid gap-4 p-6">
-            <div className="grid gap-4 sm:grid-cols-[0.95fr_1.05fr]">
+            <div className="grid gap-4 sm:grid-cols-[0.88fr_1.12fr] xl:grid-cols-[0.82fr_1.18fr]">
               <Panel className="space-y-5 p-5">
                 <div className="flex items-center justify-between">
                   <div>

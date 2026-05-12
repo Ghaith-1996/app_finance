@@ -511,9 +511,8 @@ async function loadPortfolioQuestionContext(
 }
 
 /**
- * Resolve the chat-grant scope for a validated story-chat request body.
- * `article-chat` surface requires `newsItemId`; `article-chat-general` does
- * not.
+ * Resolve the chat-grant scope for a validated chat request body. The signed
+ * grant helper normalizes this to a 15-minute portfolio-wide chat grant.
  */
 function resolveChatScope(
   userId: string,
@@ -607,10 +606,8 @@ export async function POST(request: Request) {
 
   const scope = resolveChatScope(user.id, portfolioId, newsItemId);
 
-  // Turnstile: only require a fresh token when the current browser session
-  // does NOT already hold a valid grant for this exact chat scope. After a
-  // first successful verification we issue a session cookie that bypasses
-  // this branch for subsequent requests in the same scope.
+  // Turnstile: only require a fresh token when the browser does NOT already
+  // hold a valid 15-minute portfolio chat grant.
   let issueGrantCookie = false;
   if (chatGrantRequired(request, scope)) {
     // Both story chat and general feed chat are rendered by the same client
@@ -627,10 +624,12 @@ export async function POST(request: Request) {
     }
     issueGrantCookie = true;
   }
+  const respondForChat = (body: unknown, status = 200) =>
+    issueGrantCookie ? respondWithGrant(body, status, scope) : json(body, status);
 
   const ownsPortfolio = await verifyPortfolioOwnership(supabase, portfolioId, user.id);
   if (!ownsPortfolio) {
-    return json({ error: "Portfolio not found" }, 404);
+    return respondForChat({ error: "Portfolio not found" }, 404);
   }
 
   if (newsItemId) {
@@ -641,7 +640,7 @@ export async function POST(request: Request) {
       .maybeSingle();
 
     if (!newsItemRow) {
-      return json({ error: "Article not found" }, 404);
+      return respondForChat({ error: "Article not found" }, 404);
     }
   }
 
@@ -653,7 +652,7 @@ export async function POST(request: Request) {
     );
   } catch (error) {
     if (error instanceof BillingAccessError) {
-      return json(
+      return respondForChat(
         {
           error: `The ${modelTier} tier requires the ${PLAN_LABELS[error.requiredPlan]} plan.`,
           code: error.code,
@@ -665,7 +664,7 @@ export async function POST(request: Request) {
       );
     }
     if (error instanceof AIUsageAccessError) {
-      return json(
+      return respondForChat(
         {
           error: error.message,
           code: error.code,
@@ -704,7 +703,7 @@ export async function POST(request: Request) {
           deployment: deploymentLabelForLogs(providerId),
           message: aiErr.message,
         });
-        return json(
+        return respondForChat(
           {
             error: userFacingMessage(aiErr.code),
             code: aiErr.code,
@@ -717,10 +716,7 @@ export async function POST(request: Request) {
         threadId: null,
         messages: buildEphemeralMessages(history, message, answer),
       };
-      if (issueGrantCookie) {
-        return respondWithGrant(responseBody, 200, scope);
-      }
-      return json(responseBody);
+      return respondForChat(responseBody);
     }
 
     const threadId = await getOrCreateThread(supabase, user.id, portfolioId, newsItemId);
@@ -734,7 +730,7 @@ export async function POST(request: Request) {
       });
 
     if (insertUserError) {
-      return json({ error: insertUserError.message }, 500);
+      return respondForChat({ error: insertUserError.message }, 500);
     }
 
     const recentMessages = await loadMessages(supabase, threadId);
@@ -759,7 +755,7 @@ export async function POST(request: Request) {
         deployment: deploymentLabelForLogs(providerId),
         message: aiErr.message,
       });
-      return json(
+      return respondForChat(
         {
           error: userFacingMessage(aiErr.code),
           code: aiErr.code,
@@ -777,7 +773,7 @@ export async function POST(request: Request) {
       });
 
     if (insertAssistantError) {
-      return json({ error: insertAssistantError.message }, 500);
+      return respondForChat({ error: insertAssistantError.message }, 500);
     }
 
     const { error: updateThreadError } = await supabase
@@ -786,15 +782,15 @@ export async function POST(request: Request) {
       .eq("id", threadId);
 
     if (updateThreadError) {
-      return json({ error: updateThreadError.message }, 500);
+      return respondForChat({ error: updateThreadError.message }, 500);
     }
 
     const messages = await loadMessages(supabase, threadId);
-    if (issueGrantCookie) {
-      return respondWithGrant({ threadId, messages }, 200, scope);
-    }
-    return json({ threadId, messages });
+    return respondForChat({ threadId, messages });
   } catch (error) {
-    return json({ error: error instanceof Error ? error.message : "Failed to send chat message" }, 500);
+    return respondForChat(
+      { error: error instanceof Error ? error.message : "Failed to send chat message" },
+      500,
+    );
   }
 }

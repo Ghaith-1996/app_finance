@@ -1,6 +1,10 @@
 import "server-only";
 
-import { buildStoryLink, renderDailyDigestEmailHtml } from "@/emails/daily-digest-email";
+import {
+  buildFeedLink,
+  buildStoryLink,
+  renderDailyDigestEmailHtml,
+} from "@/emails/daily-digest-email";
 import {
   requireResendApiKey,
   requireTwilioAccountSid,
@@ -29,7 +33,12 @@ function buildSmsBody(digest: DailyDigestSnapshot, baseUrl: string): string {
     ? `Bearish: ${digest.bearishSymbols.join(", ")}.`
     : "Bearish: none.";
 
-  return `Pulsefolio Morning Digest. ${bullish} ${bearish} Read: ${baseUrl}/digest/${digest.id}`;
+  const leadStory = digest.topStories[0];
+  const readUrl = leadStory
+    ? buildStoryLink(baseUrl, digest.id, leadStory.newsItemId)
+    : buildFeedLink(baseUrl);
+
+  return `Pulsefolio Morning Digest. ${bullish} ${bearish} Read: ${readUrl}`;
 }
 
 function getResendFromAddress(): string {

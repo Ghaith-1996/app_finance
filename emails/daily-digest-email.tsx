@@ -23,8 +23,12 @@ function storySummary(story: DigestSnapshotStory): string {
   return story.aiSummary || story.whyItMatters || "Open the digest page for the full stored snapshot.";
 }
 
-export function buildStoryLink(baseUrl: string, digestId: string, newsItemId: string): string {
-  return `${baseUrl}/digest/${digestId}?story=${encodeURIComponent(newsItemId)}#story-${encodeURIComponent(newsItemId)}`;
+export function buildFeedLink(baseUrl: string): string {
+  return `${baseUrl}/feed`;
+}
+
+export function buildStoryLink(baseUrl: string, _digestId: string, newsItemId: string): string {
+  return `${buildFeedLink(baseUrl)}?story=${encodeURIComponent(newsItemId)}`;
 }
 
 function renderStory(story: DigestSnapshotStory, index: number, digest: DailyDigestSnapshot, baseUrl: string): string {
@@ -59,7 +63,7 @@ export function renderDailyDigestEmailHtml({
   digest: DailyDigestSnapshot;
   baseUrl: string;
 }): string {
-  const digestHref = escapeHtml(`${baseUrl}/digest/${digest.id}`);
+  const feedHref = escapeHtml(buildFeedLink(baseUrl));
   const storiesHtml = digest.topStories
     .map((story, index) => renderStory(story, index, digest, baseUrl))
     .join("");
@@ -90,8 +94,8 @@ export function renderDailyDigestEmailHtml({
               Stories matched from the prior 5:00 PM ET close through this morning&#39;s 9:00 AM ET digest.
             </p>
             <p style="margin:8px 0 0;font-size:14px;line-height:1.6;color:#cbd5e1;">
-              Open the full stored digest:
-              <a href="${digestHref}" style="color:#34d399;text-decoration:underline;">
+              Open Pulsefolio:
+              <a href="${feedHref}" style="color:#34d399;text-decoration:underline;">
                 View in Pulsefolio
               </a>
             </p>

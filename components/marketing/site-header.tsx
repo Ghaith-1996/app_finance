@@ -40,7 +40,7 @@ export function SiteHeader() {
         <div className="flex items-center gap-3">
           <ThemeToggle compact className="hidden sm:inline-flex" />
           <Link
-            href="/feed"
+            href="/demo"
             className={buttonStyles({
               variant: "ghost",
               className: "hidden sm:inline-flex",

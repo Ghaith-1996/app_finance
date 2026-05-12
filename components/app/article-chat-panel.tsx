@@ -179,8 +179,8 @@ export function ArticleChatPanel({
           history: messages.map((entry) => ({ role: entry.role, content: entry.content })),
         };
         // Only attach a Turnstile token when the server has not yet granted
-        // this chat scope. After the first successful send the grant cookie
-        // keeps us verified for the rest of the browser session.
+        // this portfolio chat window. After the first successful send the
+        // grant cookie keeps us verified for 15 minutes.
         if (!isVerifiedForCurrentChat && turnstile.token) {
           body.turnstileToken = turnstile.token;
         }
@@ -209,8 +209,8 @@ export function ArticleChatPanel({
         }
         setMessages((data.messages ?? []) as ArticleChatMessage[]);
         setDraft("");
-        // First successful send minted a server-side grant cookie for this
-        // chat scope. Mark the scope as verified and keep the widget hidden
+        // First successful send minted a server-side grant cookie. Mark this
+        // portfolio chat window as verified and keep the widget hidden
         // without resetting it (that would re-arm a fresh challenge).
         setIsVerifiedForCurrentChat(true);
       } catch (err) {
@@ -229,8 +229,8 @@ export function ArticleChatPanel({
     ],
   );
 
-  // The user can submit if the chat scope is already server-verified for this
-  // browser session, OR if the live Turnstile challenge just produced a token.
+  // The user can submit if the portfolio chat window is already verified, OR
+  // if the live Turnstile challenge just produced a token.
   const canSendForCurrentChat = isVerifiedForCurrentChat || turnstile.canSubmit;
 
   const helperCopy = isGeneralContext
@@ -402,7 +402,7 @@ export function ArticleChatPanel({
                   <p className="text-xs text-slate-500">You hit the minute-level safety limit. Wait a moment, then try again.</p>
                 )}
                 {errorCode === "quota_exceeded" && (
-                  <p className="text-xs text-slate-500">You have used this plan's AI allowance for the current reset window.</p>
+                  <p className="text-xs text-slate-500">You have used this plan&apos;s AI allowance for the current reset window.</p>
                 )}
                 {errorCode === "plan_upgrade_required" && (
                   <p className="text-xs text-slate-500">Upgrade your plan in Billing to unlock that model tier.</p>

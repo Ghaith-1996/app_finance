@@ -13,6 +13,7 @@ import type {
   Holding,
   PortfolioOverview,
   PortfolioPricingRefreshResult,
+  PortfolioValueSnapshot,
 } from "@/lib/types";
 
 export function PortfolioPricingSection({
@@ -20,12 +21,14 @@ export function PortfolioPricingSection({
   portfolioCreatedAt,
   initialOverview,
   initialHoldings,
+  initialValueSnapshots = [],
   children,
 }: {
   portfolioId: string;
   portfolioCreatedAt: string;
   initialOverview: PortfolioOverview;
   initialHoldings: Holding[];
+  initialValueSnapshots?: PortfolioValueSnapshot[];
   children?: ReactNode;
 }) {
   const [overview, setOverview] = useState(initialOverview);
@@ -46,9 +49,13 @@ export function PortfolioPricingSection({
   useEffect(() => {
     if (autoRefreshStartedRef.current || initialHoldings.length === 0) return;
     autoRefreshStartedRef.current = true;
-    setAutoRefreshing(true);
 
     let active = true;
+    queueMicrotask(() => {
+      if (active) {
+        setAutoRefreshing(true);
+      }
+    });
 
     void refreshPortfolioPricingSnapshot(portfolioId, { includeHoldings: true })
       .then((result) => {
@@ -81,6 +88,8 @@ export function PortfolioPricingSection({
           totalValue={overview.totalValue}
           dayChange={overview.dayChange ?? 0}
           portfolioCreatedAt={portfolioCreatedAt}
+          holdings={holdings}
+          historicalSnapshots={initialValueSnapshots}
         />
       </div>
 

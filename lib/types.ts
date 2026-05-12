@@ -158,6 +158,17 @@ export interface PortfolioPricingRefreshResult {
   holdings?: Holding[] | null;
 }
 
+export interface PortfolioValueSnapshot {
+  id: string;
+  capturedAt: string;
+  bucketStart: string;
+  totalValue: number;
+  costBasis: number;
+  dayChangePercent: number;
+  quoteCurrency: string;
+  positionsCount: number;
+}
+
 export interface PortfolioInsight {
   title: string;
   value: string;

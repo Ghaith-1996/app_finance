@@ -80,7 +80,9 @@ describe("daily digest delivery adapters", () => {
     expect(body.to).toBe("user@example.com");
     expect(body.subject).toContain("Pulsefolio Morning Digest");
     expect(body.html).toContain("Apple overnight move");
-    expect(body.html).toContain("https://pulsefolio.example/digest/digest-1");
+    expect(body.html).toContain("https://pulsefolio.example/feed");
+    expect(body.html).toContain("https://pulsefolio.example/feed?story=news-1");
+    expect(body.html).not.toContain("https://pulsefolio.example/digest/digest-1");
   });
 
   it("escapes interpolated HTML in the rendered email and does not import react-dom/server", async () => {
@@ -151,7 +153,7 @@ describe("daily digest delivery adapters", () => {
     expect(body).toContain("To=%2B14165551234");
     expect(body).toContain("MessagingServiceSid=MG123");
     expect(body).toContain("Pulsefolio+Morning+Digest");
-    expect(body).toContain("digest%2Fdigest-1");
+    expect(body).toContain("feed%3Fstory%3Dnews-1");
   });
 
   it("returns failed for definite Twilio API failures", async () => {

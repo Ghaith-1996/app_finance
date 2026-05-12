@@ -1,0 +1,54 @@
+name: Portfolio Value Snapshots
+
+on:
+  schedule:
+    - cron: "5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  trigger-portfolio-value-snapshots:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger hourly snapshot route
+        env:
+          CRON_ENDPOINT: ${{ secrets.CRON_ENDPOINT }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+
+          for name in CRON_ENDPOINT CRON_SECRET; do
+            if [ -z "${!name:-}" ]; then
+              echo "${name} secret is not set"
+              exit 1
+            fi
+          done
+
+          if [[ "${CRON_ENDPOINT}" != */api/news/cron ]]; then
+            echo "CRON_ENDPOINT must end with /api/news/cron, got: ${CRON_ENDPOINT}"
+            exit 1
+          fi
+
+          BASE_URL="${CRON_ENDPOINT%/api/news/cron}"
+          SNAPSHOT_ENDPOINT="${BASE_URL}/api/portfolio/value-snapshots/cron"
+          response_file="$(mktemp)"
+
+          http_code="$(
+            curl -sS \
+              -X POST \
+              -H "Authorization: Bearer ${CRON_SECRET}" \
+              -H "Accept: application/json" \
+              -o "${response_file}" \
+              -w "%{http_code}" \
+              "${SNAPSHOT_ENDPOINT}"
+          )"
+
+          echo "HTTP ${http_code}"
+          cat "${response_file}"
+
+          if [ "${http_code}" -lt 200 ] || [ "${http_code}" -ge 300 ]; then
+            echo "Portfolio value snapshot cron failed"
+            exit 1
+          fi

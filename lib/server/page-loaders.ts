@@ -12,11 +12,13 @@ import {
   resolveFeedPayload,
 } from "@/lib/server/feed";
 import { newsWindowCutoffIso } from "@/lib/services/news/pool-snapshot";
+import { loadPortfolioValueSnapshots } from "@/lib/services/portfolio-value-snapshots";
 import type {
   Holding,
   PortfolioFeedHighlight,
   PortfolioInsight,
   PortfolioOverview,
+  PortfolioValueSnapshot,
 } from "@/lib/types";
 
 type ServerSupabase = Awaited<ReturnType<typeof createClient>>;
@@ -687,6 +689,7 @@ export async function loadFullPortfolioPageData(): Promise<{
   holdings: Holding[];
   sourceType: string | null;
   portfolioOverview: PortfolioOverview;
+  portfolioValueSnapshots: PortfolioValueSnapshot[];
   insights: PortfolioInsight[];
   feedHighlights: PortfolioFeedHighlight[];
 }> {
@@ -705,15 +708,17 @@ export async function loadFullPortfolioPageData(): Promise<{
       holdings: [],
       sourceType: null,
       portfolioOverview: FULL_OVERVIEW_FALLBACK,
+      portfolioValueSnapshots: [],
       insights: [],
       feedHighlights: [],
     };
   }
 
-  const [holdingRows, latestRun, feedCount] = await Promise.all([
+  const [holdingRows, latestRun, feedCount, portfolioValueSnapshots] = await Promise.all([
     loadHoldingRows(context.supabase, portfolioId),
     loadLatestAnalysisRun(context.supabase, portfolioId),
     loadFeedItemCount(context.supabase, portfolioId),
+    loadPortfolioValueSnapshots(context.supabase, portfolioId, { limit: 72 }),
   ]);
   timer.mark("holdings/overview context");
 
@@ -747,6 +752,7 @@ export async function loadFullPortfolioPageData(): Promise<{
       emptyLastSyncedLabel: "Not synced",
       emptyCoverageLabel: "0 stories",
     }),
+    portfolioValueSnapshots,
     insights,
     feedHighlights,
   };

@@ -269,6 +269,7 @@ export default async function FullPortfolioPage() {
     portfolioCreatedAt,
     holdings,
     portfolioOverview,
+    portfolioValueSnapshots,
     insights,
     feedHighlights,
   } = await loadFullPortfolioPageData();
@@ -344,6 +345,7 @@ export default async function FullPortfolioPage() {
             portfolioCreatedAt={portfolioCreatedAt ?? new Date().toISOString()}
             initialOverview={portfolioOverview}
             initialHoldings={holdings}
+            initialValueSnapshots={portfolioValueSnapshots}
           >
             <div>
               <h2 className="mb-6 text-[22px] font-bold tracking-tight text-white">

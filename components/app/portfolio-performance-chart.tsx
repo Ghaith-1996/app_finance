@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { TrendingUp } from "lucide-react";
 import {
   Area,
@@ -12,101 +12,221 @@ import {
   YAxis,
 } from "recharts";
 import { cn, formatCurrency } from "@/lib/utils";
-
-type TimeRange = "1D" | "1W" | "1M" | "ALL";
+import type { Holding, PortfolioValueSnapshot } from "@/lib/types";
 
 interface PortfolioPerformanceChartProps {
   totalValue: number;
   dayChange: number;
   portfolioCreatedAt: string;
+  holdings: Holding[];
+  historicalSnapshots?: PortfolioValueSnapshot[];
 }
 
 interface ChartPoint {
   date: number;
   label: string;
   value: number;
+  detail: string;
 }
 
-function getRangeStartDate(range: TimeRange, now: Date): Date {
-  const start = new Date(now);
-  switch (range) {
-    case "1D":
-      start.setDate(start.getDate() - 1);
-      break;
-    case "1W":
-      start.setDate(start.getDate() - 7);
-      break;
-    case "1M":
-      start.setMonth(start.getMonth() - 1);
-      break;
-    case "ALL":
-      start.setFullYear(start.getFullYear() - 5);
-      break;
+interface ActualPerformanceSnapshot {
+  data: ChartPoint[];
+  currentValue: number;
+  previousCloseValue: number;
+  dayGainDollar: number;
+  dayGainPercent: number;
+  quotedHoldings: number;
+  latestQuoteAt: number | null;
+  source: "snapshots" | "holdings";
+}
+
+function getHoldingPrice(holding: Holding): number {
+  return Number(holding.currentPrice || holding.price || 0);
+}
+
+function getHoldingCurrentValue(holding: Holding): number {
+  if (holding.currentValue > 0) return Number(holding.currentValue);
+  const price = getHoldingPrice(holding);
+  return holding.quantity > 0 ? Number(holding.quantity) * price : 0;
+}
+
+function getHoldingCostBasis(holding: Holding): number {
+  if (holding.costBasis > 0) return Number(holding.costBasis);
+  return holding.quantity > 0 && holding.averageCost > 0
+    ? Number(holding.quantity) * Number(holding.averageCost)
+    : 0;
+}
+
+function getHoldingPreviousCloseValue(holding: Holding): number {
+  const currentValue = getHoldingCurrentValue(holding);
+  if (currentValue <= 0) return 0;
+
+  const dailyChange = Number(holding.dailyChange ?? 0);
+  if (!Number.isFinite(dailyChange) || dailyChange <= -99.9) {
+    return currentValue;
   }
-  return start;
+
+  return currentValue / (1 + dailyChange / 100);
 }
 
-function generateChartData(
+function latestQuoteTimestamp(holdings: Holding[]): number | null {
+  let latest: number | null = null;
+
+  for (const holding of holdings) {
+    if (!holding.quoteAsOf) continue;
+    const timestamp = Date.parse(holding.quoteAsOf);
+    if (!Number.isFinite(timestamp)) continue;
+    if (latest === null || timestamp > latest) latest = timestamp;
+  }
+
+  return latest;
+}
+
+function buildActualPerformanceSnapshot(
+  holdings: Holding[],
   totalValue: number,
-  range: TimeRange,
-  createdAt: Date,
-): ChartPoint[] {
-  const now = new Date();
-  const rangeStart = getRangeStartDate(range, now);
-  const effectiveStart = createdAt > rangeStart ? createdAt : rangeStart;
+  portfolioCreatedAt: Date,
+  fallbackDayChange: number,
+): ActualPerformanceSnapshot {
+  const currentFromHoldings = holdings.reduce(
+    (sum, holding) => sum + getHoldingCurrentValue(holding),
+    0,
+  );
+  const currentValue = totalValue > 0 ? totalValue : currentFromHoldings;
+  const costBasis = holdings.reduce(
+    (sum, holding) => sum + getHoldingCostBasis(holding),
+    0,
+  );
+  const previousCloseValue = holdings.reduce(
+    (sum, holding) => sum + getHoldingPreviousCloseValue(holding),
+    0,
+  );
+  const latestQuoteAt = latestQuoteTimestamp(holdings);
+  const quotedHoldings = holdings.filter((holding) => getHoldingPrice(holding) > 0).length;
+  const createdAtMs = Number.isFinite(portfolioCreatedAt.getTime())
+    ? portfolioCreatedAt.getTime()
+    : Date.now();
+  const latestMs = latestQuoteAt ?? Date.now();
+  const previousCloseMs = latestMs - 24 * 60 * 60 * 1000;
+  const fallbackChange = Number.isFinite(fallbackDayChange)
+    ? fallbackDayChange
+    : 0;
+  const fallbackDenominator = 1 + fallbackChange / 100;
+  const effectivePreviousClose =
+    previousCloseValue > 0
+      ? previousCloseValue
+      : fallbackDenominator > 0.001
+        ? currentValue / fallbackDenominator
+        : currentValue;
+  const dayGainDollar =
+    effectivePreviousClose > 0 ? currentValue - effectivePreviousClose : 0;
+  const dayGainPercent =
+    effectivePreviousClose > 0
+      ? (dayGainDollar / effectivePreviousClose) * 100
+      : fallbackDayChange;
 
-  const diffMs = now.getTime() - effectiveStart.getTime();
-  const diffDays = diffMs / (1000 * 60 * 60 * 24);
-
-  let points: number;
-  if (range === "1D") {
-    points = Math.max(2, Math.min(24, Math.ceil(diffDays * 24)));
-  } else {
-    points = Math.max(2, Math.min(range === "1W" ? 7 : range === "1M" ? 30 : 90, Math.ceil(diffDays)));
-  }
-
-  const volatility =
-    range === "1D" ? 0.003 : range === "1W" ? 0.008 : range === "1M" ? 0.02 : 0.06;
-  const trend =
-    range === "1D" ? 0.001 : range === "1W" ? 0.005 : range === "1M" ? 0.03 : 0.15;
-
-  const startValue = totalValue / (1 + trend);
   const data: ChartPoint[] = [];
+  if (costBasis > 0) {
+    data.push({
+      date: createdAtMs,
+      label: "Cost basis",
+      value: costBasis,
+      detail: "Average cost basis from saved holdings",
+    });
+  }
+  if (effectivePreviousClose > 0) {
+    data.push({
+      date: previousCloseMs,
+      label: "Prev close",
+      value: effectivePreviousClose,
+      detail: "Portfolio value implied by previous close quotes",
+    });
+  }
+  data.push({
+    date: latestMs,
+    label: "Latest",
+    value: currentValue,
+    detail: latestQuoteAt
+      ? "Latest synced portfolio value"
+      : "Current saved portfolio value",
+  });
 
-  for (let i = 0; i < points; i++) {
-    const progress = i / (points - 1);
-    const trendComponent = startValue * trend * progress;
-    const noise =
-      (Math.sin(i * 1.7) * 0.4 + Math.sin(i * 0.3) * 0.6) *
-      startValue *
-      volatility;
-    const value = startValue + trendComponent + noise;
+  if (data.length === 1) {
+    data.unshift({
+      date: createdAtMs,
+      label: "Start",
+      value: currentValue,
+      detail: "No cost basis or previous close available yet",
+    });
+  }
 
-    const pointDate = new Date(
-      effectiveStart.getTime() + (diffMs * i) / (points - 1),
-    );
+  return {
+    data,
+    currentValue,
+    previousCloseValue: effectivePreviousClose,
+    dayGainDollar,
+    dayGainPercent,
+    quotedHoldings,
+    latestQuoteAt,
+    source: "holdings",
+  };
+}
 
-    let label: string;
-    if (range === "1D") {
-      label = pointDate.toLocaleTimeString("en-US", {
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: false,
-      });
-    } else {
-      label = pointDate
-        .toLocaleDateString("en-US", { month: "short", day: "2-digit" })
-        .toUpperCase();
+function buildHistoricalPerformanceSnapshot(
+  snapshots: PortfolioValueSnapshot[],
+  fallback: ActualPerformanceSnapshot,
+): ActualPerformanceSnapshot {
+  const validSnapshots = snapshots
+    .map((snapshot) => {
+      const date = Date.parse(snapshot.bucketStart || snapshot.capturedAt);
+      return {
+        snapshot,
+        date,
+      };
+    })
+    .filter(
+      (item) =>
+        Number.isFinite(item.date) &&
+        Number.isFinite(item.snapshot.totalValue) &&
+        item.snapshot.totalValue > 0,
+    )
+    .sort((a, b) => a.date - b.date);
+
+  if (validSnapshots.length < 2) return fallback;
+
+  const latest = validSnapshots[validSnapshots.length - 1];
+  let previous = validSnapshots[validSnapshots.length - 2];
+  for (let index = validSnapshots.length - 2; index >= 0; index -= 1) {
+    const candidate = validSnapshots[index];
+    if (latest.date - candidate.date >= 23 * 60 * 60 * 1000) {
+      previous = candidate;
+      break;
     }
-
-    data.push({ date: pointDate.getTime(), label, value });
   }
+  const previousValue = previous.snapshot.totalValue;
+  const currentValue = latest.snapshot.totalValue;
+  const dayGainDollar = currentValue - previousValue;
+  const dayGainPercent =
+    previousValue > 0 ? (dayGainDollar / previousValue) * 100 : latest.snapshot.dayChangePercent;
 
-  if (data.length > 0) {
-    data[data.length - 1].value = totalValue;
-  }
-
-  return data;
+  return {
+    data: validSnapshots.map(({ snapshot, date }) => ({
+      date,
+      label: new Date(date).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+      }),
+      value: snapshot.totalValue,
+      detail: "Stored hourly portfolio value snapshot",
+    })),
+    currentValue,
+    previousCloseValue: previousValue,
+    dayGainDollar,
+    dayGainPercent,
+    quotedHoldings: latest.snapshot.positionsCount,
+    latestQuoteAt: Date.parse(latest.snapshot.capturedAt),
+    source: "snapshots",
+  };
 }
 
 function formatAxisValue(value: number, range: number): string {
@@ -179,45 +299,68 @@ function CustomTooltip({
 
   return (
     <div className="rounded-xl border border-white/10 bg-[#0f1419] px-4 py-3 shadow-xl">
+      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+        {point.label}
+      </p>
       <p className="text-xs text-slate-500">
         {dateStr} &middot; {timeStr}
       </p>
       <p className="mt-1 text-lg font-bold text-white">
         {formatCurrency(point.value)}
       </p>
+      <p className="mt-1 max-w-[220px] text-xs text-slate-500">
+        {point.detail}
+      </p>
     </div>
   );
 }
 
-function getRangeDescription(range: TimeRange, createdAt: Date): string {
-  const now = new Date();
-  const rangeStart = getRangeStartDate(range, now);
-  const effectiveStart = createdAt > rangeStart ? createdAt : rangeStart;
-  const diffDays = Math.ceil(
-    (now.getTime() - effectiveStart.getTime()) / (1000 * 60 * 60 * 24),
-  );
-
-  if (range === "1D") {
-    const hours = Math.min(24, Math.ceil(diffDays * 24));
-    return `Simulated trend over ${hours} hour${hours !== 1 ? "s" : ""}`;
+function formatQuoteDescription(snapshot: ActualPerformanceSnapshot): string {
+  if (snapshot.source === "snapshots") {
+    const latest = snapshot.latestQuoteAt
+      ? new Date(snapshot.latestQuoteAt).toLocaleString("en-US", {
+          month: "short",
+          day: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+        })
+      : "recently";
+    return `Hourly stored portfolio value history. Latest snapshot ${latest}.`;
   }
-  return `Simulated trend over ${diffDays} day${diffDays !== 1 ? "s" : ""}`;
+
+  if (!snapshot.latestQuoteAt) {
+    return "Cost basis, previous close, and latest saved value from your holdings.";
+  }
+
+  const latest = new Date(snapshot.latestQuoteAt).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  const noun = snapshot.quotedHoldings === 1 ? "holding" : "holdings";
+  return `Cost basis, previous close, and latest quote value from ${snapshot.quotedHoldings} ${noun}. Latest quote ${latest}.`;
 }
 
 export function PortfolioPerformanceChart({
   totalValue,
   dayChange,
   portfolioCreatedAt,
+  holdings,
+  historicalSnapshots = [],
 }: PortfolioPerformanceChartProps) {
-  const [range, setRange] = useState<TimeRange>("1M");
   const createdAt = useMemo(
     () => new Date(portfolioCreatedAt),
     [portfolioCreatedAt],
   );
-  const data = useMemo(
-    () => generateChartData(totalValue, range, createdAt),
-    [totalValue, range, createdAt],
+  const snapshot = useMemo(
+    () => {
+      const fallback = buildActualPerformanceSnapshot(holdings, totalValue, createdAt, dayChange);
+      return buildHistoricalPerformanceSnapshot(historicalSnapshots, fallback);
+    },
+    [historicalSnapshots, holdings, totalValue, createdAt, dayChange],
   );
+  const data = snapshot.data;
 
   const { min: domainMin, max: domainMax, ticks } = useMemo(
     () => computeDomain(data),
@@ -226,8 +369,7 @@ export function PortfolioPerformanceChart({
 
   const axisRange = domainMax - domainMin;
 
-  const dayGainDollar = totalValue * (dayChange / 100);
-  const isPositive = dayChange >= 0;
+  const isPositive = snapshot.dayGainDollar >= 0;
 
   const gradientId = "performanceGradient";
 
@@ -256,7 +398,7 @@ export function PortfolioPerformanceChart({
             />
             <span className="text-sm font-bold">
               {isPositive ? "+" : ""}
-              {dayChange.toFixed(1)}% Today
+              {snapshot.dayGainPercent.toFixed(1)}% Today
             </span>
           </div>
           <div className="sm:text-right">
@@ -270,7 +412,7 @@ export function PortfolioPerformanceChart({
               )}
             >
               {isPositive ? "+" : ""}
-              {formatCurrency(Math.abs(dayGainDollar))}
+              {formatCurrency(Math.abs(snapshot.dayGainDollar))}
             </p>
           </div>
         </div>
@@ -281,32 +423,25 @@ export function PortfolioPerformanceChart({
           <div>
             <div className="flex items-center gap-2">
               <p className="text-sm font-bold uppercase tracking-[0.15em] text-white">
-                Growth Performance
+                Portfolio Performance
               </p>
-              <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-400">
-                Simulated
+              <span className="rounded bg-brand/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-brand">
+                {snapshot.source === "snapshots" ? "Hourly snapshots" : "Live quotes"}
               </span>
             </div>
             <p className="mt-1 text-xs text-slate-500">
-              {getRangeDescription(range, createdAt)}
+              {formatQuoteDescription(snapshot)}
             </p>
           </div>
-          <div className="flex w-full overflow-x-auto rounded-xl border border-white/[0.06] bg-white/[0.03] p-1 sm:w-auto">
-            {(["1D", "1W", "1M", "ALL"] as TimeRange[]).map((r) => (
-              <button
-                key={r}
-                type="button"
-                onClick={() => setRange(r)}
-                className={cn(
-                  "min-w-[48px] shrink-0 rounded-lg px-4 py-1.5 text-xs font-bold transition",
-                  range === r
-                    ? "bg-brand/15 text-brand"
-                    : "text-slate-500 hover:text-slate-300",
-                )}
-              >
-                {r}
-              </button>
-            ))}
+          <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-end">
+            <span className="rounded-xl border border-white/[0.06] bg-white/[0.03] px-3 py-1.5 text-xs font-bold text-slate-400">
+              {snapshot.source === "snapshots" ? "Stored hourly values" : "Actual holdings"}
+            </span>
+            {snapshot.previousCloseValue > 0 ? (
+              <span className="rounded-xl border border-white/[0.06] bg-white/[0.03] px-3 py-1.5 text-xs font-bold text-slate-400">
+                Prev close {formatCurrency(Math.round(snapshot.previousCloseValue))}
+              </span>
+            ) : null}
           </div>
         </div>
 

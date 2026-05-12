@@ -32,7 +32,11 @@ function analysisPulseFill(lastAnalyzedAt: string): number {
 export default async function FeedPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ symbol?: string | string[]; ticker?: string | string[] }>;
+  searchParams?: Promise<{
+    symbol?: string | string[];
+    ticker?: string | string[];
+    story?: string | string[];
+  }>;
 }) {
   const sp = searchParams ? await searchParams : {};
   const raw = sp.symbol;
@@ -41,6 +45,9 @@ export default async function FeedPage({
   const rawTicker = sp.ticker;
   const initialTicker =
     typeof rawTicker === "string" ? rawTicker : Array.isArray(rawTicker) ? rawTicker[0] : undefined;
+  const rawStory = sp.story;
+  const initialStoryId =
+    typeof rawStory === "string" ? rawStory : Array.isArray(rawStory) ? rawStory[0] : undefined;
 
   const {
     showOnboardingNav,
@@ -140,6 +147,7 @@ export default async function FeedPage({
           insights={portfolioInsights}
           initialSymbol={initialSymbol}
           initialTicker={initialTicker}
+          initialStoryId={initialStoryId}
           initialFeedPayload={initialFeedPayload}
           allowedModelTiers={billingSummary?.allowedModelTiers}
           defaultModelTier={billingSummary?.defaultModelTier}

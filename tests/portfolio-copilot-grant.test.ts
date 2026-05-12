@@ -290,6 +290,23 @@ describe("POST /api/portfolio-copilot (Turnstile grant)", () => {
     expect(mockVerifyTurnstileToken).not.toHaveBeenCalled();
   });
 
+  it("issues the grant cookie when Turnstile passes even if the provider fails", async () => {
+    mockAnswerPortfolioQuestion.mockRejectedValueOnce(
+      new AIChatError("provider_unavailable", "down"),
+    );
+
+    const req = makePost({
+      portfolioId: "p1",
+      message: "first",
+      turnstileToken: "tok-1",
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(503);
+    expect(mockVerifyTurnstileToken).toHaveBeenCalledTimes(1);
+    expect(res.headers.get("set-cookie")).toContain("Max-Age=900");
+  });
+
   it("returns 403 turnstile_failed when no grant and the token fails", async () => {
     mockVerifyTurnstileToken.mockResolvedValueOnce({
       success: false,

@@ -168,6 +168,45 @@ describe("FeedView", () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
+  it("selects a story from the initial deep-link story id", async () => {
+    const targetStory = makeFeedItem({
+      id: "feed-row-1",
+      newsItemId: "news-1",
+      headline: "Deep linked story",
+    });
+    const initialFeedPayload = makeFeedPayload([
+      makeFeedItem({ id: "feed-row-0", newsItemId: "news-0", headline: "Other story" }),
+      targetStory,
+    ]);
+
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true }),
+    });
+
+    await act(async () => {
+      render(
+        <FeedView
+          portfolioId="p1"
+          initialStoryId="news-1"
+          initialFeedPayload={initialFeedPayload}
+        />,
+      );
+    });
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        "/api/feed/open",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({ newsItemId: "news-1" }),
+        }),
+      );
+    });
+    expect(screen.getByText("Article detail")).toBeTruthy();
+    expect(screen.getAllByText("Deep linked story").length).toBeGreaterThan(1);
+  });
+
   it("fetches once after hydration when initialSymbol selects a specific holding", async () => {
     const initialFeedPayload = makeFeedPayload(
       [makeFeedItem({ id: "story-1", headline: "Hydrated story", holdings: ["AAPL"] })],

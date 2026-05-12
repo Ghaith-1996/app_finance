@@ -33,6 +33,7 @@ async function loadModule() {
 
 describe("chat-turnstile-grant", () => {
   beforeEach(() => {
+    vi.useRealTimers();
     vi.resetModules();
     restoreEnv();
     setEnv("TURNSTILE_SECRET_KEY", "test-secret-key");
@@ -43,31 +44,50 @@ describe("chat-turnstile-grant", () => {
   // Cookie name derivation
   // -------------------------------------------------------------------------
 
-  it("derives distinct cookie names per scope", async () => {
+  it("uses one cookie name per user and portfolio across chat surfaces", async () => {
     const { chatGrantCookieName } = await loadModule();
 
-    const a = chatGrantCookieName({
+    const story = chatGrantCookieName({
       userId: "user-1",
       surface: "article-chat",
       portfolioId: "p-1",
       newsItemId: "n-1",
     });
-    const b = chatGrantCookieName({
+    const otherStory = chatGrantCookieName({
       userId: "user-1",
       surface: "article-chat",
       portfolioId: "p-1",
       newsItemId: "n-2",
     });
-    const c = chatGrantCookieName({
+    const general = chatGrantCookieName({
+      userId: "user-1",
+      surface: "article-chat-general",
+      portfolioId: "p-1",
+    });
+    const copilot = chatGrantCookieName({
+      userId: "user-1",
+      surface: "portfolio-copilot",
+      portfolioId: "p-1",
+    });
+    const otherUser = chatGrantCookieName({
       userId: "user-2",
       surface: "article-chat",
       portfolioId: "p-1",
       newsItemId: "n-1",
     });
+    const otherPortfolio = chatGrantCookieName({
+      userId: "user-1",
+      surface: "article-chat",
+      portfolioId: "p-2",
+      newsItemId: "n-1",
+    });
 
-    expect(a).not.toBe(b);
-    expect(a).not.toBe(c);
-    expect(a.startsWith("cv_")).toBe(true);
+    expect(story).toBe(otherStory);
+    expect(story).toBe(general);
+    expect(story).toBe(copilot);
+    expect(story).not.toBe(otherUser);
+    expect(story).not.toBe(otherPortfolio);
+    expect(story.startsWith("cv_")).toBe(true);
   });
 
   it("produces a stable name for the same scope across calls", async () => {
@@ -139,7 +159,7 @@ describe("chat-turnstile-grant", () => {
     ).toBe(false);
   });
 
-  it("rejects a grant value when the surface or portfolio changes", async () => {
+  it("accepts a grant across chat surfaces but rejects another portfolio", async () => {
     const { buildChatGrantCookieValue, hasValidChatGrantValue } =
       await loadModule();
 
@@ -154,7 +174,7 @@ describe("chat-turnstile-grant", () => {
         surface: "portfolio-copilot",
         portfolioId: "p1",
       }),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       hasValidChatGrantValue(value, {
         userId: "u1",
@@ -164,7 +184,7 @@ describe("chat-turnstile-grant", () => {
     ).toBe(false);
   });
 
-  it("rejects a grant value when the newsItemId changes for article-chat", async () => {
+  it("accepts a story-chat grant when the newsItemId changes in the same portfolio", async () => {
     const { buildChatGrantCookieValue, hasValidChatGrantValue } =
       await loadModule();
 
@@ -181,7 +201,31 @@ describe("chat-turnstile-grant", () => {
         portfolioId: "p1",
         newsItemId: "story-B",
       }),
-    ).toBe(false);
+    ).toBe(true);
+  });
+
+  it("expires a grant after the 15-minute verification window", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-25T12:00:00.000Z"));
+
+    const {
+      buildChatGrantCookieValue,
+      hasValidChatGrantValue,
+    } = await loadModule();
+    const scope = {
+      userId: "u1",
+      surface: "portfolio-copilot" as const,
+      portfolioId: "p1",
+    };
+    const value = buildChatGrantCookieValue(scope);
+
+    vi.setSystemTime(new Date("2026-03-25T12:14:59.000Z"));
+    expect(hasValidChatGrantValue(value, scope)).toBe(true);
+
+    vi.setSystemTime(new Date("2026-03-25T12:15:01.000Z"));
+    expect(hasValidChatGrantValue(value, scope)).toBe(false);
+
+    vi.useRealTimers();
   });
 
   it("rejects malformed, empty, and wrong-version grant values", async () => {
@@ -291,7 +335,7 @@ describe("chat-turnstile-grant", () => {
   // Set-Cookie serialization
   // -------------------------------------------------------------------------
 
-  it("builds a session-only Set-Cookie header with secure flag only in production", async () => {
+  it("builds a 15-minute Set-Cookie header with secure flag only in production", async () => {
     const { buildChatGrantSetCookieHeader } = await loadModule();
     const scope = {
       userId: "u1",
@@ -301,10 +345,9 @@ describe("chat-turnstile-grant", () => {
     const header = buildChatGrantSetCookieHeader(scope);
 
     expect(header).toContain("Path=/");
+    expect(header).toContain("Max-Age=900");
     expect(header).toContain("HttpOnly");
     expect(header).toContain("SameSite=Lax");
-    // No Max-Age / Expires -> session only
-    expect(header).not.toMatch(/Max-Age/i);
     expect(header).not.toMatch(/Expires/i);
     // Not production -> no Secure attribute
     expect(header).not.toContain("Secure");

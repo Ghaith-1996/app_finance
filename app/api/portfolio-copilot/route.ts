@@ -135,8 +135,7 @@ export async function POST(request: Request) {
   };
 
   // Grant-based Turnstile gating: only require a fresh challenge when the
-  // current browser session does not already hold a grant for this
-  // portfolio copilot scope.
+  // browser does not already hold a valid 15-minute portfolio chat grant.
   let issueGrantCookie = false;
   if (chatGrantRequired(request, scope)) {
     const turnstileResult = await verifyTurnstileToken({
@@ -149,7 +148,8 @@ export async function POST(request: Request) {
     }
     issueGrantCookie = true;
   }
-
+  const respondForChat = (body: unknown, status = 200) =>
+    issueGrantCookie ? respondWithGrant(body, status, scope) : json(body, status);
 
   const { data: portfolio } = await supabase
     .from("portfolios")
@@ -159,14 +159,14 @@ export async function POST(request: Request) {
     .single();
 
   if (!portfolio) {
-    return json({ error: "Portfolio not found" }, 404);
+    return respondForChat({ error: "Portfolio not found" }, 404);
   }
 
   try {
     await assertUserCanUseAI(user, modelTier, "portfolio_copilot");
   } catch (error) {
     if (error instanceof BillingAccessError) {
-      return json(
+      return respondForChat(
         {
           error: `The ${modelTier} tier requires the ${PLAN_LABELS[error.requiredPlan]} plan.`,
           code: error.code,
@@ -178,7 +178,7 @@ export async function POST(request: Request) {
       );
     }
     if (error instanceof AIUsageAccessError) {
-      return json(
+      return respondForChat(
         {
           error: error.message,
           code: error.code,
@@ -213,7 +213,7 @@ export async function POST(request: Request) {
     ]);
 
     if (holdingsResult.error) {
-      return json({ error: holdingsResult.error.message }, 500);
+      return respondForChat({ error: holdingsResult.error.message }, 500);
     }
 
     const latestRunId = runResult.data?.id ?? null;
@@ -272,10 +272,10 @@ export async function POST(request: Request) {
       ]);
 
       if (insightsResult.error) {
-        return json({ error: insightsResult.error.message }, 500);
+        return respondForChat({ error: insightsResult.error.message }, 500);
       }
       if (feedResult.error) {
-        return json({ error: feedResult.error.message }, 500);
+        return respondForChat({ error: feedResult.error.message }, 500);
       }
 
       insightsRows = insightsResult.data;
@@ -347,7 +347,7 @@ export async function POST(request: Request) {
       });
     } catch (error) {
       const aiErr = error instanceof AIChatError ? error : toArticleChatError(error);
-      return json(
+      return respondForChat(
         {
           error: userFacingMessage(aiErr.code),
           code: aiErr.code,
@@ -356,12 +356,9 @@ export async function POST(request: Request) {
       );
     }
 
-    if (issueGrantCookie) {
-      return respondWithGrant({ answer }, 200, scope);
-    }
-    return json({ answer });
+    return respondForChat({ answer });
   } catch (error) {
-    return json(
+    return respondForChat(
       { error: error instanceof Error ? error.message : "Failed to answer question" },
       500,
     );

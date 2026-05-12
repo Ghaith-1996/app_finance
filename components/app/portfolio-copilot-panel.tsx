@@ -32,8 +32,8 @@ export function PortfolioCopilotPanel({
   allowedTiers?: ArticleChatModelTier[];
   defaultModelTier?: ArticleChatModelTier;
   /**
-   * Initial "scope already passed a Turnstile challenge in this browser
-   * session" hint from the server (derived from the signed grant cookie).
+   * Initial "portfolio chat window already passed a Turnstile challenge"
+   * hint from the server (derived from the signed grant cookie).
    * When `true`, the widget is hidden and the send button does not wait on
    * a fresh challenge.
    */
@@ -117,8 +117,8 @@ export function PortfolioCopilotPanel({
             .map((item) => ({ role: item.role, content: item.content })),
         };
         // Only attach a Turnstile token when the server has not yet granted
-        // this portfolio-copilot scope. Once granted, the signed session
-        // cookie bypasses the challenge for the rest of the browser session.
+        // this portfolio chat window. Once granted, the signed cookie bypasses
+        // the challenge for 15 minutes.
         if (!isVerifiedForCurrentChat && turnstile.token) {
           body.turnstileToken = turnstile.token;
         }
@@ -291,7 +291,7 @@ export function PortfolioCopilotPanel({
                 <p className="text-xs text-slate-500">You hit the minute-level safety limit. Wait a moment, then try again.</p>
               )}
               {errorCode === "quota_exceeded" && (
-                <p className="text-xs text-slate-500">You have used this plan's AI allowance for the current reset window.</p>
+                <p className="text-xs text-slate-500">You have used this plan&apos;s AI allowance for the current reset window.</p>
               )}
               {errorCode === "plan_upgrade_required" && (
                 <p className="text-xs text-slate-500">Upgrade your plan in Billing to unlock that model tier.</p>

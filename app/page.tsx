@@ -73,7 +73,7 @@ export default async function Home() {
             <Link href="/onboarding" className="transition hover:text-primary">
               {t("landing.footerOnboarding")}
             </Link>
-            <Link href="/feed" className="transition hover:text-primary">
+            <Link href="/demo" className="transition hover:text-primary">
               {t("landing.footerFeed")}
             </Link>
             <Link href="/portfolio" className="transition hover:text-primary">
@@ -337,13 +337,13 @@ function FinalCallToAction() {
               <ArrowRight className="ml-2 h-4 w-4" />
             </Link>
             <Link
-              href="/feed"
+              href="/demo"
               className={buttonStyles({
                 variant: "secondary",
                 size: "lg",
               })}
             >
-              View feed demo
+              Open demo
             </Link>
           </div>
         </Panel>

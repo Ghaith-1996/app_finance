@@ -682,7 +682,7 @@ export const useCases: UseCase[] = [
       "Top 3 stories matched to your holdings",
     ],
     ctaLabel: "Try the feed",
-    ctaHref: "/feed",
+    ctaHref: "/demo#daily-brief",
     preview: {
       portfolioValue: "$246,380",
       portfolioChange: "+1.14%",
@@ -722,7 +722,7 @@ export const useCases: UseCase[] = [
       "Highlighted movers with context",
     ],
     ctaLabel: "Try the analysis",
-    ctaHref: "/analysis",
+    ctaHref: "/demo#adviser",
     preview: {
       holdings: [
         { symbol: "NVDA", company: "NVIDIA", change: 2.4, highlight: true },
@@ -747,7 +747,7 @@ export const useCases: UseCase[] = [
       "Follow-up questions in context",
     ],
     ctaLabel: "Get started",
-    ctaHref: "/onboarding",
+    ctaHref: "/demo#article-impact",
     preview: {
       holdings: [
         { symbol: "MSFT", company: "Microsoft", change: 0.7, highlight: true },

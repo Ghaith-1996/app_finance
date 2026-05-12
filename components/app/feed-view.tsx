@@ -100,6 +100,7 @@ export function FeedView({
   insights = [],
   initialSymbol,
   initialTicker,
+  initialStoryId,
   initialFeedPayload,
   allowedModelTiers = ["free", "premium", "ultimate"],
   defaultModelTier = "free",
@@ -111,6 +112,8 @@ export function FeedView({
   initialSymbol?: string;
   /** When set (e.g. from `/feed?ticker=AAPL`), switch to market mode and filter by this ticker tag. */
   initialTicker?: string;
+  /** When set (e.g. from `/feed?story=<newsItemId>`), select the matching article after the feed loads. */
+  initialStoryId?: string;
   initialFeedPayload?: FeedResponsePayload | null;
   allowedModelTiers?: ArticleChatModelTier[];
   defaultModelTier?: ArticleChatModelTier;
@@ -188,6 +191,7 @@ export function FeedView({
   const hasLoadedFeedRef = useRef(Boolean(initialFeedPayload));
   const initialFetchHandledRef = useRef(false);
   const initialSymbolAppliedRef = useRef(false);
+  const initialStoryAppliedRef = useRef(false);
 
   useEffect(() => {
     setLastIngestHint(readLastIngestSnapshot());
@@ -639,6 +643,27 @@ export function FeedView({
     [],
   );
 
+  useEffect(() => {
+    const raw = initialStoryId?.trim();
+    if (!raw || initialStoryAppliedRef.current) return;
+
+    const match = visibleStories.find(
+      (story) => story.newsItemId === raw || story.id === raw,
+    );
+    if (!match) return;
+
+    initialStoryAppliedRef.current = true;
+    setSelectedStoryId(match.id);
+    trackStoryOpen(match.newsItemId);
+
+    if (typeof window === "undefined") return;
+    window.requestAnimationFrame(() => {
+      document
+        .getElementById(`feed-story-${match.newsItemId || match.id}`)
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  }, [initialStoryId, trackStoryOpen, visibleStories]);
+
   const handleStoryOpen = useCallback(
     (story: NewsItem) => {
       if (story.id === selectedStoryId) return;
@@ -986,13 +1011,14 @@ export function FeedView({
           <div className="space-y-4">
             <div className="flex flex-col gap-5">
               {visibleStories.map((story) => (
-                <NewsFeedCard
-                  key={story.id}
-                  story={story}
-                  mode={mode}
-                  selected={story.id === selectedStoryId}
-                  onOpen={() => handleStoryOpen(story)}
-                />
+                <div key={story.id} id={`feed-story-${story.newsItemId || story.id}`}>
+                  <NewsFeedCard
+                    story={story}
+                    mode={mode}
+                    selected={story.id === selectedStoryId}
+                    onOpen={() => handleStoryOpen(story)}
+                  />
+                </div>
               ))}
             </div>
             {totalPages > 1 ? (

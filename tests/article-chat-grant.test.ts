@@ -365,7 +365,7 @@ describe("POST /api/article-chat (Turnstile grant)", () => {
     expect(res.headers.get("set-cookie")).toBeNull();
   });
 
-  it("re-requires Turnstile when the newsItemId (story) changes, even if a grant exists for another story", async () => {
+  it("does NOT require Turnstile when the story changes within a verified portfolio chat window", async () => {
     const scope: ChatGrantScope = {
       userId: "user-1",
       surface: "article-chat",
@@ -377,17 +377,17 @@ describe("POST /api/article-chat (Turnstile grant)", () => {
         portfolioId: "p1",
         newsItemId: "n2", // different story
         message: "On the other story",
-        turnstileToken: "tok-other",
+        // No turnstileToken on purpose.
       },
       cookieHeaderFor(scope),
     );
 
     const res = await POST(req);
     expect(res.status).toBe(200);
-    expect(mockVerifyTurnstileToken).toHaveBeenCalledTimes(1);
+    expect(mockVerifyTurnstileToken).not.toHaveBeenCalled();
   });
 
-  it("re-requires Turnstile for the general feed chat even if a story grant exists", async () => {
+  it("does NOT require Turnstile for general feed chat when a story grant exists for the same portfolio", async () => {
     const storyScope: ChatGrantScope = {
       userId: "user-1",
       surface: "article-chat",
@@ -399,24 +399,15 @@ describe("POST /api/article-chat (Turnstile grant)", () => {
         portfolioId: "p1",
         // no newsItemId => article-chat-general scope
         message: "General question",
-        turnstileToken: "tok-general",
+        // No turnstileToken on purpose.
       },
       cookieHeaderFor(storyScope),
     );
 
     const res = await POST(req);
     expect(res.status).toBe(200);
-    expect(mockVerifyTurnstileToken).toHaveBeenCalledTimes(1);
-    const call = mockVerifyTurnstileToken.mock.calls[0][0];
-    // The article-chat endpoint serves both story chat and general feed chat;
-    // both are rendered by the same Turnstile widget with `action="article-chat"`.
-    // The server discriminates the two via `scope.surface` for grant issuance,
-    // but the Turnstile action assertion must match what the widget emits.
-    expect(call.expectedAction).toBe("article-chat");
-
-    // A grant for the general surface should now be issued.
-    const setCookie = res.headers.get("set-cookie");
-    expect(setCookie).toBeTruthy();
+    expect(mockVerifyTurnstileToken).not.toHaveBeenCalled();
+    expect(res.headers.get("set-cookie")).toBeNull();
   });
 
   it("returns 503 on AI failure and does NOT re-consume the grant (cookie-bearing request should succeed once AI is healthy again)", async () => {
@@ -459,6 +450,24 @@ describe("POST /api/article-chat (Turnstile grant)", () => {
     const retryRes = await POST(retryReq);
     expect(retryRes.status).toBe(200);
     expect(mockVerifyTurnstileToken).not.toHaveBeenCalled();
+  });
+
+  it("issues the grant cookie when Turnstile passes even if the AI provider fails", async () => {
+    mockAnswerArticleQuestion.mockRejectedValueOnce(
+      new AIChatError("provider_unavailable", "down"),
+    );
+
+    const req = makePost({
+      portfolioId: "p1",
+      newsItemId: "n1",
+      message: "First try",
+      turnstileToken: "tok-1",
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(503);
+    expect(mockVerifyTurnstileToken).toHaveBeenCalledTimes(1);
+    expect(res.headers.get("set-cookie")).toContain("Max-Age=900");
   });
 
   it("rejects with 403 turnstile_failed when no grant cookie is present and the token fails", async () => {
@@ -524,7 +533,7 @@ describe("GET /api/article-chat (Turnstile grant)", () => {
     expect(body.turnstileVerified).toBe(true);
   });
 
-  it("returns turnstileVerified: false when a grant cookie is for a different story", async () => {
+  it("returns turnstileVerified: true when a grant cookie is for a different story in the same portfolio", async () => {
     const otherScope: ChatGrantScope = {
       userId: "user-1",
       surface: "article-chat",
@@ -539,6 +548,6 @@ describe("GET /api/article-chat (Turnstile grant)", () => {
     );
     expect(res.status).toBe(200);
     const body = (await res.json()) as { turnstileVerified?: boolean };
-    expect(body.turnstileVerified).toBe(false);
+    expect(body.turnstileVerified).toBe(true);
   });
 });

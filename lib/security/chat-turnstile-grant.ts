@@ -1,15 +1,14 @@
 /**
- * Server-side session-only "chat verification grant" helper.
+ * Server-side short-lived "chat verification grant" helper.
  *
- * Once a user has passed a Turnstile challenge for a specific chat scope
- * (story chat, general chat, or portfolio copilot), we mint a signed,
- * HttpOnly, session-only cookie that lets them keep sending messages in that
- * same scope for the remainder of the browser session without re-verifying.
+ * Once a user has passed a Turnstile challenge for a portfolio chat surface,
+ * we mint a signed, HttpOnly cookie that lets them keep sending messages for
+ * that same portfolio for a short window without re-verifying.
  *
  * The signature is produced with HMAC-SHA256 using `TURNSTILE_SECRET_KEY` as
  * the signing key, so no additional env variable is required.
  *
- * Server-only — never import from client components.
+ * Server-only - never import from client components.
  */
 
 import { createHmac, timingSafeEqual } from "crypto";
@@ -23,8 +22,9 @@ const log = createLogger("chat-turnstile-grant");
 // ---------------------------------------------------------------------------
 
 /**
- * Surfaces that can be granted independently. A grant for one surface is not
- * valid for any other surface.
+ * Surfaces that can request a portfolio-wide chat grant. Auth, ownership,
+ * billing, and durable quota checks still run on every request; Turnstile is
+ * only a bot-friction gate.
  *
  * - `article-chat`          : story-level chat on a specific article
  * - `article-chat-general`  : general "Ask AI" in the feed (no article)
@@ -39,7 +39,7 @@ export interface ChatGrantScope {
   userId: string;
   surface: ChatGrantSurface;
   portfolioId: string;
-  /** Required for `article-chat`; must be omitted for other surfaces. */
+  /** Present for story chat requests, but not part of the grant boundary. */
   newsItemId?: string;
 }
 
@@ -48,14 +48,15 @@ export interface ChatGrantScope {
 // ---------------------------------------------------------------------------
 
 const COOKIE_PREFIX = "cv_"; // "chat verified"
-const COOKIE_VERSION = "v1";
+const COOKIE_VERSION = "v2";
 const SIGNATURE_SEPARATOR = ".";
+export const CHAT_GRANT_TTL_SECONDS = 15 * 60;
 
 export const CHAT_GRANT_COOKIE_OPTIONS = {
   httpOnly: true,
   sameSite: "lax" as const,
   path: "/",
-  // Session-only: no `maxAge` / `expires` -> cleared on browser exit.
+  maxAge: CHAT_GRANT_TTL_SECONDS,
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -71,13 +72,15 @@ function requireSigningKey(): string {
   return key;
 }
 
-function scopeKey(scope: ChatGrantScope): string {
+function normalizedScopeKey(scope: ChatGrantScope): string {
+  // A grant is intentionally portfolio-wide for 15 minutes. The route still
+  // validates the exact story, portfolio ownership, model access, and quota on
+  // every request.
   const parts = [
     COOKIE_VERSION,
     scope.userId,
-    scope.surface,
+    "portfolio-chat",
     scope.portfolioId,
-    scope.newsItemId ?? "-",
   ];
   return parts.join("|");
 }
@@ -90,9 +93,13 @@ function base64UrlEncode(buf: Buffer): string {
     .replace(/=+$/, "");
 }
 
-function signScope(scope: ChatGrantScope, key: string): string {
+function signScope(
+  scope: ChatGrantScope,
+  key: string,
+  issuedAtMs: number,
+): string {
   const mac = createHmac("sha256", key);
-  mac.update(scopeKey(scope));
+  mac.update(`${normalizedScopeKey(scope)}|${issuedAtMs}`);
   return base64UrlEncode(mac.digest());
 }
 
@@ -108,10 +115,10 @@ function safeEqual(a: string, b: string): boolean {
 }
 
 function scopeHash(scope: ChatGrantScope): string {
-  // Stable, URL-safe identifier derived from the scope so cookie names do not
-  // leak the raw IDs or grow unbounded.
+  // Stable, URL-safe identifier derived from the portfolio grant boundary so
+  // cookie names do not leak the raw IDs or grow unbounded.
   const mac = createHmac("sha256", "chat-grant-name-salt");
-  mac.update(scopeKey(scope));
+  mac.update(normalizedScopeKey(scope));
   return base64UrlEncode(mac.digest().subarray(0, 12));
 }
 
@@ -121,20 +128,26 @@ function scopeHash(scope: ChatGrantScope): string {
 
 /**
  * Name of the `Set-Cookie` / `Cookie` entry that carries the grant for this
- * scope. Stable for a given scope so repeated issuance overwrites the same
- * cookie.
+ * portfolio. Stable for a given user + portfolio so repeated issuance
+ * overwrites the same cookie.
  */
 export function chatGrantCookieName(scope: ChatGrantScope): string {
   return `${COOKIE_PREFIX}${scopeHash(scope)}`;
 }
 
 /**
- * Build the opaque cookie value that encodes the scope signature.
+ * Build the opaque cookie value that encodes the grant timestamp and scope
+ * signature.
  */
 export function buildChatGrantCookieValue(scope: ChatGrantScope): string {
   const key = requireSigningKey();
-  const signature = signScope(scope, key);
-  return `${COOKIE_VERSION}${SIGNATURE_SEPARATOR}${signature}`;
+  const issuedAtMs = Date.now();
+  const signature = signScope(scope, key, issuedAtMs);
+  return [
+    COOKIE_VERSION,
+    String(issuedAtMs),
+    signature,
+  ].join(SIGNATURE_SEPARATOR);
 }
 
 /**
@@ -163,10 +176,9 @@ export function parseCookieHeader(header: string | null): Record<string, string>
 }
 
 /**
- * Validate a raw cookie value (`<version>.<signature>`) against the expected
- * signature for the given scope. Returns `false` if missing, malformed, wrong
- * version, or the signature does not match (user changed, scope changed,
- * cookie tampered).
+ * Validate a raw cookie value (`<version>.<issuedAtMs>.<signature>`) against
+ * the expected signature for the given portfolio. Returns `false` if missing,
+ * malformed, wrong version, expired, or the signature does not match.
  *
  * Useful for server components / loaders that already have access to the
  * parsed cookie store and do not hold a `Request` object.
@@ -179,16 +191,22 @@ export function hasValidChatGrantValue(
   if (!key) return false;
   if (!raw) return false;
 
-  const [version, signature] = raw.split(SIGNATURE_SEPARATOR);
-  if (version !== COOKIE_VERSION || !signature) return false;
+  const [version, issuedAtRaw, signature] = raw.split(SIGNATURE_SEPARATOR);
+  if (version !== COOKIE_VERSION || !issuedAtRaw || !signature) return false;
 
-  const expected = signScope(scope, key);
+  const issuedAtMs = Number(issuedAtRaw);
+  if (!Number.isFinite(issuedAtMs)) return false;
+
+  const ageMs = Date.now() - issuedAtMs;
+  if (ageMs < 0 || ageMs > CHAT_GRANT_TTL_SECONDS * 1000) return false;
+
+  const expected = signScope(scope, key, issuedAtMs);
   return safeEqual(signature, expected);
 }
 
 /**
  * Check whether an incoming request carries a valid grant for the given
- * chat scope.
+ * portfolio chat scope.
  */
 export function hasValidChatGrantCookie(
   request: Request,
@@ -200,8 +218,8 @@ export function hasValidChatGrantCookie(
 }
 
 /**
- * Build a `Set-Cookie` header string that issues a session-only grant for
- * the given scope.
+ * Build a `Set-Cookie` header string that issues a short-lived grant for
+ * the given portfolio chat scope.
  */
 export function buildChatGrantSetCookieHeader(scope: ChatGrantScope): string {
   const name = chatGrantCookieName(scope);
@@ -210,6 +228,7 @@ export function buildChatGrantSetCookieHeader(scope: ChatGrantScope): string {
   const pieces = [
     `${name}=${encodeURIComponent(value)}`,
     "Path=/",
+    `Max-Age=${CHAT_GRANT_TTL_SECONDS}`,
     "HttpOnly",
     "SameSite=Lax",
   ];

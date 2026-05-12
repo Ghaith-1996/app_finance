@@ -17,7 +17,11 @@ This document is intentionally detailed, but it is still a handoff, not a replac
 
 Project name:
 
-- `portfolio-signal`
+- `Pulsefolio` (package name: `pulsefolio`)
+
+Legacy/internal identifiers:
+
+- some worker user-agent strings and older comments still use `portfolio-signal`; treat those as legacy naming unless the task is explicitly a rename cleanup.
 
 What the app does:
 
@@ -28,6 +32,9 @@ What the app does:
 - runs portfolio-specific matching and scoring
 - generates a personalized feed and portfolio insights
 - supports article-level chat and portfolio-level copilot chat
+- supports billing-gated AI tiers, durable AI quotas, and Turnstile bot verification
+- can send 9 AM Eastern portfolio/watchlist digest notifications by email/SMS
+- tracks latest earnings-report links for held/watchlist symbols
 
 What it is not:
 
@@ -44,7 +51,7 @@ Product posture:
 
 ## Current Session Decisions
 
-These decisions were made in the current thread and are reflected in code/doc changes:
+These decisions were made across recent implementation threads and are reflected in code/doc changes:
 
 - user wants to use Azure `gpt-5.2` for the main path
 - StepFun `step-3.5-flash:free` via OpenRouter should remain available for switching back and forth
@@ -112,6 +119,25 @@ These decisions were made in the current thread and are reflected in code/doc ch
 - new deployment follow-up: apply `supabase/migrations/020_durable_ai_usage_limits.sql` in every environment before relying on the durable quota/rate-limit enforcement
 - personal feed article limits raised: `ANALYSIS_NEWS_POOL_LIMIT` 100→500 (articles scored per analysis run), `MAX_PAGE_SIZE` 100→500 (pagination cap), `DEFAULT_FEED_PAGE_SIZE` 50→100; time-based 24-hour filter unchanged
 - updated `tests/analysis-constants.test.ts` to reflect the new 500-article pool limit
+- feed sorting/pagination now supports `match`, `recent`, `hot`, and `oldest` where applicable; `hot` uses `news_items.detail_open_count`
+- added `POST /api/feed/open` plus migration `019_news_detail_open_count.sql` to increment `detail_open_count` when a user opens a story detail
+- analysis runs can now finish as `degraded` when AI failures make output unreliable; feed/digest/page loaders treat `complete` and `degraded` runs as usable
+- added Phase 2 DB hardening in `supabase/migrations/021_phase2_security_and_concurrency.sql`: Stripe webhook processing states/reclaim, unique subscription row per user, unique active analysis run per portfolio, feed indexes, and atomic plan-aware AI quota RPC
+- added stale-recovery follow-up migrations `022_stale_recovery_backfill.sql` and `023_analysis_run_heartbeat.sql`; active analysis runs now use `analysis_runs.updated_at` as a heartbeat/staleness signal
+- article chat now supports both story-scoped chat (`newsItemId`) and general feed Ask AI (`portfolioId` + message, no `newsItemId`)
+- story chat, general feed chat, and portfolio copilot use session-only HMAC-signed Turnstile grant cookies scoped to the user/surface/portfolio/story; once verified, the same browser session can keep chatting in that scope without a new challenge
+- Turnstile grant issuance is best-effort: if `TURNSTILE_SECRET_KEY` is missing for signing, the chat response still succeeds after verification, but the user will be asked to verify again next request
+- AI tier routing is now explicit: `free` -> OpenRouter, `premium` -> Mistral, `ultimate` -> Azure
+- settings now includes billing, notification preferences, theme preferences, and profile editing on one surface
+- root preferences infrastructure exists for light/dark theme and locale cookies/localStorage; locale is currently forced to `en` even though `fr` remains in the supported-locale type
+- added daily digest notifications: `user_notification_preferences`, `notification_digests`, `notification_deliveries`, digest builder/delivery services, `/digest/[digestId]`, `POST /api/notifications/daily-digest/cron`, and `.github/workflows/daily-digest.yml`
+- daily digest runs are scheduled from GitHub Actions at `0,15,30,45 13,14 * * *` UTC, while the route itself only runs during the real `9 AM America/New_York` hour for DST safety
+- digest email delivery uses Resend; digest SMS delivery uses Twilio; SMS pending deliveries are not blindly resent and can become `uncertain`
+- digest links prefer `APP_BASE_URL`, then `NEXT_PUBLIC_SITE_URL` / `NEXT_PUBLIC_APP_URL`, before trusted request-origin fallback
+- added latest earnings-report tracking: `ticker_earnings_reports`, `lib/services/earnings-reports.ts`, `POST /api/earnings-reports/cron`, and `.github/workflows/earnings-report-sync.yml`
+- earnings-report sync resolves tracked symbols from holdings + watchlists, prefers company-hosted investor/earnings links, falls back to SEC filings, and inactivates rows for no-longer-tracked symbols
+- portfolio holdings and watchlist details now expose latest earnings-report links when `ticker_earnings_reports` has an active row
+- `README.md` and `PRE_LAUNCH_CHECKLIST.md` now document daily digest and earnings-report scheduler setup in addition to the news scheduler
 
 Important runtime note:
 
@@ -132,6 +158,8 @@ Important runtime note:
 - `clsx` for tailwind utility merging
 - Stripe (billing/subscriptions)
 - Recharts (charts in watchlist dashboard and portfolio)
+- Cloudflare Turnstile (bot verification)
+- Resend and Twilio API integrations for digest delivery
 
 Node scripts:
 
@@ -151,12 +179,22 @@ Node scripts:
   - app UI and marketing UI
 - `components/legal/`
   - shared legal document shell used by `/terms` and `/privacy`
+- `components/providers/`
+  - app-wide preferences provider for theme/locale state
+- `emails/`
+  - React email rendering for daily digest delivery
 - `lib/actions/`
-  - server actions, mainly portfolio import/edit/read helpers
+  - server actions for portfolio, profile, watchlist, community, and notification preferences
+- `lib/notifications/`
+  - daily digest build, delivery, preference, and timezone helpers
+- `lib/preferences.ts`
+  - theme/locale cookie and localStorage constants/helpers
 - `lib/legal/`
   - shared legal placeholders, static dates, and legal document constants
 - `lib/services/`
   - core business logic
+- `lib/server/`
+  - server page loaders and shared feed resolver
 - `lib/services/cache.ts`
   - in-memory TTL cache for expensive provider calls
 - `lib/billing/`
@@ -182,29 +220,13 @@ Node scripts:
 
 ## Current Git / Repo State
 
-At the time of writing, the worktree is dirty. Do not assume all local changes are yours.
-
-Tracked modified files visible in `git status`:
-
-- `AGENTS.md`
-- `CLAUDE.md`
-- `app/(auth)/login/page.tsx`
-- `app/terms/page.tsx`
-- `components/app/profile-form.tsx`
-- `lib/i18n/dictionaries.ts`
-- `tests/login-language-hidden.test.tsx`
-
-Untracked files visible in `git status`:
-
-- `app/privacy/`
-- `components/legal/`
-- `lib/legal/`
-- `tests/profile-form-legal-links.test.tsx`
+At the time this document was refreshed, `git status --short` was clean before editing `CLAUDE.md`.
 
 Implications:
 
+- do not assume it remains clean in a later session; always run `git status --short`
 - do not revert unrelated local changes
-- prefer reading the current file contents before editing any of the modified files above
+- prefer reading the current file contents before editing any modified files
 
 ## Runtime Architecture
 
@@ -216,6 +238,8 @@ High-level split:
 - Next API routes expose feed, analysis, ingest, health, and chat behaviors
 - Python worker fetches and normalizes external news
 - TypeScript handles AI enrichment and portfolio scoring
+- notification services build and deliver stored daily digest snapshots
+- earnings-report services resolve tracked symbol report links for portfolio/watchlist surfaces
 
 Important conceptual split:
 
@@ -234,6 +258,19 @@ Ingestion model:
 - manual candidate testing can also write into the same pool via `POST /api/news/cron/v2` or `POST /api/news/refresh-v2`
 - personal feed selection considers both portfolio holdings and watchlist symbols
 - `feed_items.match_sources` tracks whether each story matched via `"portfolio"`, `"watchlist"`, or both
+- `news_items.detail_open_count` tracks story-detail opens and powers `hot` feed sorting
+
+Notification model:
+
+- users opt into email and/or SMS daily digest delivery from `/settings`
+- digest cron builds one stored `notification_digests` row per user/date and upserts `notification_deliveries` rows per channel
+- digest story links open `/digest/[digestId]`, which requires auth and only shows the owner their stored snapshot
+
+Earnings-report model:
+
+- the earnings sync cron resolves all unique symbols from holdings and watchlists
+- `ticker_earnings_reports` stores preferred company/SEC links, report dates, active state, and last error
+- portfolio holdings and watchlist detail views render report links from active rows when available
 
 ## Authentication And Session Model
 
@@ -259,6 +296,7 @@ Protected routes:
 - `/settings`
 - `/admin`
 - `/complete-profile`
+- `/digest/[digestId]`
 
 Login flow:
 
@@ -266,6 +304,7 @@ Login flow:
 - callback route exchanges auth code for session
 - after success, users with incomplete profile rows are redirected to `/complete-profile?redirectTo=...`
 - profile completion requires first name, last name, and username (`user_profiles.handle`)
+- first-time completion also requires Terms acceptance and stores `accepted_terms_at`
 - users with complete profiles are redirected to the requested route or `/portfolio`
 
 Supabase clients:
@@ -380,6 +419,7 @@ Pipeline concept shown to user:
 - `mapping_news`
 - `generating_insights`
 - `complete`
+- `degraded`
 - `failed`
 
 ### `/feed`
@@ -400,10 +440,13 @@ Purpose:
 
 Important behavior:
 
-- personal feed = latest completed analysis run only
+- personal feed = latest completed or degraded analysis run
 - market feed = direct `news_items` query from the last 24 hours
-- client-side filtering exists for holdings, sectors, category, source type, recency
-- article detail panel supports article chat
+- server resolver supports pagination, recency cap, mode-specific sort, ticker/source/category filters, and watchlist-only fallback
+- client-side filtering exists for loaded holdings, sectors, category, source type, recency, sort, and ticker input
+- `hot` sort uses `detail_open_count`; story detail opens are posted to `/api/feed/open`
+- Ask AI supports both selected-story chat and general portfolio/market chat, with Turnstile grant reuse per browser session
+- article chat lives in a right-side sticky sidebar on `xl+` and a mobile slide-over below `xl`
 
 ### `/portfolio`
 
@@ -443,6 +486,7 @@ Current behavior:
 - includes refresh prices button
 - includes portfolio copilot panel
 - includes summary cards built from holdings, insights, and feed highlights
+- holdings rows include quick links to `/feed?ticker=SYMBOL` and a latest earnings report link when available
 
 ### `/watchlist`
 
@@ -468,6 +512,8 @@ Current state:
 - selected symbol state is URL-driven via `?symbol=...` (deep-linkable)
 - right side of the page shows a Twelve Data detail dashboard for the selected symbol
 - dashboard includes: summary, 30-day price chart (SVG), market stats, company profile
+- dashboard has overview/financials tabs using Recharts for price, revenue/net income, debt/cash/FCF, and EPS charts where data exists
+- dashboard surfaces the latest earnings report link from `ticker_earnings_reports` when available
 - dashboard degrades gracefully if some Twelve Data endpoints fail
 - per-row 3-dot menu supports delete (calls server action, removes from DB)
 - global "Refresh prices" button re-fetches Finnhub quotes for all saved items
@@ -514,6 +560,8 @@ Current behavior:
 - updates `user_profiles.display_name` from `first_name + last_name`
 - reuses the same validation and save path as first-login completion
 - shows `BillingSettingsPanel` with current plan, status, renewal date, allowed model tiers, AI quota usage/remaining/reset timing, and manage/upgrade CTAs
+- shows `NotificationSettingsPanel` for 9 AM Eastern email/SMS digest preferences, including E.164 phone validation for SMS
+- shows `PreferencesPanel` for light/dark theme selection
 - displays `billing=success` badge after Stripe checkout redirect
 - allowlisted admins see `hasAdminModelAccess` reflected in the billing UI and get an `Admin` link in the user menu
 
@@ -597,6 +645,24 @@ Current behavior:
 - covers auth/profile data, portfolio/holdings/watchlist data, billing/subscription metadata, article/chat inputs, community content, essential cookies/preferences, security checks/logs, and admin/support access
 - names the actual processors/services reflected in the repo or deployment model: Supabase, Stripe, Vercel, Cloudflare Turnstile, configurable AI providers, and third-party market/news providers where applicable
 - describes cross-border processing, request-based privacy rights handling, retention/safeguards/breach notice posture, and links back to `/terms`
+
+### `/digest/[digestId]`
+
+Files:
+
+- `app/digest/[digestId]/page.tsx`
+
+Purpose:
+
+- authenticated view of a stored daily digest snapshot linked from email/SMS notifications
+
+Current behavior:
+
+- unauthenticated users are redirected to `/login?redirectTo=/digest/...`
+- users can only read their own `notification_digests` rows
+- renders the digest window, summary line, bullish/bearish leaders, and stored top stories
+- supports `?story=...` highlighting for links that deep-link to a specific digest story
+- external article URLs are sanitized before rendering
 
 ## API Routes
 
@@ -688,16 +754,34 @@ Current filters:
 - `maxMinutes`
 - `ticker`
 - `sourceType`
+- `sort`
+- `page`
+- `pageSize`
 
 Important behavior:
 
 - feed age is capped to 24 hours for both modes
-- personal mode joins `feed_items` to `news_items`
+- personal mode joins `feed_items` to `news_items` for the latest `complete` or `degraded` analysis run
 - personal mode returns `matchSources` per story (`"portfolio"`, `"watchlist"`, or both)
 - watchlist-only fallback: if user has no portfolio but has watchlist items, personal mode performs lightweight on-the-fly matching against `news_items` using watchlist symbols
 - market mode reads `news_items` directly
 - market mode marks stories as portfolio matches and/or watchlist matches (`isPortfolioMatch`, `isWatchlistMatch`)
+- `hot` sort falls back to recent with a notice when every visible story has `detail_open_count <= 0`
 - response includes `watchlistSymbols` array alongside existing `portfolioSymbols` and `portfolioSectors`
+
+### `POST /api/feed/open`
+
+File:
+
+- `app/api/feed/open/route.ts`
+
+Behavior:
+
+- authenticated
+- accepts `{ newsItemId }`
+- calls the `increment_news_item_detail_open_count` RPC with the service role client
+- returns `{ ok: true, detailOpenCount }`
+- tracking failures are intentionally non-blocking in the UI
 
 ### `GET /api/article-chat`
 
@@ -710,25 +794,32 @@ Behavior:
 - authenticated
 - requires `portfolioId` and `newsItemId`
 - verifies portfolio ownership
+- validates the news item exists
 - lazily creates or loads article chat thread
-- returns messages
+- returns `{ threadId, messages, turnstileVerified }`
 
 ### `POST /api/article-chat`
 
 Behavior:
 
 - authenticated
-- requires `portfolioId`, `newsItemId`, `message`
+- requires `portfolioId` and `message`; `newsItemId` is optional
+- with `newsItemId`, persists a story-scoped chat thread and stores messages
+- without `newsItemId`, answers general feed/portfolio questions using ephemeral messages and no article thread
+- validates Turnstile unless the request has a valid session-only chat grant cookie for the exact scope
+- mints a best-effort chat grant cookie after successful Turnstile verification
 - verifies model-tier access plus durable AI burst/quota limits before admitting the request
-- stores user message
-- loads article + holdings + latest feed match context
-- calls `ai.answerArticleQuestion(...)` (providers do **not** fall back to the stub on failure; empty or failed generations surface as `AIChatError` / `toArticleChatError`)
+- model tier maps to provider: free/OpenRouter, premium/Mistral, ultimate/Azure
+- story mode loads article + holdings + latest feed match context and calls `ai.answerArticleQuestion(...)`
+- general mode loads portfolio overview + holdings + insights + recent feed + watchlist symbols and calls `ai.answerPortfolioQuestion(...)`
+- providers do **not** fall back to the stub on failure; empty or failed generations surface as `AIChatError` / `toArticleChatError`
 - may return **403** with `{ error, code: "plan_upgrade_required", currentPlan, requiredPlan, requestedTier }` when the requested model tier exceeds the user's effective access
 - may return **429** with `{ error, code: "rate_limited", retryAfterMs, resetsAt }` when the durable per-minute burst cap is exceeded
 - may return **429** with `{ error, code: "quota_exceeded", quotaWindow, quotaLimit, quotaUsed, resetsAt }` when the shared AI quota window is exhausted
 - on provider failure: returns **503** with `{ error, code }` (`AIChatErrorCode`), logs provider + deployment server-side; **does not** insert an assistant row
 - error codes map to distinct user-facing messages: `provider_auth` → credentials/config hint; `provider_timeout` → retry hint; `provider_bad_response` → rephrase hint; `provider_unavailable` → generic retry
-- on success: stores assistant reply and returns `{ threadId, messages }`
+- on story success: stores assistant reply and returns `{ threadId, messages }`
+- on general success: returns `{ threadId: null, messages }`
 
 ### `POST /api/portfolio-copilot`
 
@@ -740,8 +831,11 @@ Behavior:
 
 - authenticated
 - requires `portfolioId` and `message`
+- validates Turnstile unless the request has a valid session-only portfolio-copilot grant cookie
+- mints a best-effort chat grant cookie after successful Turnstile verification
 - verifies model-tier access plus durable AI burst/quota limits before calling the provider
 - loads portfolio overview, holdings, latest insights, and latest feed context
+- accepts optional recent chat `history` and client-provided `watchlistSymbols`
 - may return **403** with `{ error, code: "plan_upgrade_required", currentPlan, requiredPlan, requestedTier }`
 - may return **429** with `{ error, code: "rate_limited" | "quota_exceeded", retryAfterMs?, quotaWindow?, quotaLimit?, quotaUsed?, resetsAt? }`
 - calls `ai.answerPortfolioQuestion(...)`
@@ -878,6 +972,36 @@ Behavior:
 - returns sync result merged with overview
 - proper 401/404/500 error status codes
 
+### `POST /api/notifications/daily-digest/cron`
+
+File:
+
+- `app/api/notifications/daily-digest/cron/route.ts`
+
+Behavior:
+
+- secured by `DIGEST_CRON_SECRET` + timing-safe comparison
+- `GET` returns 405 guidance; only `POST` runs the job
+- optional `?now=...` test override is parsed as a date
+- calls `runDailyDigestCron({ now, request })`
+- route returns 200 when all attempted deliveries are sent/skipped, 500 if any delivery fails or is uncertain
+- `.github/workflows/daily-digest.yml` invokes it at `0,15,30,45 13,14 * * *` UTC, while the service itself gates to `9 AM America/New_York`
+
+### `POST /api/earnings-reports/cron`
+
+File:
+
+- `app/api/earnings-reports/cron/route.ts`
+
+Behavior:
+
+- secured by `CRON_SECRET` + timing-safe comparison
+- `GET` returns 405 guidance; only `POST` runs the job
+- calls `syncTrackedEarningsReports(createServiceClient())`
+- syncs tracked symbols from all holdings and watchlist items
+- writes active/inactive rows in `ticker_earnings_reports`
+- `.github/workflows/earnings-report-sync.yml` invokes it daily at `17 9 * * *` UTC and supports `workflow_dispatch`
+
 ### `POST /api/billing/checkout`
 
 File:
@@ -920,10 +1044,12 @@ Behavior:
 - `runtime = "nodejs"`
 - validates Stripe signature via `requireStripeWebhookSecret`
 - handles: `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.paid`, `invoice.payment_failed`
-- idempotent via `hasProcessedStripeEvent` / `insertProcessedStripeEvent`
+- idempotent via `claimStripeEvent`, `markStripeEventProcessed`, and `markStripeEventFailed`
+- returns 409 when another fresh worker is already processing the same event
+- reclaims failed or stale `processing` events after the configured timeout
 - stores minimal audit payload (`buildEventAuditPayload`) not the full Stripe object
 - syncs customer record and subscription to DB
-- returns 200 for all handled events, 204 for unhandled event types
+- returns 200 with `{ received: true, ignored: true }` for unhandled event types
 
 ## Server Actions And Portfolio Logic
 
@@ -965,6 +1091,15 @@ Key watchlist actions:
 - `deleteWatchlistItem(id)` — removes from DB
 - `getWatchlistItemDetails(symbol)` — fetches Twelve Data detail for dashboard
 
+Notification preferences actions file:
+
+- `lib/actions/notifications.ts`
+
+Key notification actions:
+
+- `getCurrentUserNotificationPreferences` - loads the signed-in user's digest email/SMS flags and phone number, falling back to disabled defaults
+- `saveCurrentUserNotificationPreferences(input)` - validates E.164 phone number requirements, upserts `user_notification_preferences`, and revalidates `/settings`
+
 Profile actions file:
 
 - `lib/actions/profile.ts`
@@ -1003,7 +1138,7 @@ Behavior:
 - attempts Yahoo quotes for current prices and daily change
 - falls back to DB values if Yahoo fails
 - computes total portfolio value and weighted day change
-- reads latest completed run for `lastAnalyzedAt`
+- reads latest completed or degraded run for `lastAnalyzedAt`
 - reads `feed_items` count for coverage string
 
 Note:
@@ -1099,6 +1234,7 @@ Provides:
 
 - `requireSupabaseUrl()`, `requireSupabaseAnonKey()` — core Supabase config
 - `requireFinnhubKey()`, `requireTwelveDataKey()` — provider keys
+- `requireDigestCronSecret()`, `requireResendApiKey()`, `requireTwilioAccountSid()`, `requireTwilioAuthToken()`, `requireTwilioMessagingServiceSid()` - daily digest cron/delivery keys
 - `hasKey(name)` — boolean check for any env var
 - `checkOptionalProviders()` — emits `console.warn` for missing optional keys
 - `validateAzureConfig()` — returns `{ ok, issues, key, baseUrl, model }`:
@@ -1131,6 +1267,7 @@ Used by:
 - `lib/services/finnhub.ts` — logs HTTP errors, timeouts, network failures
 - `lib/services/twelvedata.ts` — logs HTTP errors, timeouts, partial endpoint failures
 - `lib/actions/watchlist.ts` — logs search failures with typed error codes
+- daily digest and earnings-report cron/services log job start/completion/failure summaries
 
 ## Twelve Data Service
 
@@ -1141,6 +1278,7 @@ Main file:
 Used for:
 
 - watchlist detail dashboard (quote, profile, price chart, stats, earnings, financials)
+- latest earnings-report metadata shown in the watchlist detail earnings card
 
 Behavior:
 
@@ -1244,6 +1382,8 @@ Enrichable source types (eligible for AI enrichment):
 - `newsapi`
 - `gnews`
 - `finnhub` (added when Finnhub was included in the cron pipeline)
+- `newsapi_ai`
+- `newscatcher`
 
 Current headline-style source types:
 
@@ -1251,6 +1391,8 @@ Current headline-style source types:
 - `gnews`
 - `finnhub`
 - `marketaux`
+- `newsapi_ai`
+- `newscatcher`
 
 ### Finnhub targeted refresh
 
@@ -1359,6 +1501,8 @@ Key constants:
 Core behavior:
 
 - creates/updates `analysis_runs`
+- reclaims stale active runs before creating a new run
+- relies on a DB uniqueness constraint so only one active run per portfolio can exist
 - reads holdings for the selected portfolio
 - reads the user's `watchlist_items` (resolved via `portfolio.user_id`)
 - reads newest 500 `news_items` from the last 24 hours
@@ -1366,6 +1510,8 @@ Core behavior:
 - persists `feed_items` only when relevance is high enough
 - writes `portfolio_insights`
 - persists `match_sources` (array of `"portfolio"`, `"watchlist"`, or both) on each `feed_item`
+- marks the run `degraded` instead of `complete` when AI failures are high enough to make output unreliable
+- keeps only the newest 3 analysis runs per portfolio and purges `feed_items` older than 14 days on successful/degraded completion
 
 Important match behavior:
 
@@ -1386,6 +1532,7 @@ Important guardrails:
 Implication:
 
 - personal feed can include stories matched through watchlist only, portfolio only, or both
+- latest usable feed/page data includes both `complete` and `degraded` runs
 - personal feed can still be empty even when the global news pool is not
 
 ## AI Layer
@@ -1412,7 +1559,8 @@ Provider selection in `lib/services/ai/index.ts`:
 - `AI_PROVIDER=mistral` -> Mistral provider
 - `AI_PROVIDER=anthropic` -> Anthropic provider
 - `AI_PROVIDER=openai` -> public OpenAI provider
-- anything else -> OpenRouter provider
+- `AI_PROVIDER=openrouter` -> OpenRouter provider
+- unset/unknown -> public OpenAI provider
 
 Stub fallback:
 
@@ -1554,15 +1702,16 @@ Expected environment:
 
 The billing system drives a tiered AI provider model:
 
-- free plan users → OpenRouter (StepFun `step-3.5-flash:free`)
-- premium plan users → Mistral (`mistral-large-latest`)
-- ultimate plan users → Azure OpenAI (`gpt-5.2`)
+- free plan users -> OpenRouter (StepFun `step-3.5-flash:free`)
+- premium plan users -> Mistral (`mistral-large-latest`)
+- ultimate plan users -> Azure OpenAI (`gpt-5.2`)
 
 Key files:
 
-- `lib/billing/plans.ts` — `providerIdForTier()`, `allowedModelTiersForPlan()`, `isTierAllowedForPlan()`
-- `lib/billing/subscriptions.ts` — `assertUserCanUseModelTier()` throws `BillingAccessError` if tier is gated
-- `lib/types.ts` — `ArticleChatModelTier = "free" | "premium" | "ultimate"`
+- `lib/billing/plans.ts` - `providerIdForTier()`, `allowedModelTiersForPlan()`, `isTierAllowedForPlan()`
+- `lib/billing/subscriptions.ts` - `assertUserCanUseModelTier()` throws `BillingAccessError` if tier is gated
+- `lib/security/ai-access.ts` - `assertUserCanUseAI()` layers model-tier entitlement, durable burst limits, and quota consumption
+- `lib/types.ts` - `ArticleChatModelTier = "free" | "premium" | "ultimate"`
 
 ## Recommended Portfolio-News System Prompt
 
@@ -1594,6 +1743,15 @@ Source of truth:
 - `supabase/migrations/015_billing_events_rls.sql`
 - `supabase/migrations/016_billing_private_rls.sql`
 - `supabase/migrations/017_redact_billing_payloads.sql`
+- `supabase/migrations/018_lock_down_news_item_writes.sql`
+- `supabase/migrations/019_news_detail_open_count.sql`
+- `supabase/migrations/019_user_accepted_terms.sql`
+- `supabase/migrations/020_durable_ai_usage_limits.sql`
+- `supabase/migrations/021_phase2_security_and_concurrency.sql`
+- `supabase/migrations/022_stale_recovery_backfill.sql`
+- `supabase/migrations/023_analysis_run_heartbeat.sql`
+- `supabase/migrations/024_daily_digest_notifications.sql`
+- `supabase/migrations/024_ticker_earnings_reports.sql`
 
 ### Core enums from initial schema
 
@@ -1602,6 +1760,10 @@ Source of truth:
 - `analysis_status`
 - `sentiment_type`
 - `impact_level`
+
+Later enum value:
+
+- `analysis_status` includes `degraded` after migration `021_phase2_security_and_concurrency.sql`
 
 ### `portfolios`
 
@@ -1649,6 +1811,7 @@ Key fields:
 - `progress`
 - `started_at`
 - `completed_at`
+- `updated_at` heartbeat/staleness timestamp
 
 ### `news_items`
 
@@ -1676,6 +1839,8 @@ Later fields:
 - `external_id`
 - `category_hint`
 - `metadata`
+- `detail_open_count`
+- extraction fields: `extracted_content`, `extraction_status`, `extraction_error`, `extracted_at`, `extraction_cache_key`
 
 Important indexing:
 
@@ -1786,12 +1951,14 @@ Key fields:
 - `display_name`
 - `avatar_url`
 - `handle`
+- `accepted_terms_at`
 
 Notes:
 
 - `handle` remains the unique username field
 - `display_name` is now written as `first_name + last_name`
 - `first_name` and `last_name` were added in `012_user_profile_names.sql`
+- `accepted_terms_at` is written by the first-login Terms acceptance flow
 
 ### `billing_customers`
 
@@ -1831,6 +1998,10 @@ Indexes: `user_id`, `stripe_customer_id`, `status`
 
 Migration: `014_billing.sql`
 
+Current constraint:
+
+- `021_phase2_security_and_concurrency.sql` dedupes legacy rows and adds a unique index on `subscriptions(user_id)`, so `upsertSubscriptionRow` now upserts on `user_id`
+
 ### `billing_events`
 
 Purpose:
@@ -1844,10 +2015,107 @@ Key columns:
 - `event_type` TEXT
 - `payload` JSONB (redacted audit projection)
 - `processed_at`
+- `processing_state` (`processing`, `processed`, `failed`)
+- `last_error`
 
 RLS: no user-facing policies; internal audit table accessed only via service-role.
 
-Migrations: `014_billing.sql`, `015_billing_events_rls.sql`, `016_billing_private_rls.sql`
+Migrations: `014_billing.sql`, `015_billing_events_rls.sql`, `016_billing_private_rls.sql`, `021_phase2_security_and_concurrency.sql`
+
+### `ai_usage_counters` / `rate_limit_events`
+
+Purpose:
+
+- durable AI quota and burst/rate-limit backing store
+
+Key behavior:
+
+- RPCs in `020_durable_ai_usage_limits.sql` enforce AI usage and route/action throttles
+- Phase 2 migration sets RPC search paths and adds `consume_ai_quota_for_user`
+- quotas are shared across article chat and portfolio copilot
+
+### `user_notification_preferences`
+
+Purpose:
+
+- per-user opt-in settings for morning digest delivery
+
+Key fields:
+
+- `user_id`
+- `email_digest_enabled`
+- `sms_digest_enabled`
+- `phone_number`
+
+Notes:
+
+- phone numbers must be E.164 when present
+- users can manage only their own row through RLS
+
+### `notification_digests`
+
+Purpose:
+
+- stored, owner-readable daily digest snapshots
+
+Key fields:
+
+- `user_id`
+- `digest_date`
+- `time_zone`
+- `window_start`, `window_end`
+- `source_mode` (`portfolio` or `watchlist`)
+- optional `portfolio_id`, `portfolio_name`
+- `summary_line`, `bullish_symbols`, `bearish_symbols`
+- `top_stories` JSONB array
+
+Important uniqueness:
+
+- `(user_id, digest_date)`
+
+### `notification_deliveries`
+
+Purpose:
+
+- per-channel delivery state for each digest
+
+Key fields:
+
+- `digest_id`
+- `channel` (`email` or `sms`)
+- `status` (`pending`, `sent`, `skipped`, `failed`, `uncertain`)
+- `provider_message_id`
+- `error_text`
+- `sent_at`
+
+Important uniqueness:
+
+- `(digest_id, channel)`
+
+### `ticker_earnings_reports`
+
+Purpose:
+
+- latest earnings-report link lookup for tracked holdings/watchlist symbols
+
+Key fields:
+
+- `symbol`
+- `preferred_url`
+- `url_source` (`company` or `sec`)
+- `company_url`
+- `sec_url`
+- `report_date`
+- `filing_form`
+- `title`
+- `is_active`
+- `last_checked_at`
+- `error`
+
+Notes:
+
+- authenticated users can read active report metadata
+- writes are service-role only through the earnings-report cron/service path
 
 ### Billing RLS Evolution
 
@@ -1913,6 +2181,13 @@ These components support the portfolio, onboarding, and billing surfaces:
 - `components/app/billing-settings-panel.tsx` — displays current plan, allowed model tiers, renewal/trial end date, and manage/upgrade CTAs sourced from `BillingSummary`
 - `components/app/provider-card.tsx` — card rendering a provider with status badge (Preview/Demo), gradient background per provider ID, and optional onSelect callback
 
+### Notification / Preferences Components
+
+- `components/app/notification-settings-panel.tsx` - settings card for email/SMS morning digest opt-in and E.164 phone entry
+- `components/app/preferences-panel.tsx` - settings card for light/dark theme selection
+- `components/providers/preferences-provider.tsx` - root provider, hydration script, cookie/localStorage sync, and translator hook
+- `components/preferences/theme-toggle.tsx` and `components/preferences/locale-select.tsx` - preference controls kept for app-wide preference UX
+
 ### App Shell / Navigation
 
 - `components/app/app-shell-layout.tsx` — layout wrapper with collapsible sidebar; main nav (Home, Onboarding, Analysis, Feed) + Portfolio/Watchlist subnav as expandable "Overview" section; sidebar collapse state persisted to localStorage
@@ -1935,6 +2210,8 @@ Provides:
 - `FeedResponsePayload` type for API feed responses
 - 24-hour max age cap enforcement
 - pagination parsing
+- mode-specific sort parsing (`match`, `recent`, `hot`, `oldest`)
+- detail-open-count-aware hot sorting with recent fallback notice
 - `resolveFeedPayload()` helper for building feed responses
 
 ### Page Loaders (`lib/server/page-loaders.ts`)
@@ -1944,6 +2221,7 @@ Provides:
 - `PortfolioSummary`, `HoldingRow`, `AuthenticatedPageContext` types
 - server-only loaders for authenticated page contexts
 - shared data fetching for portfolio pages
+- attaches latest earnings-report fields to portfolio holdings when active report rows exist
 
 ## News Service Modules (Additional)
 
@@ -1982,7 +2260,8 @@ Provides:
 Key types and enums exported:
 
 - `Sentiment`, `ImpactLevel`, `NewsCategory` — shared domain enums
-- `TickerImpact`, `MatchReasonCode`, `MatchSource` — feed/analysis types
+- `TickerImpact`, `MatchReasonCode`, `MatchSource`, `FeedSort` — feed/analysis types
+- `LatestEarningsReportFields`, `LatestEarningsReportSource` - report-link fields attached to holdings/watchlist detail data
 - `Provider` — AI provider display type with id, name, model, status, and tier badge
 - `FAQItem` — marketing FAQ entry type
 - `Holding`, `HoldingDraft` — portfolio position types
@@ -1995,8 +2274,10 @@ High-level:
 
 - portfolio-owned data is user-scoped via `portfolios.user_id`
 - `watchlist_items` are user-scoped via `watchlist_items.user_id`
-- `news_items` are readable by authenticated users
+- `news_items` are readable by authenticated users; authenticated direct writes were removed
 - article chat is user-scoped
+- notification preferences/digests are user-scoped
+- `ticker_earnings_reports` is authenticated-readable and service-written
 
 Important implication:
 
@@ -2013,10 +2294,9 @@ File:
 
 Provides:
 
-- `createRateLimiter({ windowMs, maxRequests })` — in-memory sliding-window rate limiter
-- `check(key)` returns `{ allowed, retryAfterMs?, remaining }`
-- auto-cleans expired entries every 60 seconds
-- suitable for single-instance deployments; replace backing store with Upstash Redis for horizontal scaling
+- durable Supabase-backed route/action rate limiting through `consume_rate_limit`
+- `check(key)` returns `Promise<{ allowed, retryAfterMs?, remaining, resetsAt }>`
+- default limiters for shared AI burst, analysis run, community post, and community comment surfaces
 
 Current repo state:
 
@@ -2068,8 +2348,9 @@ Provides:
 
 Files:
 
-- `lib/security/turnstile.ts` — server-side Siteverify verification helper
-- `components/security/turnstile-widget.tsx` — reusable client widget + `useTurnstile` hook
+- `lib/security/turnstile.ts` - server-side Siteverify verification helper
+- `components/security/turnstile-widget.tsx` - reusable client widget + `useTurnstile` hook
+- `lib/security/chat-turnstile-grant.ts` - signed, HttpOnly, session-only chat grant cookies
 
 Protected surfaces:
 
@@ -2092,8 +2373,11 @@ How it works:
 - on challenge completion, client receives a single-use token
 - client includes `turnstileToken` in the POST body (API routes) or as an argument (server actions)
 - server calls `verifyTurnstileToken()` before executing any side-effects
+- chat routes first check for a valid scope-specific grant cookie; if one exists, the route skips a fresh challenge for that browser session
+- successful chat verification mints a grant cookie scoped by user, surface, portfolio, and optional story
 - on failure: returns 403 (routes) or `{ ok: false, error }` (actions) without executing the action
 - tokens expire quickly and are single-use; the widget is reset after each submission
+- grant cookies are session-only, signed with `TURNSTILE_SECRET_KEY`, HttpOnly, SameSite=Lax, and Secure in production
 
 Environment:
 
@@ -2125,7 +2409,7 @@ Provides:
 - `PLAN_KEYS`, `PAID_PLAN_KEYS` constants
 - `MODEL_TIERS_BY_PLAN` — maps each plan to its allowed `ArticleChatModelTier` array
 - `parsePlanKey(value)`, `parseModelTier(value)` — safe parsers
-- `providerIdForTier(tier)` — free→`"openrouter"`, premium→`"mistral"`, ultimate→`"azure"`
+- `providerIdForTier(tier)` - free -> `"openrouter"`, premium -> `"mistral"`, ultimate -> `"azure"`
 - `allowedModelTiersForPlan(planKey)`, `isTierAllowedForPlan(planKey, tier)`
 - `defaultModelTierForPlan(planKey)` — returns highest tier the plan allows
 - `requiredPlanForTier(tier)` — inverse lookup
@@ -2137,7 +2421,7 @@ Provides:
 - Supabase CRUD layer for `billing_customers`, `subscriptions`, `billing_events`
 - `loadBillingCustomerByUserId`, `loadBillingCustomerByStripeCustomerId`, `upsertBillingCustomer`
 - `loadSubscriptionsForUser`, `upsertSubscriptionRow`
-- `hasProcessedStripeEvent`, `insertProcessedStripeEvent` — idempotency helpers
+- `claimStripeEvent`, `markStripeEventProcessed`, `markStripeEventFailed` - idempotency and stale/failed webhook recovery helpers
 
 ### Stripe SDK (`lib/billing/stripe.ts`)
 
@@ -2160,6 +2444,7 @@ Provides:
 - `assertUserCanUseModelTier(userId, tier)` — throws `BillingAccessError` if tier is not allowed
 - `deriveStripeCustomerName(user)` — extracts display name from Supabase auth metadata
 - entitlement logic: `trialing` and `active` are entitled; `past_due` is entitled only while `current_period_end` is in the future
+- billing summaries include `hasAdminModelAccess`, allowed/default model tiers, and AI quota usage/limit/window/reset fields
 
 ### Sync (`lib/billing/sync.ts`)
 
@@ -2180,6 +2465,7 @@ Location:
 Main files:
 
 - `workers/news_ingestion/main.py`
+- `workers/news_ingestion/cron_runner.py`
 - `workers/news_ingestion/cron_runner_v2.py`
 - `workers/news_ingestion/bootstrap.py`
 - `workers/news_ingestion/schema.py`
@@ -2244,6 +2530,7 @@ Common requirements:
 - `FINNHUB_API_KEY` (required for watchlist search/quotes, also used by news refresh)
 - `TWELVE_DATA_API_KEY` (watchlist detail dashboard)
 - `CRON_SECRET`
+- `CRON_ENDPOINT` (GitHub Actions secret, full deployed `/api/news/cron` URL)
 - `EDGAR_LOCAL_DATA_DIR`
 
 ### Candidate Ingestion (Phase 1)
@@ -2289,6 +2576,24 @@ Important:
 - `STRIPE_ULTIMATE_PRICE_ID`
 - `STRIPE_CUSTOMER_PORTAL_CONFIGURATION_ID` (optional)
 
+### Daily Digest Notifications
+
+- `DIGEST_CRON_SECRET` (deployed app runtime and GitHub Actions secret)
+- `DIGEST_CRON_ENDPOINT` (GitHub Actions secret, full deployed `/api/notifications/daily-digest/cron` URL)
+- `RESEND_API_KEY`
+- `RESEND_FROM_EMAIL` (optional; defaults to `Pulsefolio <onboarding@resend.dev>`)
+- `TWILIO_ACCOUNT_SID`
+- `TWILIO_AUTH_TOKEN`
+- `TWILIO_MESSAGING_SERVICE_SID`
+- `APP_BASE_URL` (preferred canonical origin for email/SMS links)
+- `NEXT_PUBLIC_APP_URL` or `NEXT_PUBLIC_SITE_URL` (lower-priority fallbacks for canonical links)
+
+### Earnings Reports
+
+- `EARNINGS_REPORTS_CRON_ENDPOINT` (GitHub Actions secret, full deployed `/api/earnings-reports/cron` URL)
+- `CRON_SECRET` (shared bearer token for the deployed route)
+- `EDGAR_IDENTITY` (SEC requests)
+
 ### Legacy / currently unused in app flow
 
 - `NEWS_PROVIDER`
@@ -2306,7 +2611,8 @@ For local dev / testing use Cloudflare's always-pass test keys:
 
 Reference:
 
-- `.env.example` is the current documented env template
+- `.env.example` documents core local envs and AI/provider setup
+- `README.md` and `PRE_LAUNCH_CHECKLIST.md` document the additional GitHub Actions scheduler secrets for news, daily digest, and earnings-report jobs
 
 Security note:
 
@@ -2318,76 +2624,116 @@ Test directory:
 
 - `tests/`
 
-Current files:
+Current top-level test files:
 
+- `active-portfolio-value-card.test.tsx`
+- `admin-access.test.ts`
+- `ai-access.test.ts`
 - `ai-chat-errors.test.ts`
 - `ai-prompts.test.ts`
 - `analysis-constants.test.ts`
+- `analysis-cron-route.test.ts`
+- `analysis-run-heartbeat-migration.test.ts`
 - `analysis-run-trigger.test.tsx`
 - `analysis-service.test.ts`
+- `app-shell-layout.test.tsx`
+- `article-chat-grant.test.ts`
 - `article-chat-panel.test.tsx`
+- `article-chat-panel-grant.test.tsx`
 - `article-chat-route.test.ts`
+- `article-chat-token-budget.test.ts`
 - `article-cta.test.tsx`
+- `auth-callback-route.test.ts`
+- `billing-store.test.ts`
+- `billing-stripe-base-url.test.ts`
+- `billing-subscriptions.test.ts`
 - `cache.test.ts`
 - `candidate-source-registration.test.ts`
+- `chat-turnstile-grant.test.ts`
+- `community-actions.test.ts`
+- `community-post-card.test.tsx`
+- `community-types.test.ts`
+- `complete-profile-page.test.ts`
 - `cron-route.test.ts`
 - `cron-v2-route.test.ts`
+- `daily-digest-builder.test.ts`
+- `daily-digest-cron-route.test.ts`
+- `daily-digest-migration.test.ts`
+- `delivery-adapters.test.ts`
+- `digest-page.test.tsx`
+- `durable-ai-usage-migration.test.ts`
+- `earnings-report-migration.test.ts`
+- `earnings-reports-cron-route.test.ts`
+- `earnings-reports-service.test.ts`
+- `enrich-cron-route.test.ts`
 - `env-validation.test.ts`
 - `external-url.test.ts`
+- `extraction-uuid-validation.test.ts`
+- `feed-open-route.test.ts`
+- `feed-page-counts.test.ts`
 - `feed-query.test.ts`
 - `feed-route.test.ts`
 - `feed-view.test.tsx`
 - `finnhub-errors.test.ts`
 - `finnhub-refresh.test.ts`
 - `gnews-targeting.test.ts`
+- `handle-hardening.test.ts`
 - `ingest-detail.test.ts`
 - `ingest-route.test.ts`
 - `logger.test.ts`
-- `news-health-route.test.ts`
-- `portfolio-match-parser.test.ts`
-- `portfolio-queries.test.ts`
-- `publisher-extract.test.ts`
-- `publisher-url.test.ts`
-- `refresh-route.test.ts`
-- `refresh-v2-route.test.ts`
-- `profile-utils.test.ts`
-- `auth-callback-route.test.ts`
-- `user-menu.test.tsx`
-- `turnstile-verify.test.ts`
-- `turnstile-protected-routes.test.ts`
-- `article-chat-token-budget.test.ts`
-- `active-portfolio-value-card.test.tsx`
-- `analysis-cron-route.test.ts`
-- `app-shell-layout.test.tsx`
-- `billing-subscriptions.test.ts`
-- `community-actions.test.ts`
-- `community-post-card.test.tsx`
-- `community-types.test.ts`
-- `complete-profile-page.test.ts`
-- `enrich-cron-route.test.ts`
-- `extraction-uuid-validation.test.ts`
-- `handle-hardening.test.ts`
+- `login-language-hidden.test.tsx`
 - `middleware.test.ts`
 - `mistral-provider.test.ts`
+- `news-health-route.test.ts`
+- `notification-preferences.test.ts`
+- `notification-settings-panel.test.tsx`
 - `onboarding-page.test.tsx`
+- `phase2-migration.test.ts`
+- `portfolio-copilot-grant.test.ts`
+- `portfolio-copilot-panel-grant.test.tsx`
 - `portfolio-copilot-route.test.ts`
+- `portfolio-copilot-token-budget.test.ts`
 - `portfolio-csv-import-flow.test.tsx`
+- `portfolio-holdings-table.test.tsx`
+- `portfolio-match-parser.test.ts`
+- `portfolio-price-sync.test.ts`
 - `portfolio-pricing-section.test.tsx`
+- `portfolio-queries.test.ts`
+- `portfolio-refresh-loaders.test.ts`
 - `portfolio-snapshot-panel.test.tsx`
 - `portfolio-sync-prices-route.test.ts`
 - `portfolio-value-card.test.tsx`
-- `portfolio-price-sync.test.ts`
-- `portfolio-refresh-loaders.test.ts`
+- `preferences-panel.test.tsx`
+- `preferences-provider.test.tsx`
+- `profile-form-legal-links.test.tsx`
+- `profile-utils.test.ts`
+- `publisher-extract.test.ts`
+- `publisher-url.test.ts`
 - `rate-limit.test.ts`
 - `redirect-validation.test.ts`
+- `refresh-route.test.ts`
+- `refresh-v2-route.test.ts`
+- `root-layout.test.tsx`
+- `site-header-language-hidden.test.tsx`
 - `source-config-candidate.test.ts`
+- `stale-recovery-migration.test.ts`
+- `streamed-price-refresh-pages.test.tsx`
 - `stripe-webhook-route.test.ts`
-- `streamed-price-refresh-pages.test.tsx` (if present)
 - `timing-safe.test.ts`
+- `turnstile-protected-routes.test.ts`
+- `turnstile-verify.test.ts`
+- `turnstile-widget.test.ts`
 - `twelvedata-detail.test.ts`
+- `user-menu.test.tsx`
 - `watchlist-detail-dashboard.test.tsx`
 - `watchlist-items.test.tsx`
 - `watchlist-page.test.tsx`
+
+Support files:
+
+- `tests/setup.ts`
+- `tests/helpers/mock-service-supabase.ts`
+- `tests/stubs/server-only.ts`
 
 Coverage themes:
 
@@ -2395,6 +2741,7 @@ Coverage themes:
 - analysis constants and gating behavior
 - analysis trigger UI state (status-only, no refresh button)
 - feed route: personal mode with matchSources/matchReasonCodes, market mode with isWatchlistMatch, watchlist-only fallback
+- feed route/page counts, pagination, hot sort, detail-open tracking, and `/api/feed/open`
 - cron route: full pipeline with Finnhub, analysis-for-all, cooldown skipping
 - candidate cron route: separate secret, candidate source payload validation, same-table writes
 - refresh route orchestration (deprecated but tested)
@@ -2411,8 +2758,11 @@ Coverage themes:
 - profile validation/completeness helpers, callback redirect gating, and avatar dropdown behavior
 - Turnstile server-side verification (success, failure, timeout/duplicate, network error, missing token/secret, action/hostname mismatch, idempotency key, client IP extraction)
 - Turnstile route/action protection gating (article-chat, portfolio-copilot, community post/comment reject without valid token)
+- chat Turnstile grant cookies and client panel grant behavior for article chat and portfolio copilot
 - article chat token budget assertion (2000 tokens across all four providers)
+- portfolio copilot token budget assertion
 - billing entitlement logic (buildBillingState, trialing/active/past_due, tier gating, admin override via `hasAdminModelAccess`)
+- billing store/webhook idempotency, stale processing recovery, canonical base URL resolution, and one-subscription-per-user migration
 - Mistral provider creation, config validation, chat/enrichment methods
 - analysis cron route (GET eligibility, POST single-portfolio run, cooldown, CRON_SECRET)
 - enrichment cron route (batch enrichment, max batch size, CRON_SECRET)
@@ -2435,6 +2785,10 @@ Coverage themes:
 - redirect validation (safe/unsafe paths, sanitization)
 - portfolio price sync (stale-skip, refresh, auth, dedup)
 - portfolio refresh loaders (dedupe, cached in-flight promise)
+- analysis run heartbeat and stale-run migrations
+- daily digest builder, digest cron route, digest page, notification preferences/settings panel, delivery adapters, and digest migration
+- earnings report service, cron route, migration, portfolio holdings report links, and watchlist detail report links
+- root preferences provider/panel and theme persistence
 
 Known testing limitation:
 
@@ -2450,17 +2804,21 @@ Current docs in repo:
 
 - `README.md`
   - recently updated away from generic create-next-app boilerplate
-  - now documents local run and AI provider setup
+  - now documents local run, AI provider setup, news scheduler, and daily digest scheduler
 - `analysis.txt`
   - longer repo analysis
 - `CLAUDE.md`
   - this handoff
 - `PRE_LAUNCH_CHECKLIST.md`
-  - deployment checklist covering env vars, migrations, API quotas, smoke tests, rollback
+  - deployment checklist covering env vars, migrations through `024`, API quotas, scheduler secrets, smoke tests, rollback
 - `.github/workflows/news-cron.yml`
   - schedules GitHub Actions every 20 minutes, runs `python -m workers.news_ingestion.cron_runner`, and `POST`s the payload to the deployed `/api/news/cron` route
 - `.github/workflows/news-cron-v2.yml`
   - manual `workflow_dispatch` candidate workflow that runs `python -m workers.news_ingestion.cron_runner_v2`, posts to `/api/news/cron/v2`, then reuses the shared enrich and analysis endpoints
+- `.github/workflows/daily-digest.yml`
+  - scheduled/manual workflow that posts to `/api/notifications/daily-digest/cron`; the route gates to the actual 9 AM Eastern hour
+- `.github/workflows/earnings-report-sync.yml`
+  - scheduled/manual workflow that posts to `/api/earnings-reports/cron` to refresh tracked symbol report links
 - `supabase/README.md`
   - migration application basics
 - `workers/news_ingestion/TROUBLESHOOTING.md`
@@ -2478,6 +2836,9 @@ Completed workstreams:
 6. Observability: `lib/logger.ts` structured logging in Finnhub, Twelve Data, and watchlist actions
 7. Tests: `finnhub-errors.test.ts`, `cache.test.ts`, `logger.test.ts`, `env-validation.test.ts`, `twelvedata-detail.test.ts` — covering provider error classification, cache TTL, structured logging, env validation, and Twelve Data aggregator partial/full/failure scenarios
 8. UX polish: watchlist dashboard catches unhandled promise rejections; `PRE_LAUNCH_CHECKLIST.md` covers env, migrations, API quotas, smoke tests, rollback
+9. Bot verification: article chat/general Ask AI/portfolio copilot now use Turnstile with session-scoped grant cookies
+10. Scheduler expansion: GitHub Actions now cover production news, candidate news, daily digest, and earnings-report sync jobs
+11. Billing/analysis hardening: Stripe webhook reclaim, unique active analysis runs, degraded analysis status, and heartbeat-based stale-run recovery are implemented in migrations/services
 
 ## Known Caveats And Rough Edges
 
@@ -2486,17 +2847,19 @@ Completed workstreams:
 - some portfolio/strategy surfaces contain heuristic presentation logic
 - marketing pages are more polished than some backend guarantees
 - article chat depends on migration `006_article_chat.sql` being present in the live DB
+- daily digest depends on migration `024_daily_digest_notifications.sql`, `DIGEST_CRON_SECRET`, `APP_BASE_URL`, Resend, and Twilio configuration
+- earnings report links depend on migration `024_ticker_earnings_reports.sql`, `CRON_SECRET`, GitHub `EARNINGS_REPORTS_CRON_ENDPOINT`, and SEC/company-site availability
+- durable quotas/concurrency depend on migrations `020` through `023` being applied in each environment
 - the public OpenAI provider is still hardcoded to `gpt-4o-mini`
 - article chat output budget is now 2000 tokens, so longer answers are possible but provider-side truncation is still possible on very long prompts
-- local verification of `tests/article-chat-token-budget.test.ts` is currently blocked in this environment by a Vitest startup `spawn EPERM` error after working around PowerShell `npm.ps1` policy restrictions
-- local Vitest execution for the new profile tests is blocked by the same `spawn EPERM` startup issue
 - personal feed emptiness is valid and expected if nothing scores above threshold
 - personal feed can now include watchlist-only matches (relevance 75, no AI assessment)
 - newly added watchlist symbols affect the feed on the next cron cycle, not immediately
+- newly added holdings/watchlist symbols affect latest earnings-report links after the next earnings-report sync job
 - the `/api/news/refresh` and `/api/news/ingest` routes are deprecated but still functional for admin use
 - the "Refresh news & analysis" button has been removed from the analysis page UI
 - generated Python `__pycache__` files are present and should usually be ignored
-- some pre-existing tests (`feed-view`, `gnews-targeting`, `analysis-service`) may fail until mocks match current routes
+- `PRE_LAUNCH_CHECKLIST.md` currently records local `typecheck`, `lint`, and `test` as open launch blockers until re-run/fixed
 
 ## Community Social Home (`/home`)
 
@@ -2573,6 +2936,66 @@ Client components:
 - Feed is global (no follow graph filtering) in v1
 - No separate API routes — all data flows through server actions
 - Mobile: left and right rails are hidden; center feed is full-width
+
+## Daily Digest Notifications
+
+The daily digest feature stores and delivers a top-10 overnight portfolio/watchlist snapshot at 9 AM Eastern.
+
+Schema:
+
+- `supabase/migrations/024_daily_digest_notifications.sql`
+- `user_notification_preferences`
+- `notification_digests`
+- `notification_deliveries`
+
+Core files:
+
+- `lib/notifications/daily-digest.ts`
+- `lib/notifications/delivery.ts`
+- `lib/notifications/preferences.ts`
+- `lib/notifications/timezone.ts`
+- `emails/daily-digest-email.tsx`
+- `app/api/notifications/daily-digest/cron/route.ts`
+- `app/digest/[digestId]/page.tsx`
+- `components/app/notification-settings-panel.tsx`
+- `.github/workflows/daily-digest.yml`
+
+Behavior:
+
+- digest source is the latest completed/degraded portfolio analysis when a user has portfolios
+- watchlist-only users get direct watchlist matches from `news_items`
+- one digest per user/date is enforced by a unique constraint
+- delivery rows are keyed by digest/channel
+- email uses Resend and includes the full digest
+- SMS uses Twilio and sends a short leader summary plus digest link
+- stale pending SMS deliveries become `uncertain` instead of being resent automatically
+
+## Latest Earnings Reports
+
+The earnings-report feature resolves a latest report link for tracked symbols and surfaces it in portfolio/watchlist UI.
+
+Schema:
+
+- `supabase/migrations/024_ticker_earnings_reports.sql`
+- `ticker_earnings_reports`
+
+Core files:
+
+- `lib/services/earnings-reports.ts`
+- `app/api/earnings-reports/cron/route.ts`
+- `.github/workflows/earnings-report-sync.yml`
+- `lib/server/page-loaders.ts`
+- `components/app/portfolio-holdings-table.tsx`
+- `components/app/watchlist-detail-dashboard.tsx`
+
+Behavior:
+
+- tracked universe = unique symbols from `holdings` + `watchlist_items`
+- company-site discovery scans investor/news/media pages for earnings/result/release links
+- SEC fallback uses company tickers and submissions APIs, preferring recent eligible 10-K/10-Q/20-F/8-K/6-K filings with earnings markers
+- preferred company links win over SEC links
+- rows for no-longer-tracked symbols are marked inactive
+- public URLs are validated with existing publisher URL safety checks before fetch/render
 
 ## Recommended Read Order By Task
 
@@ -2691,12 +3114,57 @@ Read:
 12. `supabase/migrations/014_billing.sql`
 13. `tests/billing-subscriptions.test.ts`
 
+### If changing daily digest notifications
+
+Read:
+
+1. `CLAUDE.md`
+2. `supabase/migrations/024_daily_digest_notifications.sql`
+3. `lib/notifications/types.ts`
+4. `lib/notifications/timezone.ts`
+5. `lib/notifications/preferences.ts`
+6. `lib/notifications/daily-digest.ts`
+7. `lib/notifications/delivery.ts`
+8. `emails/daily-digest-email.tsx`
+9. `app/api/notifications/daily-digest/cron/route.ts`
+10. `app/digest/[digestId]/page.tsx`
+11. `components/app/notification-settings-panel.tsx`
+12. `.github/workflows/daily-digest.yml`
+
+### If changing earnings report links
+
+Read:
+
+1. `CLAUDE.md`
+2. `supabase/migrations/024_ticker_earnings_reports.sql`
+3. `lib/services/earnings-reports.ts`
+4. `app/api/earnings-reports/cron/route.ts`
+5. `.github/workflows/earnings-report-sync.yml`
+6. `lib/server/page-loaders.ts`
+7. `components/app/portfolio-holdings-table.tsx`
+8. `components/app/watchlist-detail-dashboard.tsx`
+9. `lib/security/publisher-url.ts`
+
+### If changing preferences/theme
+
+Read:
+
+1. `CLAUDE.md`
+2. `app/layout.tsx`
+3. `lib/preferences.ts`
+4. `components/providers/preferences-provider.tsx`
+5. `components/app/preferences-panel.tsx`
+6. `lib/i18n/dictionaries.ts`
+
 ## Useful Commands
 
 ```bash
 npm run dev
+npm run build
+npm run lint
 npm run typecheck
 npm run test
+npm run test -- tests/daily-digest-builder.test.ts tests/daily-digest-cron-route.test.ts tests/earnings-reports-service.test.ts tests/earnings-reports-cron-route.test.ts
 node --env-file=.env scripts/test-openrouter.mjs
 node --env-file=.env scripts/test-azure-openai.mjs
 python -m workers.news_ingestion.main --check

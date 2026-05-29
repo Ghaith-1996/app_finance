@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
+import { AppLogo } from "@/components/brand/app-logo";
 import { ThemeToggle } from "@/components/preferences/theme-toggle";
 import { usePreferences } from "@/components/providers/preferences-provider";
 import { buttonStyles } from "@/components/ui/button";
@@ -47,9 +48,7 @@ export default function LoginPage() {
 
         <div className="text-center">
           <Link href="/" className="inline-flex items-center gap-3 text-primary no-underline">
-            <span className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-brand/15 text-lg font-semibold text-brand">
-              PF
-            </span>
+            <AppLogo size="lg" priority />
             <div className="text-left">
               <p className="text-xs uppercase tracking-[0.22em] text-secondary">Pulsefolio</p>
               <p className="text-base font-semibold text-primary">{t("login.tagline")}</p>

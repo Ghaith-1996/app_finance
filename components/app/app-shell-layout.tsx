@@ -19,6 +19,7 @@ import {
   Upload,
 } from "lucide-react";
 
+import { AppLogo } from "@/components/brand/app-logo";
 import { ThemeToggle } from "@/components/preferences/theme-toggle";
 import { usePreferences } from "@/components/providers/preferences-provider";
 import { UserMenu } from "@/components/app/user-menu";
@@ -127,9 +128,7 @@ export function AppShellLayout({
         <div className="flex h-full min-w-[260px] flex-col">
           <div className="flex items-start justify-between gap-2 px-6 pt-8 pb-4">
             <Link href="/" className="flex min-w-0 flex-1 items-center gap-3">
-              <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand/15 text-sm font-bold text-brand">
-                PF
-              </span>
+              <AppLogo size="md" />
               <div className="min-w-0">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
                   {t("shell.observatory")}
@@ -266,9 +265,7 @@ export function AppShellLayout({
       <header className="fixed left-0 right-0 top-0 z-40 flex flex-col border-b border-subtle bg-surface/95 backdrop-blur-xl lg:hidden">
         <div className="flex items-center gap-3 px-4 py-3 sm:px-5">
           <Link href="/" className="flex items-center gap-2">
-            <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-brand/15 text-xs font-bold text-brand">
-              PF
-            </span>
+            <AppLogo size="sm" />
             <span className="text-sm font-semibold text-primary">Pulsefolio</span>
           </Link>
           <nav className="flex flex-1 items-center justify-end gap-1 overflow-x-auto pb-1">

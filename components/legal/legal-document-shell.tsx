@@ -1,6 +1,8 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { AppLogo } from "@/components/brand/app-logo";
+
 type RelatedLink = {
   href: string;
   label: string;
@@ -26,12 +28,18 @@ export function LegalDocumentShell({
   return (
     <div className="min-h-screen bg-background">
       <div className="mx-auto max-w-4xl px-6 py-16 lg:py-24">
-        <Link
-          href="/"
-          className="mb-10 inline-block text-sm text-slate-400 transition-colors hover:text-brand"
-        >
-          &larr; Back to home
-        </Link>
+        <div className="mb-10 flex flex-wrap items-center gap-4">
+          <Link href="/" className="inline-flex items-center gap-3">
+            <AppLogo size="md" />
+            <span className="text-sm font-semibold text-white">Pulsefolio</span>
+          </Link>
+          <Link
+            href="/"
+            className="text-sm text-slate-400 transition-colors hover:text-brand"
+          >
+            &larr; Back to home
+          </Link>
+        </div>
 
         <div className="space-y-4">
           <h1 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">{title}</h1>

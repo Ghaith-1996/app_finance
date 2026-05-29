@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { ArrowLeft, ArrowRight } from "lucide-react";
 
+import { AppLogo } from "@/components/brand/app-logo";
 import { DemoWorkspace } from "@/components/marketing/demo-workspace";
 import { buttonStyles } from "@/components/ui/button";
 
@@ -17,9 +18,7 @@ export default function DemoPage() {
       <header className="border-b border-subtle bg-background/95 px-6 py-4 backdrop-blur-xl lg:px-8">
         <div className="mx-auto flex max-w-[90rem] flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <Link href="/" className="inline-flex items-center gap-3">
-            <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-brand/15 text-sm font-semibold text-brand">
-              PF
-            </span>
+            <AppLogo size="md" />
             <span>
               <span className="block text-sm font-semibold uppercase tracking-[0.18em] text-primary">
                 Pulsefolio demo

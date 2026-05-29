@@ -5,7 +5,7 @@ import {
   PreferenceScript,
   PreferencesProvider,
 } from "@/components/providers/preferences-provider";
-import { APP_LOGO_ALT, APP_LOGO_SRC } from "@/lib/brand/logo";
+import { APP_LOGO_ALT } from "@/lib/brand/logo";
 import { isTheme, THEME_COOKIE_KEY } from "@/lib/preferences";
 import "./globals.css";
 
@@ -14,11 +14,15 @@ export const metadata: Metadata = {
   description:
     "Portfolio-aware finance frontend MVP for AI analysis and personalized market news.",
   icons: {
-    icon: APP_LOGO_SRC,
-    apple: APP_LOGO_SRC,
+    icon: [
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/logo.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: "/icon-192.png",
+    shortcut: "/favicon.ico",
   },
   openGraph: {
-    images: [{ url: APP_LOGO_SRC, alt: APP_LOGO_ALT }],
+    images: [{ url: "/icon-192.png", alt: APP_LOGO_ALT }],
   },
 };
 

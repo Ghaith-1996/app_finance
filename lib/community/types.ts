@@ -71,9 +71,13 @@ export function extractTickerHashtags(body: string): string[] {
 
 export function extractHashtags(body: string): string[] {
   const tickers = new Set(extractTickers(body));
+  const tickerHashtags = new Set(extractTickerHashtags(body));
   const matches = [...body.matchAll(HASHTAG_REGEX)]
     .map((m) => m[1])
-    .filter((tag) => !tickers.has(tag.toUpperCase()))
+    .filter((tag) => {
+      const normalized = tag.toUpperCase();
+      return !tickers.has(normalized) && !tickerHashtags.has(normalized);
+    })
     .map((tag) => tag.toLowerCase());
 
   return [...new Set(matches)];

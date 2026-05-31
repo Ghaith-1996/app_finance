@@ -30,6 +30,11 @@ export function buildGnewsPortfolioQueries(holdings: HoldingLike[]): string[] {
   const uniqueQueries = new Set<string>();
 
   const orderedHoldings = [...holdings].sort((left, right) => {
+    const leftHasCompany = normalizeCompanyName(left.company) ? 1 : 0;
+    const rightHasCompany = normalizeCompanyName(right.company) ? 1 : 0;
+    if (leftHasCompany !== rightHasCompany) {
+      return leftHasCompany - rightHasCompany;
+    }
     const leftKey = `${(left.symbol ?? "").toUpperCase()}|${normalizeCompanyName(left.company)}`;
     const rightKey = `${(right.symbol ?? "").toUpperCase()}|${normalizeCompanyName(right.company)}`;
     return leftKey.localeCompare(rightKey);

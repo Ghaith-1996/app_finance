@@ -28,8 +28,8 @@ export default function TermsPage() {
       <section>
         <h2 className="mb-3 text-lg font-semibold text-white">1. Operator and Scope</h2>
         <p>
-          Pulsefolio is operated by <strong>{LEGAL_OPERATOR_NAME}</strong> ("we", "us", and
-          "our"). These Terms apply to your access to and use of the Pulsefolio website,
+          Pulsefolio is operated by <strong>{LEGAL_OPERATOR_NAME}</strong> (&quot;we&quot;, &quot;us&quot;, and
+          &quot;our&quot;). These Terms apply to your access to and use of the Pulsefolio website,
           authenticated application, article chat, portfolio copilot, community features, and any
           related services we make available.
         </p>
@@ -111,7 +111,7 @@ export default function TermsPage() {
         <h2 className="mb-3 text-lg font-semibold text-white">9. Third-Party Data and Services</h2>
         <p>
           The Service depends on third-party authentication, hosting, payments, AI, news, and
-          market-data providers. Third-party data is provided "as is," and we do not guarantee its
+          market-data providers. Third-party data is provided &quot;as is,&quot; and we do not guarantee its
           accuracy, completeness, or availability. Your use of certain third-party services may also
           be subject to those providers&apos; own terms and policies.
         </p>
@@ -180,8 +180,8 @@ export default function TermsPage() {
       <section>
         <h2 className="mb-3 text-lg font-semibold text-white">15. Disclaimers</h2>
         <p>
-          To the fullest extent permitted by law, the Service is provided "as is" and "as
-          available," without warranties of any kind, whether express, implied, or statutory,
+          To the fullest extent permitted by law, the Service is provided &quot;as is&quot; and &quot;as
+          available,&quot; without warranties of any kind, whether express, implied, or statutory,
           including any implied warranties of merchantability, fitness for a particular purpose,
           non-infringement, accuracy, or uninterrupted availability.
         </p>

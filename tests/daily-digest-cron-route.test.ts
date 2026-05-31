@@ -18,6 +18,15 @@ vi.mock("@/lib/notifications/delivery", () => ({
 import { createMockServiceSupabase } from "@/tests/helpers/mock-service-supabase";
 import { POST } from "@/app/api/notifications/daily-digest/cron/route";
 
+type MockServiceSupabase = ReturnType<typeof createMockServiceSupabase>;
+
+function currentMockSupabase(): MockServiceSupabase {
+  if (!currentSupabase.value) {
+    throw new Error("Mock Supabase client was not initialized");
+  }
+  return currentSupabase.value as MockServiceSupabase;
+}
+
 function makeFeedRow(publishedAt: string) {
   return {
     id: "feed-1",
@@ -127,7 +136,7 @@ describe("POST /api/notifications/daily-digest/cron", () => {
 
     const secondBody = await second.json();
     expect(secondBody.skippedDeliveries).toBe(2);
-    expect(currentSupabase.value.__db.notification_deliveries).toHaveLength(2);
+    expect(currentMockSupabase().__db.notification_deliveries).toHaveLength(2);
   });
 
   it("skips 13 UTC during standard time and runs once at 14 UTC", async () => {
@@ -319,6 +328,6 @@ describe("POST /api/notifications/daily-digest/cron", () => {
     expect(response.status).toBe(500);
     expect(body.uncertainDeliveries).toBe(1);
     expect(sendDigestSmsMock).not.toHaveBeenCalled();
-    expect(currentSupabase.value.__db.notification_deliveries[0].status).toBe("uncertain");
+    expect(currentMockSupabase().__db.notification_deliveries[0].status).toBe("uncertain");
   });
 });

@@ -226,7 +226,17 @@ describe("POST /api/news/refresh", () => {
     );
     expect(mockIngestNewsToSupabase).toHaveBeenCalledWith(
       supabaseMock,
-      { sourceTypes: ["edgar", "newsapi", "gnews", "finnhub"], limit: 11 },
+      {
+        sourceTypes: [
+          "edgar",
+          "newsapi",
+          "gnews",
+          "finnhub",
+          "newsapi_ai",
+          "newscatcher",
+        ],
+        limit: 11,
+      },
     );
     expect(mockRunAnalysis).toHaveBeenCalledWith(supabaseMock, "p1");
     expect(body.ingestBreakdown.edgar.inserted).toBe(1);

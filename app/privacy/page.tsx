@@ -26,8 +26,8 @@ export default function PrivacyPage() {
       <section>
         <h2 className="mb-3 text-lg font-semibold text-white">1. Who We Are</h2>
         <p>
-          Pulsefolio is operated by <strong>{LEGAL_OPERATOR_NAME}</strong> ("we", "us", and
-          "our"). This Privacy Policy applies to the public site, authenticated application,
+          Pulsefolio is operated by <strong>{LEGAL_OPERATOR_NAME}</strong> (&quot;we&quot;, &quot;us&quot;, and
+          &quot;our&quot;). This Privacy Policy applies to the public site, authenticated application,
           billing flows, AI-assisted chat features, and community features we operate under the
           Pulsefolio name.
         </p>

@@ -116,9 +116,10 @@ describe("PortfolioCopilotPanel (Turnstile grant behavior)", () => {
     // First successful send must NOT reset — only scope changes / turnstile_failed do.
     expect(resetSpy.mock.calls.length).toBe(resetCallsBefore);
     // Outbound request carried a turnstileToken (because we were not yet verified).
-    const postCall = fetchMock.mock.calls.find(
-      ([_u, opts]: [unknown, { method?: string } | undefined]) => opts?.method === "POST",
-    );
+    const postCall = fetchMock.mock.calls.find((call) => {
+      const opts = call[1] as RequestInit | undefined;
+      return opts?.method === "POST";
+    });
     expect(postCall).toBeTruthy();
     const body = JSON.parse((postCall as [string, RequestInit])[1].body as string) as { turnstileToken?: string };
     expect(body.turnstileToken).toBe("tok-xyz");

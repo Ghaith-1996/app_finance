@@ -31,16 +31,22 @@ vi.mock("@/lib/supabase/client", () => ({
 describe("AppShellLayout", () => {
   it("uses the server-provided onboarding visibility without client auth queries", async () => {
     const { AppShellLayout } = await import("@/components/app/app-shell-layout");
+    const { PreferencesProvider } = await import("@/components/providers/preferences-provider");
 
     render(
-      <AppShellLayout
-        eyebrow="Feed"
-        title="Title"
-        description="Description"
-        showOnboardingNav={false}
+      <PreferencesProvider
+        initialTheme="dark"
+        initialLocale="en"
       >
-        <div>Child content</div>
-      </AppShellLayout>,
+        <AppShellLayout
+          eyebrow="Feed"
+          title="Title"
+          description="Description"
+          showOnboardingNav={false}
+        >
+          <div>Child content</div>
+        </AppShellLayout>
+      </PreferencesProvider>,
     );
 
     expect(screen.getByText("Child content")).toBeTruthy();

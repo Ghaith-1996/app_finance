@@ -20,6 +20,11 @@ type HoldingRow = {
   allocation?: number;
 };
 
+type EarningsReportRow = {
+  symbol: string;
+  is_active?: boolean;
+};
+
 const mocked = vi.hoisted(() => ({
   revalidatePath: vi.fn(),
   getQuotes: vi.fn(),
@@ -29,18 +34,23 @@ const mocked = vi.hoisted(() => ({
     authUserId: null as string | null,
     portfolios: [] as PortfolioRow[],
     holdings: [] as HoldingRow[],
+    ticker_earnings_reports: [] as EarningsReportRow[],
   },
   failHoldingUpdateIds: new Set<string>(),
   portfolioUpdateError: null as string | null,
 }));
 
-function makeBuilder(table: "portfolios" | "holdings") {
+function makeBuilder(table: "portfolios" | "holdings" | "ticker_earnings_reports") {
   const filters = new Map<string, unknown>();
   let mode: "select" | "update" = "select";
   let payload: Record<string, unknown> | null = null;
 
   const matches = (row: Record<string, unknown>) => {
     for (const [key, value] of filters.entries()) {
+      if (Array.isArray(value)) {
+        if (!value.includes(row[key])) return false;
+        continue;
+      }
       if (row[key] !== value) return false;
     }
     return true;
@@ -52,7 +62,11 @@ function makeBuilder(table: "portfolios" | "holdings") {
         ? mocked.state.portfolios.filter((row) =>
             matches(row as unknown as Record<string, unknown>),
           )
-        : mocked.state.holdings.filter((row) =>
+        : table === "holdings"
+          ? mocked.state.holdings.filter((row) =>
+            matches(row as unknown as Record<string, unknown>),
+          )
+          : mocked.state.ticker_earnings_reports.filter((row) =>
             matches(row as unknown as Record<string, unknown>),
           );
 
@@ -61,7 +75,11 @@ function makeBuilder(table: "portfolios" | "holdings") {
 
   const runUpdate = () => {
     const rows =
-      table === "portfolios" ? mocked.state.portfolios : mocked.state.holdings;
+      table === "portfolios"
+        ? mocked.state.portfolios
+        : table === "holdings"
+          ? mocked.state.holdings
+          : mocked.state.ticker_earnings_reports;
     const filteredRows = rows.filter((row) =>
       matches(row as unknown as Record<string, unknown>),
     );
@@ -118,6 +136,10 @@ function makeBuilder(table: "portfolios" | "holdings") {
       filters.set(column, value);
       return builder;
     },
+    in: (column: string, values: unknown[]) => {
+      filters.set(column, values);
+      return builder;
+    },
     order: () => builder,
     single: async () => {
       const result = run();
@@ -148,7 +170,11 @@ const currentSupabase = {
     }),
   },
   from: (table: string) => {
-    if (table !== "portfolios" && table !== "holdings") {
+    if (
+      table !== "portfolios" &&
+      table !== "holdings" &&
+      table !== "ticker_earnings_reports"
+    ) {
       throw new Error(`Unexpected table ${table}`);
     }
 
@@ -218,6 +244,7 @@ describe("portfolio price sync", () => {
           quote_as_of: "2026-03-25T11:20:00.000Z",
         },
       ],
+      ticker_earnings_reports: [],
     };
 
     mocked.getQuotes.mockResolvedValue(

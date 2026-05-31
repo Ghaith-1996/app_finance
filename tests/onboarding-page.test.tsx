@@ -21,6 +21,10 @@ vi.mock("@/components/app/onboarding-page-client", () => ({
   OnboardingPageClient: () => <div>Onboarding client</div>,
 }));
 
+vi.mock("@/lib/server/page-loaders", () => ({
+  loadShellChromeState: vi.fn(async () => ({ showAdminLink: false })),
+}));
+
 import OnboardingPage from "@/app/onboarding/page";
 
 describe("OnboardingPage", () => {

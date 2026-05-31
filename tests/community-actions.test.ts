@@ -62,7 +62,7 @@ const currentSupabase = {
         insert: vi.fn(),
       };
     }
-    if (table === "user_profiles") {
+    if (table === "public_user_profiles") {
       return {
         select: () => ({
           eq: () => ({

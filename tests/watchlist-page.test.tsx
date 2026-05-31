@@ -21,6 +21,10 @@ vi.mock("@/components/app/watchlist-page-client", () => ({
   WatchlistPageClient: (props: { items: Array<{ symbol: string }> }) => WatchlistPageClient(props),
 }));
 
+vi.mock("@/lib/server/page-loaders", () => ({
+  loadShellChromeState: vi.fn(async () => ({ showAdminLink: false })),
+}));
+
 describe("WatchlistPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();

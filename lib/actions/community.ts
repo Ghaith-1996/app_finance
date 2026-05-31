@@ -73,8 +73,8 @@ async function getProfileForUser(
   userId: string,
 ) {
   const { data } = await supabase
-    .from("user_profiles")
-    .select("user_id, first_name, last_name, display_name, avatar_url, handle")
+    .from("public_user_profiles")
+    .select("user_id, display_name, avatar_url, handle")
     .eq("user_id", userId)
     .maybeSingle();
 
@@ -111,8 +111,8 @@ export async function getHomeFeed(cursor?: string): Promise<{
 
   if (userIds.length > 0) {
     const { data: profiles } = await supabase
-      .from("user_profiles")
-      .select("user_id, first_name, last_name, display_name, avatar_url, handle")
+      .from("public_user_profiles")
+      .select("user_id, display_name, avatar_url, handle")
       .in("user_id", userIds);
     for (const p of profiles ?? []) {
       profileMap.set(p.user_id as string, p as Record<string, unknown>);
@@ -221,8 +221,8 @@ export async function getPostComments(postId: string): Promise<CommunityComment[
   const profileMap = new Map<string, Record<string, unknown>>();
   if (userIds.length > 0) {
     const { data: profiles } = await supabase
-      .from("user_profiles")
-      .select("user_id, first_name, last_name, display_name, avatar_url, handle")
+      .from("public_user_profiles")
+      .select("user_id, display_name, avatar_url, handle")
       .in("user_id", userIds);
     for (const p of profiles ?? []) {
       profileMap.set(p.user_id as string, p as Record<string, unknown>);
@@ -349,8 +349,8 @@ export async function getActiveDiscussions(): Promise<ActiveDiscussion[]> {
   const profileMap = new Map<string, Record<string, unknown>>();
   if (userIds.length > 0) {
     const { data: profiles } = await supabase
-      .from("user_profiles")
-      .select("user_id, first_name, last_name, display_name, avatar_url, handle")
+      .from("public_user_profiles")
+      .select("user_id, display_name, avatar_url, handle")
       .in("user_id", userIds);
     for (const p of profiles ?? []) {
       profileMap.set(p.user_id as string, p as Record<string, unknown>);

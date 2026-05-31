@@ -660,7 +660,7 @@ export function FeedView({
     window.requestAnimationFrame(() => {
       document
         .getElementById(`feed-story-${match.newsItemId || match.id}`)
-        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+        ?.scrollIntoView?.({ behavior: "smooth", block: "center" });
     });
   }, [initialStoryId, trackStoryOpen, visibleStories]);
 

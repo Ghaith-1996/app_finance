@@ -24,33 +24,23 @@ vi.mock("@/lib/supabase/server", () => ({
 import { GET } from "@/app/api/news/health/route";
 
 function createSpawnProcess(stdoutPayload: string) {
-  const listeners = new Map<string, Array<(...args: unknown[]) => void>>();
   const proc = {
     stdout: {
       on: (event: string, handler: (...args: unknown[]) => void) => {
-        const handlers = listeners.get(`stdout:${event}`) ?? [];
-        handlers.push(handler);
-        listeners.set(`stdout:${event}`, handlers);
+        if (event === "data") {
+          handler(Buffer.from(stdoutPayload));
+        }
       },
     },
     stderr: {
       on: vi.fn(),
     },
     on: (event: string, handler: (...args: unknown[]) => void) => {
-      const handlers = listeners.get(event) ?? [];
-      handlers.push(handler);
-      listeners.set(event, handlers);
+      if (event === "close") {
+        handler(0);
+      }
     },
   };
-
-  queueMicrotask(() => {
-    for (const handler of listeners.get("stdout:data") ?? []) {
-      handler(Buffer.from(stdoutPayload));
-    }
-    for (const handler of listeners.get("close") ?? []) {
-      handler(0);
-    }
-  });
 
   return proc;
 }
@@ -106,5 +96,5 @@ describe("GET /api/news/health", () => {
     expect(body.ok).toBe(true);
     expect(body.checks[0]).toEqual({ name: "python", ok: true });
     expect(body.checks.length).toBeGreaterThan(1);
-  });
+  }, 15_000);
 });

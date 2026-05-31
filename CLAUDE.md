@@ -125,18 +125,24 @@ These decisions were made across recent implementation threads and are reflected
 - added Phase 2 DB hardening in `supabase/migrations/021_phase2_security_and_concurrency.sql`: Stripe webhook processing states/reclaim, unique subscription row per user, unique active analysis run per portfolio, feed indexes, and atomic plan-aware AI quota RPC
 - added stale-recovery follow-up migrations `022_stale_recovery_backfill.sql` and `023_analysis_run_heartbeat.sql`; active analysis runs now use `analysis_runs.updated_at` as a heartbeat/staleness signal
 - article chat now supports both story-scoped chat (`newsItemId`) and general feed Ask AI (`portfolioId` + message, no `newsItemId`)
-- story chat, general feed chat, and portfolio copilot use session-only HMAC-signed Turnstile grant cookies scoped to the user/surface/portfolio/story; once verified, the same browser session can keep chatting in that scope without a new challenge
-- Turnstile grant issuance is best-effort: if `TURNSTILE_SECRET_KEY` is missing for signing, the chat response still succeeds after verification, but the user will be asked to verify again next request
+- story chat, general feed chat, and portfolio copilot use HMAC-signed Turnstile grant cookies scoped to user + portfolio for 15 minutes; auth, ownership, billing, quota, and story validation still run on every request
+- Turnstile grant issuance now uses `respondForChat` in article chat and portfolio copilot, so a passed challenge can still mint the grant cookie even when downstream provider/billing/storage work fails
 - AI tier routing is now explicit: `free` -> OpenRouter, `premium` -> Mistral, `ultimate` -> Azure
 - settings now includes billing, notification preferences, theme preferences, and profile editing on one surface
 - root preferences infrastructure exists for light/dark theme and locale cookies/localStorage; locale is currently forced to `en` even though `fr` remains in the supported-locale type
 - added daily digest notifications: `user_notification_preferences`, `notification_digests`, `notification_deliveries`, digest builder/delivery services, `/digest/[digestId]`, `POST /api/notifications/daily-digest/cron`, and `.github/workflows/daily-digest.yml`
 - daily digest runs are scheduled from GitHub Actions at `0,15,30,45 13,14 * * *` UTC, while the route itself only runs during the real `9 AM America/New_York` hour for DST safety
 - digest email delivery uses Resend; digest SMS delivery uses Twilio; SMS pending deliveries are not blindly resent and can become `uncertain`
+- digest email/SMS links now prefer feed links: story titles open `/feed?story=<newsItemId>` with that article selected, and the main CTA opens `/feed`
 - digest links prefer `APP_BASE_URL`, then `NEXT_PUBLIC_SITE_URL` / `NEXT_PUBLIC_APP_URL`, before trusted request-origin fallback
 - added latest earnings-report tracking: `ticker_earnings_reports`, `lib/services/earnings-reports.ts`, `POST /api/earnings-reports/cron`, and `.github/workflows/earnings-report-sync.yml`
 - earnings-report sync resolves tracked symbols from holdings + watchlists, prefers company-hosted investor/earnings links, falls back to SEC filings, and inactivates rows for no-longer-tracked symbols
 - portfolio holdings and watchlist details now expose latest earnings-report links when `ticker_earnings_reports` has an active row
+- portfolio performance is no longer simulated: `components/app/portfolio-performance-chart.tsx` now derives live fallback points from holdings, current quotes, cost basis, and previous-close implied value, and uses stored value snapshots when available
+- added hourly portfolio value snapshots: migration `supabase/migrations/025_portfolio_value_snapshots.sql`, service `lib/services/portfolio-value-snapshots.ts`, route `POST /api/portfolio/value-snapshots/cron`, and `.github/workflows/portfolio-value-snapshots.yml`
+- `/portfolio/full` loads recent value snapshots through `lib/server/page-loaders.ts`; the performance chart uses stored snapshots when at least two valid points exist, otherwise it falls back to the live holdings-derived view
+- the landing page hero mock product panel was widened toward the right, and "View demo" / demo CTAs now route to the public `/demo` page instead of the authenticated feed
+- added public `/demo` with `components/marketing/demo-workspace.tsx`: interactive use cases for daily brief, article impact + story chat, AI advisor, and guardrails; demo answers are intentionally longer and more detailed than the previous feed redirect
 - `README.md` and `PRE_LAUNCH_CHECKLIST.md` now document daily digest and earnings-report scheduler setup in addition to the news scheduler
 
 Important runtime note:
@@ -220,7 +226,7 @@ Node scripts:
 
 ## Current Git / Repo State
 
-At the time this document was refreshed, `git status --short` was clean before editing `CLAUDE.md`.
+At the time this document was refreshed, `git status --short` was clean before editing `AGENTS.md` and `CLAUDE.md`.
 
 Implications:
 
@@ -240,6 +246,7 @@ High-level split:
 - TypeScript handles AI enrichment and portfolio scoring
 - notification services build and deliver stored daily digest snapshots
 - earnings-report services resolve tracked symbol report links for portfolio/watchlist surfaces
+- portfolio value snapshot services record hourly portfolio values for historical charting
 
 Important conceptual split:
 
@@ -264,13 +271,20 @@ Notification model:
 
 - users opt into email and/or SMS daily digest delivery from `/settings`
 - digest cron builds one stored `notification_digests` row per user/date and upserts `notification_deliveries` rows per channel
-- digest story links open `/digest/[digestId]`, which requires auth and only shows the owner their stored snapshot
+- digest email story titles open `/feed?story=<newsItemId>` so the feed page selects that article; digest CTA/SMS fallback links open `/feed`
+- `/digest/[digestId]` remains an authenticated owner-only stored snapshot view
 
 Earnings-report model:
 
 - the earnings sync cron resolves all unique symbols from holdings and watchlists
 - `ticker_earnings_reports` stores preferred company/SEC links, report dates, active state, and last error
 - portfolio holdings and watchlist detail views render report links from active rows when available
+
+Portfolio value snapshot model:
+
+- an hourly GitHub Actions job posts to `POST /api/portfolio/value-snapshots/cron`
+- the route records one `portfolio_value_snapshots` row per portfolio per UTC hour using service-role access and Yahoo quotes
+- `/portfolio/full` loads recent snapshots and uses them for the performance chart when at least two valid points exist
 
 ## Authentication And Session Model
 
@@ -329,11 +343,29 @@ Purpose:
 - premium marketing/landing page with high-density Bento Grid and Kinetic Typography
 - built with motion-tracked glass surfaces and GLSL-inspired visual effects
 - interactive "Use Cases" section demonstrating Strategy, Guardrails, Macro, and Alpha workflows
-- clear conversion paths to GitHub and Login
+- hero mock product panel is widened toward the right for a denser first viewport
+- clear conversion paths to public `/demo`, GitHub, and Login
 
 Important caveat:
 
 - product messaging can imply a more complete backend than actually exists
+
+### `/demo`
+
+Files:
+
+- `app/demo/page.tsx`
+- `components/marketing/demo-workspace.tsx`
+
+Purpose:
+
+- public, unauthenticated product demo that shows realistic Pulsefolio workflows instead of redirecting to `/feed`
+
+Current behavior:
+
+- includes interactive demo modes for daily brief, article impact + story chat, AI advisor, and guardrails/concentration risk
+- demo article/advisor answers are intentionally longer and more detailed so users can understand the expected AI depth
+- landing page "View demo" links and use-case CTAs route here, including anchors like `/demo#daily-brief`, `/demo#adviser`, and `/demo#article-impact`
 
 ### `/login`
 
@@ -444,8 +476,9 @@ Important behavior:
 - market feed = direct `news_items` query from the last 24 hours
 - server resolver supports pagination, recency cap, mode-specific sort, ticker/source/category filters, and watchlist-only fallback
 - client-side filtering exists for loaded holdings, sectors, category, source type, recency, sort, and ticker input
+- `?story=<newsItemId>` deep-links into the feed and selects that story after feed data loads; this is used by digest email/SMS links
 - `hot` sort uses `detail_open_count`; story detail opens are posted to `/api/feed/open`
-- Ask AI supports both selected-story chat and general portfolio/market chat, with Turnstile grant reuse per browser session
+- Ask AI supports both selected-story chat and general portfolio/market chat, with 15-minute portfolio-wide Turnstile grant reuse
 - article chat lives in a right-side sticky sidebar on `xl+` and a mobile slide-over below `xl`
 
 ### `/portfolio`
@@ -486,6 +519,7 @@ Current behavior:
 - includes refresh prices button
 - includes portfolio copilot panel
 - includes summary cards built from holdings, insights, and feed highlights
+- performance chart uses hourly `portfolio_value_snapshots` when available and falls back to holdings/current-quote/cost-basis-derived points instead of simulated data
 - holdings rows include quick links to `/feed?ticker=SYMBOL` and a latest earnings report link when available
 
 ### `/watchlist`
@@ -654,7 +688,7 @@ Files:
 
 Purpose:
 
-- authenticated view of a stored daily digest snapshot linked from email/SMS notifications
+- authenticated owner-only view of a stored daily digest snapshot
 
 Current behavior:
 
@@ -662,6 +696,7 @@ Current behavior:
 - users can only read their own `notification_digests` rows
 - renders the digest window, summary line, bullish/bearish leaders, and stored top stories
 - supports `?story=...` highlighting for links that deep-link to a specific digest story
+- current outbound email/SMS story links prefer `/feed?story=<newsItemId>`, but this route remains useful for stored snapshot inspection
 - external article URLs are sanitized before rendering
 
 ## API Routes
@@ -806,8 +841,8 @@ Behavior:
 - requires `portfolioId` and `message`; `newsItemId` is optional
 - with `newsItemId`, persists a story-scoped chat thread and stores messages
 - without `newsItemId`, answers general feed/portfolio questions using ephemeral messages and no article thread
-- validates Turnstile unless the request has a valid session-only chat grant cookie for the exact scope
-- mints a best-effort chat grant cookie after successful Turnstile verification
+- validates Turnstile unless the request has a valid 15-minute portfolio-wide chat grant cookie
+- mints the chat grant cookie after successful Turnstile verification and still attempts to mint it on downstream provider/billing/storage failures via `respondForChat`
 - verifies model-tier access plus durable AI burst/quota limits before admitting the request
 - model tier maps to provider: free/OpenRouter, premium/Mistral, ultimate/Azure
 - story mode loads article + holdings + latest feed match context and calls `ai.answerArticleQuestion(...)`
@@ -817,7 +852,7 @@ Behavior:
 - may return **429** with `{ error, code: "rate_limited", retryAfterMs, resetsAt }` when the durable per-minute burst cap is exceeded
 - may return **429** with `{ error, code: "quota_exceeded", quotaWindow, quotaLimit, quotaUsed, resetsAt }` when the shared AI quota window is exhausted
 - on provider failure: returns **503** with `{ error, code }` (`AIChatErrorCode`), logs provider + deployment server-side; **does not** insert an assistant row
-- error codes map to distinct user-facing messages: `provider_auth` → credentials/config hint; `provider_timeout` → retry hint; `provider_bad_response` → rephrase hint; `provider_unavailable` → generic retry
+- error codes map to distinct user-facing messages: `provider_auth` -> credentials/config hint; `provider_timeout` -> retry hint; `provider_bad_response` -> rephrase hint; `provider_unavailable` -> generic retry
 - on story success: stores assistant reply and returns `{ threadId, messages }`
 - on general success: returns `{ threadId: null, messages }`
 
@@ -831,8 +866,8 @@ Behavior:
 
 - authenticated
 - requires `portfolioId` and `message`
-- validates Turnstile unless the request has a valid session-only portfolio-copilot grant cookie
-- mints a best-effort chat grant cookie after successful Turnstile verification
+- validates Turnstile unless the request has a valid 15-minute portfolio-wide chat grant cookie
+- mints the chat grant cookie after successful Turnstile verification and still attempts to mint it on downstream provider/billing/storage failures via `respondForChat`
 - verifies model-tier access plus durable AI burst/quota limits before calling the provider
 - loads portfolio overview, holdings, latest insights, and latest feed context
 - accepts optional recent chat `history` and client-provided `watchlistSymbols`
@@ -971,6 +1006,22 @@ Behavior:
 - then calls `getPortfolioOverview` for fresh data
 - returns sync result merged with overview
 - proper 401/404/500 error status codes
+
+### `POST /api/portfolio/value-snapshots/cron`
+
+File:
+
+- `app/api/portfolio/value-snapshots/cron/route.ts`
+
+Behavior:
+
+- secured by `PORTFOLIO_SNAPSHOT_CRON_SECRET` if present, otherwise `CRON_SECRET`
+- `GET` returns 405 guidance; only `POST` runs the job
+- optional `?now=...` test override is parsed as a date
+- calls `recordPortfolioValueSnapshots({ now })`
+- loads portfolios/holdings with the service-role client, refreshes Yahoo quotes, updates current holding quote fields, and upserts one UTC-hour snapshot per portfolio
+- route returns 500 only when all snapshot attempts fatally fail
+- `.github/workflows/portfolio-value-snapshots.yml` runs hourly at minute 5 and derives the endpoint from `CRON_ENDPOINT`
 
 ### `POST /api/notifications/daily-digest/cron`
 
@@ -2147,7 +2198,11 @@ Located in `components/marketing/`. "How It Works" section with 3 workflow step 
 
 ### `site-header.tsx`
 
-Located in `components/marketing/`. Sticky site header with "Pulsefolio" branding, nav links (Product, Use cases, How it works, FAQ), "View demo" ghost link to `/feed`, and primary CTA "Get started" to `/onboarding`.
+Located in `components/marketing/`. Sticky site header with "Pulsefolio" branding, nav links (Product, Use cases, How it works, FAQ), "View demo" ghost link to `/demo`, and primary CTA "Get started" to `/onboarding`.
+
+### `demo-workspace.tsx`
+
+Located in `components/marketing/`. Public interactive demo workspace used by `/demo`. It simulates real use cases across daily brief, article impact + story chat, AI advisor, and guardrails with longer answer examples.
 
 ### Global Performance Styles
 
@@ -2166,7 +2221,7 @@ These components support the portfolio, onboarding, and billing surfaces:
 - `components/app/portfolio-value-card.tsx` — compact card showing total portfolio value, day change %, and sync timestamp with embedded refresh button and local state management
 - `components/app/portfolio-snapshot-panel.tsx` — styled Panel displaying portfolio metrics (value, day change, 30-day move, coverage, last sync) with metric grid layout
 - `components/app/portfolio-pricing-section.tsx` — orchestrator managing holdings display, performance chart, holdings table, manual add form, and CSV import; auto-refreshes on mount
-- `components/app/portfolio-performance-chart.tsx` — Recharts AreaChart rendering simulated portfolio performance data; supports 1D, 1W, 1M, ALL time range buttons with range-based data generation
+- `components/app/portfolio-performance-chart.tsx` — Recharts AreaChart using stored hourly portfolio value snapshots when available, otherwise deriving a live fallback from holdings, current quotes, cost basis, and previous close; supports 1D, 1W, 1M, ALL time range buttons
 - `components/app/inline-refresh-prices-button.tsx` — reusable client button triggering portfolio price sync; shows loading state and color-coded feedback (green=updated, amber=no_quotes, red=error)
 - `components/app/add-position-form.tsx` — form for manually adding a single holding; validates symbol, quantity, average cost; calls `addPortfolioPosition` server action
 
@@ -2330,7 +2385,7 @@ Provides:
 
 - `isValidInternalRedirect(path)` — blocks `://`, `//`, and paths not in the allowed prefix list
 - `sanitizeRedirect(raw, fallback)` — returns safe redirect target, falls back when validation fails
-- allowed prefixes: `/portfolio`, `/analysis`, `/feed`, `/home`, `/watchlist`, `/settings`, `/complete-profile`, `/onboarding`, `/pricing`
+- allowed prefixes: `/portfolio`, `/analysis`, `/feed`, `/home`, `/watchlist`, `/settings`, `/complete-profile`, `/onboarding`, `/pricing`, `/demo`, `/digest`
 - used by middleware and auth callback to prevent open-redirect attacks
 
 ### Timing-Safe Comparison
@@ -2350,7 +2405,7 @@ Files:
 
 - `lib/security/turnstile.ts` - server-side Siteverify verification helper
 - `components/security/turnstile-widget.tsx` - reusable client widget + `useTurnstile` hook
-- `lib/security/chat-turnstile-grant.ts` - signed, HttpOnly, session-only chat grant cookies
+- `lib/security/chat-turnstile-grant.ts` - signed, HttpOnly, 15-minute chat grant cookies
 
 Protected surfaces:
 
@@ -2373,11 +2428,11 @@ How it works:
 - on challenge completion, client receives a single-use token
 - client includes `turnstileToken` in the POST body (API routes) or as an argument (server actions)
 - server calls `verifyTurnstileToken()` before executing any side-effects
-- chat routes first check for a valid scope-specific grant cookie; if one exists, the route skips a fresh challenge for that browser session
-- successful chat verification mints a grant cookie scoped by user, surface, portfolio, and optional story
+- chat routes first check for a valid 15-minute portfolio-wide grant cookie; if one exists, the route skips a fresh challenge for that portfolio in that browser
+- successful chat verification mints a grant cookie scoped by user + portfolio; story/general/copilot surfaces still validate auth, ownership, quota, and story IDs per request
 - on failure: returns 403 (routes) or `{ ok: false, error }` (actions) without executing the action
 - tokens expire quickly and are single-use; the widget is reset after each submission
-- grant cookies are session-only, signed with `TURNSTILE_SECRET_KEY`, HttpOnly, SameSite=Lax, and Secure in production
+- grant cookies are signed with `TURNSTILE_SECRET_KEY`, HttpOnly, SameSite=Lax, Secure in production, and `Max-Age=900`
 
 Environment:
 
@@ -2585,8 +2640,14 @@ Important:
 - `TWILIO_ACCOUNT_SID`
 - `TWILIO_AUTH_TOKEN`
 - `TWILIO_MESSAGING_SERVICE_SID`
-- `APP_BASE_URL` (preferred canonical origin for email/SMS links)
+- `APP_BASE_URL` (preferred canonical origin for email/SMS links; production should be `https://pulsefolio.app`)
 - `NEXT_PUBLIC_APP_URL` or `NEXT_PUBLIC_SITE_URL` (lower-priority fallbacks for canonical links)
+
+### Portfolio Value Snapshots
+
+- `CRON_ENDPOINT` (GitHub Actions secret, must end with `/api/news/cron`; snapshot workflow derives the base URL from it)
+- `CRON_SECRET` (shared bearer token for the deployed route when `PORTFOLIO_SNAPSHOT_CRON_SECRET` is absent)
+- `PORTFOLIO_SNAPSHOT_CRON_SECRET` (optional separate deployed app runtime secret for `/api/portfolio/value-snapshots/cron`)
 
 ### Earnings Reports
 
@@ -2612,7 +2673,7 @@ For local dev / testing use Cloudflare's always-pass test keys:
 Reference:
 
 - `.env.example` documents core local envs and AI/provider setup
-- `README.md` and `PRE_LAUNCH_CHECKLIST.md` document the additional GitHub Actions scheduler secrets for news, daily digest, and earnings-report jobs
+- `README.md` and `PRE_LAUNCH_CHECKLIST.md` document the additional GitHub Actions scheduler secrets for news, daily digest, portfolio value snapshots, and earnings-report jobs
 
 Security note:
 
@@ -2696,6 +2757,7 @@ Current top-level test files:
 - `portfolio-csv-import-flow.test.tsx`
 - `portfolio-holdings-table.test.tsx`
 - `portfolio-match-parser.test.ts`
+- `portfolio-performance-chart.test.tsx`
 - `portfolio-price-sync.test.ts`
 - `portfolio-pricing-section.test.tsx`
 - `portfolio-queries.test.ts`
@@ -2703,6 +2765,7 @@ Current top-level test files:
 - `portfolio-snapshot-panel.test.tsx`
 - `portfolio-sync-prices-route.test.ts`
 - `portfolio-value-card.test.tsx`
+- `portfolio-value-snapshots-cron-route.test.ts`
 - `preferences-panel.test.tsx`
 - `preferences-provider.test.tsx`
 - `profile-form-legal-links.test.tsx`
@@ -2777,6 +2840,7 @@ Coverage themes:
 - portfolio copilot route (auth, AI call, error handling)
 - portfolio CSV import flow (upload, mapping, review, save modes)
 - portfolio pricing section (orchestration, auto-refresh)
+- portfolio performance chart and pricing section use historical snapshots when available with live fallback behavior
 - portfolio snapshot panel (metric display)
 - portfolio sync prices route (auth, freshness, overview merge)
 - portfolio value card (display, refresh state)
@@ -2785,6 +2849,7 @@ Coverage themes:
 - redirect validation (safe/unsafe paths, sanitization)
 - portfolio price sync (stale-skip, refresh, auth, dedup)
 - portfolio refresh loaders (dedupe, cached in-flight promise)
+- portfolio value snapshot cron route and migration
 - analysis run heartbeat and stale-run migrations
 - daily digest builder, digest cron route, digest page, notification preferences/settings panel, delivery adapters, and digest migration
 - earnings report service, cron route, migration, portfolio holdings report links, and watchlist detail report links
@@ -2804,19 +2869,21 @@ Current docs in repo:
 
 - `README.md`
   - recently updated away from generic create-next-app boilerplate
-  - now documents local run, AI provider setup, news scheduler, and daily digest scheduler
+  - now documents local run, AI provider setup, news scheduler, daily digest scheduler, and related production setup
 - `analysis.txt`
   - longer repo analysis
 - `CLAUDE.md`
   - this handoff
 - `PRE_LAUNCH_CHECKLIST.md`
-  - deployment checklist covering env vars, migrations through `024`, API quotas, scheduler secrets, smoke tests, rollback
+  - deployment checklist covering env vars, migrations through `025`, API quotas, scheduler secrets, smoke tests, rollback
 - `.github/workflows/news-cron.yml`
   - schedules GitHub Actions every 20 minutes, runs `python -m workers.news_ingestion.cron_runner`, and `POST`s the payload to the deployed `/api/news/cron` route
 - `.github/workflows/news-cron-v2.yml`
   - manual `workflow_dispatch` candidate workflow that runs `python -m workers.news_ingestion.cron_runner_v2`, posts to `/api/news/cron/v2`, then reuses the shared enrich and analysis endpoints
 - `.github/workflows/daily-digest.yml`
   - scheduled/manual workflow that posts to `/api/notifications/daily-digest/cron`; the route gates to the actual 9 AM Eastern hour
+- `.github/workflows/portfolio-value-snapshots.yml`
+  - hourly workflow that posts to `/api/portfolio/value-snapshots/cron` to store portfolio value history
 - `.github/workflows/earnings-report-sync.yml`
   - scheduled/manual workflow that posts to `/api/earnings-reports/cron` to refresh tracked symbol report links
 - `supabase/README.md`
@@ -2828,7 +2895,7 @@ Current docs in repo:
 
 Completed workstreams:
 
-1. Mock/misleading data: portfolio chart labeled "Simulated", Y-axis precision fixed
+1. Portfolio performance chart now uses stored hourly value snapshots when available and a live holdings-derived fallback instead of simulated data
 2. Render performance: `/portfolio/full` no longer blocks on live quote sync; overview uses stored DB values
 3. Provider hardening: Finnhub throws typed `FinnhubError`; watchlist actions map each code to user-facing messages with retry hints; Twelve Data degrades gracefully on partial endpoint failure
 4. Caching: Twelve Data — quote (1 min), time_series (5 min), profile/statistics (30 min), earnings/financials (60 min) — cached server-side via `lib/services/cache.ts`
@@ -2836,22 +2903,23 @@ Completed workstreams:
 6. Observability: `lib/logger.ts` structured logging in Finnhub, Twelve Data, and watchlist actions
 7. Tests: `finnhub-errors.test.ts`, `cache.test.ts`, `logger.test.ts`, `env-validation.test.ts`, `twelvedata-detail.test.ts` — covering provider error classification, cache TTL, structured logging, env validation, and Twelve Data aggregator partial/full/failure scenarios
 8. UX polish: watchlist dashboard catches unhandled promise rejections; `PRE_LAUNCH_CHECKLIST.md` covers env, migrations, API quotas, smoke tests, rollback
-9. Bot verification: article chat/general Ask AI/portfolio copilot now use Turnstile with session-scoped grant cookies
-10. Scheduler expansion: GitHub Actions now cover production news, candidate news, daily digest, and earnings-report sync jobs
+9. Bot verification: article chat/general Ask AI/portfolio copilot now use Turnstile with 15-minute portfolio-wide grant cookies
+10. Scheduler expansion: GitHub Actions now cover production news, candidate news, daily digest, portfolio value snapshots, and earnings-report sync jobs
 11. Billing/analysis hardening: Stripe webhook reclaim, unique active analysis runs, degraded analysis status, and heartbeat-based stale-run recovery are implemented in migrations/services
 
 ## Known Caveats And Rough Edges
 
-- portfolio performance chart shows simulated data (clearly labeled)
 - monthly change is hardcoded to 0 in portfolio overview
 - some portfolio/strategy surfaces contain heuristic presentation logic
 - marketing pages are more polished than some backend guarantees
 - article chat depends on migration `006_article_chat.sql` being present in the live DB
 - daily digest depends on migration `024_daily_digest_notifications.sql`, `DIGEST_CRON_SECRET`, `APP_BASE_URL`, Resend, and Twilio configuration
+- portfolio value snapshots depend on migration `025_portfolio_value_snapshots.sql`, `CRON_SECRET` or `PORTFOLIO_SNAPSHOT_CRON_SECRET`, GitHub `CRON_ENDPOINT`, and quote-provider availability
 - earnings report links depend on migration `024_ticker_earnings_reports.sql`, `CRON_SECRET`, GitHub `EARNINGS_REPORTS_CRON_ENDPOINT`, and SEC/company-site availability
 - durable quotas/concurrency depend on migrations `020` through `023` being applied in each environment
 - the public OpenAI provider is still hardcoded to `gpt-4o-mini`
 - article chat output budget is now 2000 tokens, so longer answers are possible but provider-side truncation is still possible on very long prompts
+- latest local quality gate is green: `npm run typecheck`, `npm run lint` (warnings only), `npm run test` (`104` files / `595` tests), and `npm run build`
 - personal feed emptiness is valid and expected if nothing scores above threshold
 - personal feed can now include watchlist-only matches (relevance 75, no AI assessment)
 - newly added watchlist symbols affect the feed on the next cron cycle, not immediately
@@ -2859,7 +2927,6 @@ Completed workstreams:
 - the `/api/news/refresh` and `/api/news/ingest` routes are deprecated but still functional for admin use
 - the "Refresh news & analysis" button has been removed from the analysis page UI
 - generated Python `__pycache__` files are present and should usually be ignored
-- `PRE_LAUNCH_CHECKLIST.md` currently records local `typecheck`, `lint`, and `test` as open launch blockers until re-run/fixed
 
 ## Community Social Home (`/home`)
 
@@ -2967,8 +3034,36 @@ Behavior:
 - one digest per user/date is enforced by a unique constraint
 - delivery rows are keyed by digest/channel
 - email uses Resend and includes the full digest
-- SMS uses Twilio and sends a short leader summary plus digest link
+- email story titles and SMS lead-story links open `/feed?story=<newsItemId>` so the feed selects that article
+- the email "View in Pulsefolio" CTA and SMS fallback link open `/feed`
+- SMS uses Twilio and sends a short leader summary plus feed link
 - stale pending SMS deliveries become `uncertain` instead of being resent automatically
+
+## Portfolio Value Snapshots
+
+The portfolio value snapshot feature records each user's current portfolio value once per UTC hour for a more useful `/portfolio/full` chart.
+
+Schema:
+
+- `supabase/migrations/025_portfolio_value_snapshots.sql`
+- `portfolio_value_snapshots`
+
+Core files:
+
+- `lib/services/portfolio-value-snapshots.ts`
+- `app/api/portfolio/value-snapshots/cron/route.ts`
+- `.github/workflows/portfolio-value-snapshots.yml`
+- `lib/server/page-loaders.ts`
+- `components/app/portfolio-performance-chart.tsx`
+- `components/app/portfolio-pricing-section.tsx`
+
+Behavior:
+
+- one row per `(portfolio_id, bucket_start)` is upserted per UTC hour
+- the service uses service-role access, refreshes Yahoo quotes, updates current holding quote fields, and writes aggregate value/day-change metadata
+- the GitHub workflow runs hourly at minute 5 and derives the snapshot endpoint from `CRON_ENDPOINT`
+- `/portfolio/full` loads recent snapshots and the chart uses them when at least two valid points exist
+- if no snapshot history exists yet, the chart falls back to live holdings/current-quote/cost-basis-derived points
 
 ## Latest Earnings Reports
 

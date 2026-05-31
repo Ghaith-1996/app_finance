@@ -2,23 +2,25 @@ import React from "react";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const push = vi.fn();
-const refresh = vi.fn();
-const previewCSVImport = vi.fn();
-const previewCSVWithMapping = vi.fn();
-const saveHoldings = vi.fn();
+const mocks = vi.hoisted(() => ({
+  push: vi.fn(),
+  refresh: vi.fn(),
+  previewCSVImport: vi.fn(),
+  previewCSVWithMapping: vi.fn(),
+  saveHoldings: vi.fn(),
+}));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
-    push,
-    refresh,
+    push: mocks.push,
+    refresh: mocks.refresh,
   }),
 }));
 
 vi.mock("@/lib/actions/portfolio", () => ({
-  previewCSVImport,
-  previewCSVWithMapping,
-  saveHoldings,
+  previewCSVImport: mocks.previewCSVImport,
+  previewCSVWithMapping: mocks.previewCSVWithMapping,
+  saveHoldings: mocks.saveHoldings,
 }));
 
 vi.mock("@/components/app/csv-dropzone", () => ({
@@ -45,7 +47,7 @@ describe("PortfolioCsvImportFlow", () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    previewCSVImport.mockResolvedValue({
+    mocks.previewCSVImport.mockResolvedValue({
       drafts: [
         {
           tempId: "1",
@@ -70,12 +72,12 @@ describe("PortfolioCsvImportFlow", () => {
       error: null,
     });
 
-    previewCSVWithMapping.mockResolvedValue({
+    mocks.previewCSVWithMapping.mockResolvedValue({
       drafts: [],
       error: null,
     });
 
-    saveHoldings.mockResolvedValue({
+    mocks.saveHoldings.mockResolvedValue({
       error: null,
       portfolioId: "p1",
     });
@@ -103,22 +105,22 @@ describe("PortfolioCsvImportFlow", () => {
     });
 
     expect(await screen.findByText(/replace all/i)).toBeTruthy();
-    expect(screen.getByText(/merge/i)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /merge/i })).toBeTruthy();
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /^merge$/i }));
+      fireEvent.click(screen.getByRole("button", { name: /merge/i }));
     });
 
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: /save holdings/i }));
     });
 
-    expect(saveHoldings).toHaveBeenCalledWith(
+    expect(mocks.saveHoldings).toHaveBeenCalledWith(
       expect.objectContaining({
         portfolioId: "p1",
         mode: "merge",
       }),
     );
-    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(mocks.refresh).toHaveBeenCalledTimes(1);
   });
 });

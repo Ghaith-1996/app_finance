@@ -16,7 +16,18 @@ type PreferenceRow = {
   email_digest_enabled: boolean | null;
   sms_digest_enabled: boolean | null;
   phone_number: string | null;
+  critical_news_alerts_enabled: boolean | null;
+  earnings_report_alerts_enabled: boolean | null;
+  price_move_alerts_enabled: boolean | null;
+  price_move_threshold_percent: number | string | null;
+  concentration_alerts_enabled: boolean | null;
+  concentration_threshold_percent: number | string | null;
 };
+
+function numericPreference(value: number | string | null | undefined, fallback: number) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
 
 export async function getCurrentUserNotificationPreferences(): Promise<NotificationPreferences> {
   const supabase = await createClient();
@@ -30,15 +41,30 @@ export async function getCurrentUserNotificationPreferences(): Promise<Notificat
 
   const { data } = await supabase
     .from("user_notification_preferences")
-    .select("email_digest_enabled, sms_digest_enabled, phone_number")
+    .select(
+      "email_digest_enabled, sms_digest_enabled, phone_number, critical_news_alerts_enabled, earnings_report_alerts_enabled, price_move_alerts_enabled, price_move_threshold_percent, concentration_alerts_enabled, concentration_threshold_percent",
+    )
     .eq("user_id", user.id)
     .maybeSingle();
 
   const row = (data as PreferenceRow | null) ?? null;
+  const defaults = defaultNotificationPreferences();
   return {
     emailDigestEnabled: Boolean(row?.email_digest_enabled),
     smsDigestEnabled: Boolean(row?.sms_digest_enabled),
     phoneNumber: row?.phone_number?.trim() ?? "",
+    criticalNewsAlertsEnabled: Boolean(row?.critical_news_alerts_enabled),
+    earningsReportAlertsEnabled: Boolean(row?.earnings_report_alerts_enabled),
+    priceMoveAlertsEnabled: Boolean(row?.price_move_alerts_enabled),
+    priceMoveThresholdPercent: numericPreference(
+      row?.price_move_threshold_percent,
+      defaults.priceMoveThresholdPercent,
+    ),
+    concentrationAlertsEnabled: Boolean(row?.concentration_alerts_enabled),
+    concentrationThresholdPercent: numericPreference(
+      row?.concentration_threshold_percent,
+      defaults.concentrationThresholdPercent,
+    ),
   };
 }
 
@@ -67,6 +93,12 @@ export async function saveCurrentUserNotificationPreferences(
         email_digest_enabled: validation.value.emailDigestEnabled,
         sms_digest_enabled: validation.value.smsDigestEnabled,
         phone_number: validation.value.phoneNumber || null,
+        critical_news_alerts_enabled: validation.value.criticalNewsAlertsEnabled,
+        earnings_report_alerts_enabled: validation.value.earningsReportAlertsEnabled,
+        price_move_alerts_enabled: validation.value.priceMoveAlertsEnabled,
+        price_move_threshold_percent: validation.value.priceMoveThresholdPercent,
+        concentration_alerts_enabled: validation.value.concentrationAlertsEnabled,
+        concentration_threshold_percent: validation.value.concentrationThresholdPercent,
       },
       { onConflict: "user_id" },
     );

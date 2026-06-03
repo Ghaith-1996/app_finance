@@ -10,12 +10,24 @@ export interface NotificationPreferences {
   emailDigestEnabled: boolean;
   smsDigestEnabled: boolean;
   phoneNumber: string;
+  criticalNewsAlertsEnabled: boolean;
+  earningsReportAlertsEnabled: boolean;
+  priceMoveAlertsEnabled: boolean;
+  priceMoveThresholdPercent: number;
+  concentrationAlertsEnabled: boolean;
+  concentrationThresholdPercent: number;
 }
 
 export interface NotificationPreferenceInput {
   emailDigestEnabled: boolean;
   smsDigestEnabled: boolean;
   phoneNumber: string;
+  criticalNewsAlertsEnabled: boolean;
+  earningsReportAlertsEnabled: boolean;
+  priceMoveAlertsEnabled: boolean;
+  priceMoveThresholdPercent: number;
+  concentrationAlertsEnabled: boolean;
+  concentrationThresholdPercent: number;
 }
 
 export interface DigestSnapshotStory {

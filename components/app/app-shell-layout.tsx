@@ -7,6 +7,8 @@ import { useCallback, useEffect, useState } from "react";
 import {
   Activity,
   ArrowLeft,
+  Bell,
+  Bookmark,
   BookmarkPlus,
   ChevronDown,
   ChevronRight,
@@ -16,6 +18,7 @@ import {
   Newspaper,
   PanelLeftClose,
   PanelLeft,
+  Search,
   Upload,
 } from "lucide-react";
 
@@ -47,6 +50,7 @@ export function AppShellLayout({
   backLabel,
   showOnboardingNav = true,
   showAdminLink = false,
+  unreadAlertCount,
 }: {
   eyebrow: string;
   title: string;
@@ -58,17 +62,24 @@ export function AppShellLayout({
   backLabel?: string;
   showOnboardingNav?: boolean;
   showAdminLink?: boolean;
+  unreadAlertCount?: number;
 }) {
   const pathname = usePathname();
   const { t } = usePreferences();
   const [collapsed, setCollapsed] = useState(false);
   const [overviewOpen, setOverviewOpen] = useState(true);
+  const [resolvedUnreadAlertCount, setResolvedUnreadAlertCount] = useState(
+    unreadAlertCount ?? 0,
+  );
 
   const mainNav = [
     { href: "/home", label: t("shell.home"), icon: Home },
+    { href: "/alerts", label: t("shell.alerts"), icon: Bell },
+    { href: "/search", label: t("shell.search"), icon: Search },
     { href: "/onboarding", label: t("shell.onboarding"), icon: Upload },
-    { href: "/analysis", label: t("shell.analysis"), icon: Activity },
     { href: "/feed", label: t("shell.feed"), icon: Newspaper },
+    { href: "/saved", label: t("shell.saved"), icon: Bookmark },
+    { href: "/analysis", label: t("shell.analysis"), icon: Activity },
   ] as const;
 
   const overviewSubItems = [
@@ -88,6 +99,29 @@ export function AppShellLayout({
   useEffect(() => {
     if (isOverviewSection(pathname)) setOverviewOpen(true);
   }, [pathname]);
+
+  useEffect(() => {
+    if (typeof unreadAlertCount === "number") {
+      setResolvedUnreadAlertCount(unreadAlertCount);
+      return;
+    }
+
+    let cancelled = false;
+    fetch("/api/notifications/alerts/unread", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((body: { count?: unknown } | null) => {
+        if (!cancelled && typeof body?.count === "number") {
+          setResolvedUnreadAlertCount(body.count);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setResolvedUnreadAlertCount(0);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [unreadAlertCount]);
 
   const persistCollapsed = useCallback((next: boolean) => {
     setCollapsed(next);
@@ -168,8 +202,13 @@ export function AppShellLayout({
                 >
                   <Icon className="h-4 w-4 shrink-0" />
                   {item.label}
+                  {item.href === "/alerts" && resolvedUnreadAlertCount > 0 ? (
+                    <span className="ml-auto inline-flex min-w-5 items-center justify-center rounded-full bg-amber-400 px-1.5 py-0.5 text-[10px] font-bold text-[#080c11]">
+                      {resolvedUnreadAlertCount > 99 ? "99+" : resolvedUnreadAlertCount}
+                    </span>
+                  ) : null}
                   {isActive ? (
-                    <span className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-brand" />
+                    <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full bg-brand", item.href !== "/alerts" || resolvedUnreadAlertCount === 0 ? "ml-auto" : "")} />
                   ) : null}
                 </Link>
               );
@@ -276,13 +315,18 @@ export function AppShellLayout({
                   key={item.href}
                   href={item.href}
                   className={cn(
-                    "flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition",
+                    "relative flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition",
                     pathname === item.href
                       ? "bg-brand/10 text-brand"
                       : "text-secondary hover:text-primary",
                   )}
                 >
                   <Icon className="h-3.5 w-3.5" />
+                  {item.href === "/alerts" && resolvedUnreadAlertCount > 0 ? (
+                    <span className="absolute -right-1 -top-1 inline-flex min-w-4 items-center justify-center rounded-full bg-amber-400 px-1 text-[9px] font-bold text-[#080c11]">
+                      {resolvedUnreadAlertCount > 9 ? "9+" : resolvedUnreadAlertCount}
+                    </span>
+                  ) : null}
                   <span className="hidden sm:inline">{item.label}</span>
                 </Link>
               );

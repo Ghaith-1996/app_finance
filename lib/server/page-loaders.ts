@@ -13,6 +13,10 @@ import {
 } from "@/lib/server/feed";
 import { newsWindowCutoffIso } from "@/lib/services/news/pool-snapshot";
 import { loadPortfolioValueSnapshots } from "@/lib/services/portfolio-value-snapshots";
+import {
+  calculatePortfolioHealth,
+  type PortfolioHealthResult,
+} from "@/lib/services/portfolio-health";
 import type {
   Holding,
   PortfolioFeedHighlight,
@@ -30,6 +34,96 @@ type PortfolioSummary = {
   syncStatus: string;
   lastSyncedAt: string | null;
   createdAt: string;
+};
+
+export type HomeDashboardEarningsItem = {
+  symbol: string;
+  title: string;
+  reportDate: string | null;
+  source: string | null;
+  href: string;
+};
+
+export type HomeDashboardDigest = {
+  id: string;
+  digestDate: string;
+  summaryLine: string;
+  storyCount: number;
+  bullishSymbols: string[];
+  bearishSymbols: string[];
+};
+
+export type HomeDashboardNotificationState = {
+  emailDigestEnabled: boolean;
+  smsDigestEnabled: boolean;
+  hasPhoneNumber: boolean;
+  smartAlertRuleCount: number;
+};
+
+export type HomeDashboardAlert = {
+  id: string;
+  alertType: string;
+  severity: string;
+  title: string;
+  message: string;
+  actionHref: string;
+  createdAt: string;
+};
+
+export type HomeDashboardChangeItem = {
+  id: string;
+  title: string;
+  detail: string;
+  href: string;
+  tone: "good" | "watch" | "risk" | "neutral";
+};
+
+export type HomeDashboardActivityItem = {
+  id: string;
+  title: string;
+  detail: string;
+  href: string;
+  occurredAt: string;
+  type: "sync" | "analysis" | "digest" | "alert" | "earnings" | "thesis" | "saved";
+};
+
+export type HomeDashboardTimelineItem = HomeDashboardActivityItem;
+
+export type HomeDashboardRiskRadarItem = {
+  id: string;
+  title: string;
+  detail: string;
+  href: string;
+  tone: "good" | "watch" | "risk" | "neutral";
+};
+
+export type HomeDashboardFreshnessItem = {
+  id: string;
+  label: string;
+  value: string;
+  detail: string;
+  href: string;
+  tone: "good" | "watch" | "risk" | "neutral";
+};
+
+export type HomeDashboardData = {
+  portfolioId: string | null;
+  portfolioName: string | null;
+  overview: PortfolioOverview;
+  health: PortfolioHealthResult;
+  insights: PortfolioInsight[];
+  topStories: PortfolioFeedHighlight[];
+  earnings: HomeDashboardEarningsItem[];
+  latestDigest: HomeDashboardDigest | null;
+  notifications: HomeDashboardNotificationState;
+  recentAlerts: HomeDashboardAlert[];
+  whatChanged: HomeDashboardChangeItem[];
+  activity: HomeDashboardActivityItem[];
+  timeline: HomeDashboardTimelineItem[];
+  riskRadar: HomeDashboardRiskRadarItem[];
+  freshness: HomeDashboardFreshnessItem[];
+  marketStoryCount24h: number;
+  matchedStoryCount24h: number;
 };
 
 type HoldingRow = {
@@ -102,6 +196,16 @@ const FULL_OVERVIEW_FALLBACK: PortfolioOverview = {
   lastAnalyzedAt: "Never",
   coverage: "0 stories",
   primaryGoal: "Add holdings and run analysis.",
+};
+
+const HOME_OVERVIEW_FALLBACK: PortfolioOverview = {
+  totalValue: 0,
+  dayChange: 0,
+  monthlyChange: 0,
+  lastSyncedAt: "-",
+  lastAnalyzedAt: "Never",
+  coverage: "0 stories",
+  primaryGoal: "Add a portfolio to unlock today's dashboard.",
 };
 
 function isDevTimingEnabled() {
@@ -364,6 +468,456 @@ async function loadPortfolioFeedHighlightsForRun(
     .filter((item): item is PortfolioFeedHighlight => item !== null);
 }
 
+async function loadLatestHomeDigest(
+  supabase: ServerSupabase,
+  userId: string,
+): Promise<HomeDashboardDigest | null> {
+  const { data } = await supabase
+    .from("notification_digests")
+    .select("id, digest_date, summary_line, bullish_symbols, bearish_symbols, top_stories")
+    .eq("user_id", userId)
+    .order("digest_date", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!data?.id) return null;
+
+  const topStories = Array.isArray(data.top_stories) ? data.top_stories : [];
+
+  return {
+    id: data.id,
+    digestDate: data.digest_date,
+    summaryLine: data.summary_line,
+    storyCount: topStories.length,
+    bullishSymbols: Array.isArray(data.bullish_symbols) ? data.bullish_symbols : [],
+    bearishSymbols: Array.isArray(data.bearish_symbols) ? data.bearish_symbols : [],
+  };
+}
+
+async function loadHomeNotificationState(
+  supabase: ServerSupabase,
+  userId: string,
+): Promise<HomeDashboardNotificationState> {
+  const { data } = await supabase
+    .from("user_notification_preferences")
+    .select(
+      "email_digest_enabled, sms_digest_enabled, phone_number, critical_news_alerts_enabled, earnings_report_alerts_enabled, price_move_alerts_enabled, concentration_alerts_enabled",
+    )
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  const smartAlertRuleCount = [
+    data?.critical_news_alerts_enabled,
+    data?.earnings_report_alerts_enabled,
+    data?.price_move_alerts_enabled,
+    data?.concentration_alerts_enabled,
+  ].filter(Boolean).length;
+
+  return {
+    emailDigestEnabled: Boolean(data?.email_digest_enabled),
+    smsDigestEnabled: Boolean(data?.sms_digest_enabled),
+    hasPhoneNumber: Boolean(String(data?.phone_number ?? "").trim()),
+    smartAlertRuleCount,
+  };
+}
+
+async function loadLatestHomeAlerts(
+  supabase: ServerSupabase,
+  userId: string,
+): Promise<HomeDashboardAlert[]> {
+  const { data } = await supabase
+    .from("notification_alerts")
+    .select("id, alert_type, severity, title, message, action_href, created_at")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(5);
+
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    alertType: row.alert_type,
+    severity: row.severity,
+    title: row.title,
+    message: row.message,
+    actionHref: row.action_href,
+    createdAt: row.created_at,
+  }));
+}
+
+function mapHomeEarningsItems(holdings: Holding[]): HomeDashboardEarningsItem[] {
+  return holdings
+    .filter((holding) => holding.latestEarningsReportUrl)
+    .map((holding) => ({
+      symbol: holding.symbol,
+      title: holding.company || `${holding.symbol} latest report`,
+      reportDate: holding.latestEarningsReportDate,
+      source: holding.latestEarningsReportSource,
+      href: holding.latestEarningsReportUrl ?? "#",
+    }))
+    .sort((left, right) => {
+      const leftTime = left.reportDate ? Date.parse(left.reportDate) : 0;
+      const rightTime = right.reportDate ? Date.parse(right.reportDate) : 0;
+      return rightTime - leftTime || left.symbol.localeCompare(right.symbol);
+    })
+    .slice(0, 4);
+}
+
+function buildHomeChangeItems(input: {
+  overview: PortfolioOverview;
+  health: PortfolioHealthResult;
+  matchedStoryCount24h: number;
+  marketStoryCount24h: number;
+  recentAlerts: HomeDashboardAlert[];
+  earnings: HomeDashboardEarningsItem[];
+  latestDigest: HomeDashboardDigest | null;
+}): HomeDashboardChangeItem[] {
+  const changes: HomeDashboardChangeItem[] = [];
+  const unreadHighAlert = input.recentAlerts.find((alert) => alert.severity === "high");
+
+  if (unreadHighAlert) {
+    changes.push({
+      id: "high-alert",
+      title: "High-priority alert generated",
+      detail: unreadHighAlert.title,
+      href: "/alerts",
+      tone: "risk",
+    });
+  }
+
+  if (input.matchedStoryCount24h > 0) {
+    changes.push({
+      id: "matched-news",
+      title: `${input.matchedStoryCount24h} portfolio stories matched`,
+      detail: `${input.marketStoryCount24h} market stories were screened in the last 24 hours.`,
+      href: "/feed",
+      tone: input.matchedStoryCount24h >= 5 ? "watch" : "neutral",
+    });
+  }
+
+  if (Math.abs(input.overview.dayChange) >= 1) {
+    changes.push({
+      id: "portfolio-move",
+      title: `Portfolio moved ${input.overview.dayChange > 0 ? "up" : "down"} today`,
+      detail: `Current weighted daily move is ${input.overview.dayChange.toFixed(2)}%.`,
+      href: "/portfolio/full",
+      tone: input.overview.dayChange >= 0 ? "good" : "watch",
+    });
+  }
+
+  if (input.health.score < 70) {
+    changes.push({
+      id: "health-watch",
+      title: "Health score needs attention",
+      detail: input.health.summary,
+      href: "/portfolio/full",
+      tone: input.health.score < 55 ? "risk" : "watch",
+    });
+  }
+
+  if (input.earnings.length > 0) {
+    changes.push({
+      id: "earnings-linked",
+      title: `${input.earnings.length} earnings report link${input.earnings.length === 1 ? "" : "s"} ready`,
+      detail: input.earnings.map((item) => item.symbol).slice(0, 4).join(", "),
+      href: "/portfolio/full",
+      tone: "good",
+    });
+  }
+
+  if (input.latestDigest) {
+    changes.push({
+      id: "digest-ready",
+      title: "Latest digest is available",
+      detail: input.latestDigest.summaryLine,
+      href: `/digest/${input.latestDigest.id}`,
+      tone: "neutral",
+    });
+  }
+
+  return changes.slice(0, 5);
+}
+
+function buildHomeActivityItems(input: {
+  portfolio: PortfolioSummary | null;
+  latestRun: { id: string; completedAt: string } | null;
+  latestDigest: HomeDashboardDigest | null;
+  recentAlerts: HomeDashboardAlert[];
+  earnings: HomeDashboardEarningsItem[];
+  thesisActivity?: Array<{ id: string; symbol: string; updatedAt: string; detail: string }>;
+  savedActivity?: Array<{ id: string; title: string; savedAt: string; newsItemId: string }>;
+}): HomeDashboardActivityItem[] {
+  const items: HomeDashboardActivityItem[] = [];
+
+  if (input.portfolio?.lastSyncedAt) {
+    items.push({
+      id: "price-sync",
+      title: "Prices synced",
+      detail: input.portfolio.name,
+      href: "/portfolio/full",
+      occurredAt: input.portfolio.lastSyncedAt,
+      type: "sync",
+    });
+  }
+
+  if (input.latestRun?.completedAt) {
+    items.push({
+      id: "analysis-run",
+      title: "Analysis completed",
+      detail: "Latest portfolio scoring run is ready.",
+      href: "/analysis",
+      occurredAt: input.latestRun.completedAt,
+      type: "analysis",
+    });
+  }
+
+  if (input.latestDigest) {
+    items.push({
+      id: `digest-${input.latestDigest.id}`,
+      title: "Digest generated",
+      detail: `${input.latestDigest.storyCount} stories in the latest digest.`,
+      href: `/digest/${input.latestDigest.id}`,
+      occurredAt: input.latestDigest.digestDate,
+      type: "digest",
+    });
+  }
+
+  for (const alert of input.recentAlerts.slice(0, 3)) {
+    items.push({
+      id: `alert-${alert.id}`,
+      title: alert.title,
+      detail: alert.message,
+      href: "/alerts",
+      occurredAt: alert.createdAt,
+      type: "alert",
+    });
+  }
+
+  for (const earning of input.earnings.slice(0, 2)) {
+    if (!earning.reportDate) continue;
+    items.push({
+      id: `earnings-${earning.symbol}`,
+      title: `${earning.symbol} report link found`,
+      detail: earning.title,
+      href: earning.href,
+      occurredAt: earning.reportDate,
+      type: "earnings",
+    });
+  }
+
+  for (const thesis of input.thesisActivity ?? []) {
+    items.push({
+      id: `thesis-${thesis.id}`,
+      title: `${thesis.symbol} thesis updated`,
+      detail: thesis.detail || "Investment thesis note changed.",
+      href: "/portfolio/full",
+      occurredAt: thesis.updatedAt,
+      type: "thesis",
+    });
+  }
+
+  for (const saved of input.savedActivity ?? []) {
+    items.push({
+      id: `saved-${saved.id}`,
+      title: "Article saved",
+      detail: saved.title,
+      href: `/feed?story=${saved.newsItemId}`,
+      occurredAt: saved.savedAt,
+      type: "saved",
+    });
+  }
+
+  return items
+    .filter((item) => !Number.isNaN(Date.parse(item.occurredAt)))
+    .sort((left, right) => Date.parse(right.occurredAt) - Date.parse(left.occurredAt))
+    .slice(0, 6);
+}
+
+async function loadHomeThesisActivity(
+  supabase: ServerSupabase,
+  userId: string,
+): Promise<Array<{ id: string; symbol: string; updatedAt: string; detail: string }>> {
+  const { data } = await supabase
+    .from("user_investment_theses")
+    .select("id, symbol, thesis, updated_at")
+    .eq("user_id", userId)
+    .order("updated_at", { ascending: false })
+    .limit(4);
+
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    symbol: row.symbol,
+    updatedAt: row.updated_at,
+    detail: row.thesis ?? "",
+  }));
+}
+
+async function loadHomeSavedArticleActivity(
+  supabase: ServerSupabase,
+  userId: string,
+): Promise<Array<{ id: string; title: string; savedAt: string; newsItemId: string }>> {
+  const { data } = await supabase
+    .from("user_saved_articles")
+    .select("id, saved_at, news_items(id, headline)")
+    .eq("user_id", userId)
+    .order("saved_at", { ascending: false })
+    .limit(3);
+
+  return (data ?? [])
+    .map((row) => {
+      const news = Array.isArray(row.news_items) ? row.news_items[0] : row.news_items;
+      if (!news?.id) return null;
+      return {
+        id: row.id,
+        title: news.headline ?? "Saved article",
+        savedAt: row.saved_at,
+        newsItemId: news.id,
+      };
+    })
+    .filter((item): item is NonNullable<typeof item> => item !== null);
+}
+
+async function loadLatestNewsTimestamp(supabase: ServerSupabase): Promise<string | null> {
+  const { data } = await supabase
+    .from("news_items")
+    .select("published_at")
+    .order("published_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  return data?.published_at ?? null;
+}
+
+async function loadLatestPortfolioSnapshotTimestamp(
+  supabase: ServerSupabase,
+  portfolioId: string | null,
+): Promise<string | null> {
+  if (!portfolioId) return null;
+  const { data } = await supabase
+    .from("portfolio_value_snapshots")
+    .select("captured_at")
+    .eq("portfolio_id", portfolioId)
+    .order("captured_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  return data?.captured_at ?? null;
+}
+
+function freshnessTone(iso: string | null, goodMinutes: number, watchMinutes: number) {
+  if (!iso) return "risk" as const;
+  const ageMinutes = (Date.now() - Date.parse(iso)) / 60_000;
+  if (!Number.isFinite(ageMinutes)) return "risk" as const;
+  if (ageMinutes <= goodMinutes) return "good" as const;
+  if (ageMinutes <= watchMinutes) return "watch" as const;
+  return "risk" as const;
+}
+
+function buildHomeFreshnessItems(input: {
+  portfolio: PortfolioSummary | null;
+  latestRun: { completedAt: string } | null;
+  latestNewsAt: string | null;
+  latestAlertAt: string | null;
+  latestSnapshotAt: string | null;
+}): HomeDashboardFreshnessItem[] {
+  return [
+    {
+      id: "prices",
+      label: "Prices",
+      value: formatTimeAgo(input.portfolio?.lastSyncedAt),
+      detail: "Holding quotes and portfolio value.",
+      href: "/portfolio/full",
+      tone: freshnessTone(input.portfolio?.lastSyncedAt ?? null, 15, 120),
+    },
+    {
+      id: "news",
+      label: "News",
+      value: formatTimeAgo(input.latestNewsAt),
+      detail: "Latest article in the shared market pool.",
+      href: "/feed",
+      tone: freshnessTone(input.latestNewsAt, 45, 180),
+    },
+    {
+      id: "analysis",
+      label: "Analysis",
+      value: formatTimeAgo(input.latestRun?.completedAt),
+      detail: "Latest portfolio scoring run.",
+      href: "/analysis",
+      tone: freshnessTone(input.latestRun?.completedAt ?? null, 1440, 2880),
+    },
+    {
+      id: "snapshots",
+      label: "Snapshots",
+      value: formatTimeAgo(input.latestSnapshotAt),
+      detail: "Stored portfolio value snapshots.",
+      href: "/portfolio/full",
+      tone: freshnessTone(input.latestSnapshotAt, 90, 240),
+    },
+    {
+      id: "alerts",
+      label: "Alerts",
+      value: formatTimeAgo(input.latestAlertAt),
+      detail: "Latest generated smart alert.",
+      href: "/alerts",
+      tone: input.latestAlertAt ? "good" : "neutral",
+    },
+  ];
+}
+
+function buildRiskRadarItems(input: {
+  health: PortfolioHealthResult;
+  recentAlerts: HomeDashboardAlert[];
+  earnings: HomeDashboardEarningsItem[];
+  thesisActivity: Array<{ id: string; symbol: string; updatedAt: string; detail: string }>;
+  holdings: Holding[];
+}): HomeDashboardRiskRadarItem[] {
+  const items: HomeDashboardRiskRadarItem[] = [];
+
+  for (const alert of input.recentAlerts.filter((item) => item.severity === "high").slice(0, 2)) {
+    items.push({
+      id: `alert-${alert.id}`,
+      title: alert.title,
+      detail: alert.message,
+      href: alert.actionHref || "/alerts",
+      tone: "risk",
+    });
+  }
+
+  for (const risk of input.health.risks.slice(0, 3)) {
+    items.push({
+      id: `health-${risk.title}`,
+      title: risk.title,
+      detail: risk.detail,
+      href: risk.href,
+      tone: risk.tone,
+    });
+  }
+
+  const thesisSymbols = new Set(input.thesisActivity.map((item) => item.symbol));
+  const missingThesis = input.holdings
+    .filter((holding) => !thesisSymbols.has(holding.symbol))
+    .slice(0, 2);
+  for (const holding of missingThesis) {
+    items.push({
+      id: `missing-thesis-${holding.symbol}`,
+      title: `${holding.symbol} has no thesis`,
+      detail: "Add a thesis and review trigger so news can be matched against your own reasoning.",
+      href: "/portfolio/full",
+      tone: "watch",
+    });
+  }
+
+  for (const earning of input.earnings.slice(0, 2)) {
+    items.push({
+      id: `earnings-${earning.symbol}`,
+      title: `${earning.symbol} earnings link ready`,
+      detail: "Review the latest report before relying on article summaries.",
+      href: earning.href,
+      tone: "neutral",
+    });
+  }
+
+  return items.slice(0, 6);
+}
+
 function buildPortfolioOverview(
   holdings: Holding[],
   options: {
@@ -436,6 +990,233 @@ export async function loadShellChromeState(): Promise<{
   return {
     showOnboardingNav: context.showOnboardingNav,
     showAdminLink: context.showAdminLink,
+  };
+}
+
+export async function loadHomeDashboardData(): Promise<{
+  showOnboardingNav: boolean;
+  showAdminLink: boolean;
+  dashboard: HomeDashboardData;
+}> {
+  const timer = createTimingLogger("/home");
+  const context = await resolveAuthenticatedPageContext("/home:context");
+
+  if (!context.userId) {
+    timer.done();
+    return {
+      showOnboardingNav: true,
+      showAdminLink: false,
+      dashboard: {
+        portfolioId: null,
+        portfolioName: null,
+        overview: HOME_OVERVIEW_FALLBACK,
+        health: calculatePortfolioHealth({ holdings: [] }),
+        insights: [],
+        topStories: [],
+        earnings: [],
+        latestDigest: null,
+        notifications: {
+          emailDigestEnabled: false,
+          smsDigestEnabled: false,
+          hasPhoneNumber: false,
+          smartAlertRuleCount: 0,
+        },
+        recentAlerts: [],
+        whatChanged: [],
+        activity: [],
+        timeline: [],
+        riskRadar: [],
+        freshness: [],
+        marketStoryCount24h: 0,
+        matchedStoryCount24h: 0,
+      },
+    };
+  }
+
+  const portfolio = context.portfolios[0] ?? null;
+  const portfolioId = portfolio?.id ?? null;
+
+  const [
+    latestDigest,
+    notifications,
+    recentAlerts,
+    marketStoryCount24h,
+    latestNewsAt,
+    thesisActivity,
+    savedActivity,
+  ] = await Promise.all([
+    loadLatestHomeDigest(context.supabase, context.userId),
+    loadHomeNotificationState(context.supabase, context.userId),
+    loadLatestHomeAlerts(context.supabase, context.userId),
+    loadMarketStoryCount24h(context.supabase),
+    loadLatestNewsTimestamp(context.supabase),
+    loadHomeThesisActivity(context.supabase, context.userId),
+    loadHomeSavedArticleActivity(context.supabase, context.userId),
+  ]);
+
+  if (!portfolioId || !portfolio) {
+    timer.mark("empty dashboard context");
+    timer.done();
+    return {
+      showOnboardingNav: context.showOnboardingNav,
+      showAdminLink: context.showAdminLink,
+      dashboard: {
+        portfolioId: null,
+        portfolioName: null,
+        overview: HOME_OVERVIEW_FALLBACK,
+        health: calculatePortfolioHealth({ holdings: [] }),
+        insights: [],
+        topStories: [],
+        earnings: [],
+        latestDigest,
+        notifications,
+        recentAlerts,
+        whatChanged: buildHomeChangeItems({
+          overview: HOME_OVERVIEW_FALLBACK,
+          health: calculatePortfolioHealth({ holdings: [] }),
+          matchedStoryCount24h: 0,
+          marketStoryCount24h,
+          recentAlerts,
+          earnings: [],
+          latestDigest,
+        }),
+        activity: buildHomeActivityItems({
+          portfolio: null,
+          latestRun: null,
+          latestDigest,
+          recentAlerts,
+          earnings: [],
+          thesisActivity,
+          savedActivity,
+        }),
+        timeline: buildHomeActivityItems({
+          portfolio: null,
+          latestRun: null,
+          latestDigest,
+          recentAlerts,
+          earnings: [],
+          thesisActivity,
+          savedActivity,
+        }),
+        riskRadar: [],
+        freshness: buildHomeFreshnessItems({
+          portfolio: null,
+          latestRun: null,
+          latestNewsAt,
+          latestAlertAt: recentAlerts[0]?.createdAt ?? null,
+          latestSnapshotAt: null,
+        }),
+        marketStoryCount24h,
+        matchedStoryCount24h: 0,
+      },
+    };
+  }
+
+  const [holdingRows, latestRun] = await Promise.all([
+    loadHoldingRows(context.supabase, portfolioId),
+    loadLatestAnalysisRun(context.supabase, portfolioId),
+  ]);
+  timer.mark("dashboard holdings/run");
+
+  const [
+    feedHighlights,
+    insights,
+    matchedStoryCount24h,
+    reportsBySymbol,
+    latestSnapshotAt,
+  ] = await Promise.all([
+    loadPortfolioFeedHighlightsForRun(context.supabase, portfolioId, latestRun?.id ?? null),
+    loadPortfolioInsightsForRun(context.supabase, latestRun?.id ?? null),
+    loadMatchedStoryCount24hForRun(
+      context.supabase,
+      portfolioId,
+      latestRun?.id ?? null,
+    ),
+    loadActiveEarningsReportsBySymbols(
+      context.supabase,
+      holdingRows.map((row) => row.symbol),
+    ),
+    loadLatestPortfolioSnapshotTimestamp(context.supabase, portfolioId),
+  ]);
+  timer.mark("dashboard signals");
+
+  const holdings = attachLatestEarningsReportFields(
+    holdingRows.map(mapHoldingFromRow),
+    reportsBySymbol,
+  );
+  const overview = buildPortfolioOverview(holdings, {
+    lastSyncedAt: portfolio.lastSyncedAt,
+    lastAnalyzedAt: latestRun?.completedAt ?? null,
+    feedCount: matchedStoryCount24h,
+    emptyLastSyncedLabel: "Not synced",
+    emptyCoverageLabel: "0 high-signal stories",
+  });
+  const earnings = mapHomeEarningsItems(holdings);
+  const health = calculatePortfolioHealth({
+    holdings,
+    feedHighlights,
+    latestAnalysisAt: latestRun?.completedAt ?? null,
+  });
+
+  timer.done();
+  return {
+    showOnboardingNav: context.showOnboardingNav,
+    showAdminLink: context.showAdminLink,
+    dashboard: {
+      portfolioId,
+      portfolioName: portfolio.name,
+      overview,
+      health,
+      insights,
+      topStories: feedHighlights.slice(0, 5),
+      earnings,
+      latestDigest,
+      notifications,
+      recentAlerts,
+      whatChanged: buildHomeChangeItems({
+        overview,
+        health,
+        matchedStoryCount24h,
+        marketStoryCount24h,
+        recentAlerts,
+        earnings,
+        latestDigest,
+      }),
+      activity: buildHomeActivityItems({
+        portfolio,
+        latestRun: latestRun ?? null,
+        latestDigest,
+        recentAlerts,
+        earnings,
+        thesisActivity,
+        savedActivity,
+      }),
+      timeline: buildHomeActivityItems({
+        portfolio,
+        latestRun: latestRun ?? null,
+        latestDigest,
+        recentAlerts,
+        earnings,
+        thesisActivity,
+        savedActivity,
+      }),
+      riskRadar: buildRiskRadarItems({
+        health,
+        recentAlerts,
+        earnings,
+        thesisActivity,
+        holdings,
+      }),
+      freshness: buildHomeFreshnessItems({
+        portfolio,
+        latestRun: latestRun ?? null,
+        latestNewsAt,
+        latestAlertAt: recentAlerts[0]?.createdAt ?? null,
+        latestSnapshotAt,
+      }),
+      marketStoryCount24h,
+      matchedStoryCount24h,
+    },
   };
 }
 

@@ -2,7 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { sanitizeRedirect } from "@/lib/security/redirect";
 
-const protectedPaths = ["/onboarding", "/analysis", "/feed", "/portfolio", "/home", "/watchlist", "/settings", "/admin", "/complete-profile", "/digest"];
+const protectedPaths = ["/onboarding", "/analysis", "/feed", "/portfolio", "/home", "/alerts", "/search", "/saved", "/watchlist", "/settings", "/admin", "/complete-profile", "/digest"];
 
 /** Paths where an incomplete profile is acceptable (the user is actively completing it, or reading ToS). */
 const profileExemptPaths = ["/complete-profile", "/terms"];

@@ -1,4 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
+import { buildInvestmentThesisMatches } from "@/lib/investment-theses/matching";
+import { loadInvestmentThesesForSymbols } from "@/lib/server/investment-theses";
 import type {
   FeedMode,
   FeedSort,
@@ -433,6 +435,12 @@ async function buildPersonalPayload(
     pageSize: number;
   },
 ): Promise<FeedResponsePayload> {
+  const investmentTheses = await loadInvestmentThesesForSymbols(
+    supabase,
+    [...opts.portfolioSymbols, ...opts.watchlistSymbols],
+    opts.portfolioId,
+  );
+
   const { data: latestRun } = await supabase
     .from("analysis_runs")
     .select("id")
@@ -538,7 +546,7 @@ async function buildPersonalPayload(
   let stories = rawRows.map((row) => {
     const news = row.news_items ?? null;
     const publishedAtIso = news?.published_at ?? new Date().toISOString();
-    const story = {
+    const storyBase = {
       id: row.id,
       newsItemId: news?.id ?? "",
       headline: news?.headline ?? "",
@@ -565,6 +573,10 @@ async function buildPersonalPayload(
       sourceType: (news?.source_type ?? "other") as NewsItem["sourceType"],
       sourceConfidence: (row.source_confidence ?? "standard") as NewsItem["sourceConfidence"],
       metadata: news?.metadata ?? {},
+    } satisfies NewsItem;
+    const story = {
+      ...storyBase,
+      thesisMatches: buildInvestmentThesisMatches(storyBase, investmentTheses),
     } satisfies NewsItem;
 
     return {
@@ -614,6 +626,11 @@ async function buildWatchlistOnlyPayload(
   },
 ): Promise<FeedResponsePayload> {
   const wlSet = new Set(opts.watchlistSymbols.map((symbol) => symbol.toUpperCase()));
+  const investmentTheses = await loadInvestmentThesesForSymbols(
+    supabase,
+    opts.watchlistSymbols,
+    null,
+  );
 
   const publishedSince = new Date(
     Date.now() - FEED_MAX_AGE_MINUTES * 60 * 1000,
@@ -658,7 +675,7 @@ async function buildWatchlistOnlyPayload(
     );
     if (directMatch.matchedSymbols.length === 0) return null;
 
-    const story = {
+    const storyBase = {
       id: row.id,
       newsItemId: row.id,
       headline: row.headline,
@@ -684,6 +701,10 @@ async function buildWatchlistOnlyPayload(
           : ["watchlist_ticker_impact"],
       isWatchlistMatch: true,
       whyItMatters: `Matches watchlist symbol${directMatch.matchedSymbols.length > 1 ? "s" : ""} ${directMatch.matchedSymbols.join(", ")}.`,
+    } satisfies NewsItem;
+    const story = {
+      ...storyBase,
+      thesisMatches: buildInvestmentThesisMatches(storyBase, investmentTheses),
     } satisfies NewsItem;
 
     return {
@@ -744,6 +765,11 @@ async function buildMarketPayload(
     opts.watchlistSymbols.map((symbol) => symbol.toUpperCase()),
   );
   const ticker = opts.ticker?.trim().toUpperCase() || null;
+  const investmentTheses = await loadInvestmentThesesForSymbols(
+    supabase,
+    [...opts.portfolioSymbols, ...opts.watchlistSymbols],
+    opts.portfolioId,
+  );
 
   const publishedSince = new Date(
     Date.now() - FEED_MAX_AGE_MINUTES * 60 * 1000,
@@ -819,7 +845,7 @@ async function buildMarketPayload(
     );
     const isPortfolioMatch = portfolioDirectMatch.matchedSymbols.length > 0;
     const isWatchlistMatch = watchlistDirectMatch.matchedSymbols.length > 0;
-    const story = {
+    const storyBase = {
       id: row.id,
       newsItemId: row.id,
       headline: row.headline,
@@ -845,6 +871,10 @@ async function buildMarketPayload(
           ...watchlistDirectMatch.matchedSymbols,
         ]),
       ],
+    } satisfies NewsItem;
+    const story = {
+      ...storyBase,
+      thesisMatches: buildInvestmentThesisMatches(storyBase, investmentTheses),
     } satisfies NewsItem;
 
     return {

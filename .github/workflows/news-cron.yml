@@ -8,9 +8,14 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: news-cron
+  cancel-in-progress: false
+
 jobs:
   trigger-news-cron:
     runs-on: ubuntu-latest
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
 
@@ -58,8 +63,37 @@ jobs:
           python -m workers.news_ingestion.cron_runner > "${payload_file}"
           python -m json.tool "${payload_file}" > /dev/null
 
-          echo "Cron payload:"
-          cat "${payload_file}"
+          echo "Cron payload summary:"
+          python3 - "$payload_file" <<'PY'
+          import json
+          import sys
+
+          data = json.load(open(sys.argv[1]))
+          sources = {
+              key: data.get(key, {})
+              for key in ("edgar", "newsapi", "gnews", "finnhub")
+          }
+          source_summary = {
+              key: {
+                  "fetched": row.get("fetched", 0),
+                  "inserted": row.get("inserted", 0),
+                  "skipped": row.get("skipped", 0),
+                  "failed": row.get("failed", 0),
+              }
+              for key, row in sources.items()
+              if isinstance(row, dict)
+          }
+          print(
+              "tickers=%s lookbackHours=%s maxArticles=%s totalInserted=%s sources=%s"
+              % (
+                  len(data.get("tickers", [])),
+                  data.get("lookbackHours", "?"),
+                  data.get("maxArticles", "?"),
+                  data.get("total_inserted", "?"),
+                  json.dumps(source_summary, sort_keys=True),
+              )
+          )
+          PY
 
           http_code="$(
             curl -sS \
@@ -74,24 +108,51 @@ jobs:
           )"
 
           echo "HTTP ${http_code}"
-          cat "${response_file}"
+          echo "Cron response summary:"
+          python3 - "$response_file" <<'PY'
+          import json
+          import sys
+
+          try:
+              data = json.load(open(sys.argv[1]))
+          except Exception:
+              print("non-json response")
+              raise SystemExit(0)
+
+          print(
+              "totalInserted=%s insertedArticleIds=%s shouldEnrich=%s"
+              % (
+                  data.get("totalInserted", "?"),
+                  len(data.get("insertedArticleIds", [])),
+                  data.get("shouldEnrich", False),
+              )
+          )
+          if data.get("error"):
+              print("error=%s" % data["error"])
+          PY
 
           if [ "${http_code}" -lt 200 ] || [ "${http_code}" -ge 300 ]; then
             echo "News cron invocation failed"
             exit 1
           fi
 
-          article_ids="$(python3 -c "
+          article_ids="$(python3 - "$response_file" <<'PY'
           import json
-          data = json.load(open('${response_file}'))
-          ids = data.get('insertedArticleIds', [])
+          import sys
+
+          data = json.load(open(sys.argv[1]))
+          ids = data.get("insertedArticleIds", [])
           print(json.dumps(ids))
-          ")"
-          should_enrich="$(python3 -c "
+          PY
+          )"
+          should_enrich="$(python3 - "$response_file" <<'PY'
           import json
-          data = json.load(open('${response_file}'))
-          print('true' if data.get('shouldEnrich', False) else 'false')
-          ")"
+          import sys
+
+          data = json.load(open(sys.argv[1]))
+          print("true" if data.get("shouldEnrich", False) else "false")
+          PY
+          )"
 
           echo "article_ids=${article_ids}" >> "$GITHUB_OUTPUT"
           echo "should_enrich=${should_enrich}" >> "$GITHUB_OUTPUT"
@@ -110,10 +171,15 @@ jobs:
           echo "Enriching articles via ${ENRICH_URL}"
           echo "Total article IDs: $(echo "${ARTICLE_IDS}" | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))')"
 
-          python3 -c "
-          import json, subprocess, sys
+          python3 - "$ARTICLE_IDS" "$ENRICH_URL" <<'PY'
+          import json
+          import os
+          import subprocess
+          import sys
 
-          ids = json.loads('${ARTICLE_IDS}')
+          ids = json.loads(sys.argv[1])
+          enrich_url = sys.argv[2]
+          cron_secret = os.environ["CRON_SECRET"]
           batch_size = 10
           batches = [ids[i:i+batch_size] for i in range(0, len(ids), batch_size)]
 
@@ -127,12 +193,12 @@ jobs:
               result = subprocess.run([
                   'curl', '-sS',
                   '-X', 'POST',
-                  '-H', 'Authorization: Bearer ${CRON_SECRET}',
+                  '-H', f'Authorization: Bearer {cron_secret}',
                   '-H', 'Content-Type: application/json',
                   '-H', 'Accept: application/json',
                   '-d', payload,
                   '-w', '\n%{http_code}',
-                  '${ENRICH_URL}'
+                  enrich_url
               ], capture_output=True, text=True, timeout=120)
 
               lines = result.stdout.strip().rsplit('\n', 1)
@@ -140,7 +206,6 @@ jobs:
               http_code = lines[-1].strip()
 
               print(f'HTTP {http_code}')
-              print(body)
 
               if not (200 <= int(http_code) < 300):
                   print(f'Enrich batch {i+1} failed with HTTP {http_code}')
@@ -153,6 +218,7 @@ jobs:
                       print(f'Enrich batch {i+1} returned error: {resp["error"]}')
                       failed = True
                       break
+                  print(f'  enriched={resp.get("enriched", "?")}, skipped={resp.get("skipped", "?")}')
               except json.JSONDecodeError:
                   print(f'Enrich batch {i+1} returned invalid JSON')
                   failed = True
@@ -162,7 +228,7 @@ jobs:
               sys.exit(1)
 
           print('All enrich batches completed successfully')
-          "
+          PY
 
       - name: Extract full text for new articles
         if: steps.ingest.outputs.should_enrich == 'true'
@@ -213,30 +279,40 @@ jobs:
           )"
 
           echo "HTTP ${http_code}"
-          cat "${response_file}"
 
           if [ "${http_code}" -lt 200 ] || [ "${http_code}" -ge 300 ]; then
             echo "Analysis target discovery failed"
+            error_detail="$(python3 -c 'import json, sys; data = json.load(open(sys.argv[1])); print(data.get("error", "unknown"))' "$response_file" 2>/dev/null || printf '%s' '(non-JSON response)')"
+            echo "error: ${error_detail}"
             exit 1
           fi
 
-          portfolio_ids="$(python3 -c "
+          portfolio_ids="$(python3 - "$response_file" <<'PY'
           import json
-          data = json.load(open('${response_file}'))
-          print(json.dumps(data.get('portfolioIds', [])))
-          ")"
-          has_portfolios="$(python3 -c "
-          import json
-          data = json.load(open('${response_file}'))
-          print('true' if len(data.get('portfolioIds', [])) > 0 else 'false')
-          ")"
-          skipped_count="$(python3 -c "
-          import json
-          data = json.load(open('${response_file}'))
-          print(int(data.get('skippedCount', 0)))
-          ")"
+          import sys
 
-          echo "Eligible portfolios: ${portfolio_ids}"
+          data = json.load(open(sys.argv[1]))
+          print(json.dumps(data.get("portfolioIds", [])))
+          PY
+          )"
+          has_portfolios="$(python3 - "$response_file" <<'PY'
+          import json
+          import sys
+
+          data = json.load(open(sys.argv[1]))
+          print("true" if len(data.get("portfolioIds", [])) > 0 else "false")
+          PY
+          )"
+          skipped_count="$(python3 - "$response_file" <<'PY'
+          import json
+          import sys
+
+          data = json.load(open(sys.argv[1]))
+          print(int(data.get("skippedCount", 0)))
+          PY
+          )"
+
+          echo "Eligible portfolios: $(echo "${portfolio_ids}" | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))')"
           echo "Skipped by cooldown: ${skipped_count}"
 
           echo "portfolio_ids=${portfolio_ids}" >> "$GITHUB_OUTPUT"
@@ -256,10 +332,15 @@ jobs:
 
           echo "Running portfolio analysis via ${ANALYSIS_URL}"
 
-          python3 -c "
-          import json, subprocess, sys
+          python3 - "$PORTFOLIO_IDS" "$ANALYSIS_URL" <<'PY'
+          import json
+          import os
+          import subprocess
+          import sys
 
-          portfolio_ids = json.loads('${PORTFOLIO_IDS}')
+          portfolio_ids = json.loads(sys.argv[1])
+          analysis_url = sys.argv[2]
+          cron_secret = os.environ["CRON_SECRET"]
           print(f'Processing {len(portfolio_ids)} portfolio(s) sequentially')
 
           for i, portfolio_id in enumerate(portfolio_ids):
@@ -269,12 +350,12 @@ jobs:
               result = subprocess.run([
                   'curl', '-sS',
                   '-X', 'POST',
-                  '-H', 'Authorization: Bearer ${CRON_SECRET}',
+                  '-H', f'Authorization: Bearer {cron_secret}',
                   '-H', 'Content-Type: application/json',
                   '-H', 'Accept: application/json',
                   '-d', payload,
                   '-w', '\n%{http_code}',
-                  '${ANALYSIS_URL}'
+                  analysis_url
               ], capture_output=True, text=True, timeout=300)
 
               lines = result.stdout.strip().rsplit('\n', 1)
@@ -282,7 +363,6 @@ jobs:
               http_code = lines[-1].strip()
 
               print(f'HTTP {http_code}')
-              print(body)
 
               if not (200 <= int(http_code) < 300):
                   print(f'Analysis failed for portfolio {portfolio_id} with HTTP {http_code}')
@@ -304,4 +384,4 @@ jobs:
                   print(f'Portfolio {portfolio_id} processed successfully')
 
           print('All portfolio analyses completed successfully')
-          "
+          PY

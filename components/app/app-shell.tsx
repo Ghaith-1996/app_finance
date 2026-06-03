@@ -7,13 +7,13 @@ export function AppShell({
   title,
   description,
   children,
-  activePath: _activePath,
   actions,
   mainClassName,
   backHref,
   backLabel = "Back to portfolio",
   showOnboardingNav = true,
   showAdminLink = false,
+  unreadAlertCount,
 }: {
   eyebrow: string;
   title: string;
@@ -27,6 +27,7 @@ export function AppShell({
   backLabel?: string;
   showOnboardingNav?: boolean;
   showAdminLink?: boolean;
+  unreadAlertCount?: number;
 }) {
   return (
     <AppShellLayout
@@ -39,6 +40,7 @@ export function AppShell({
       backLabel={backLabel}
       showOnboardingNav={showOnboardingNav}
       showAdminLink={showAdminLink}
+      unreadAlertCount={unreadAlertCount}
     >
       {children}
     </AppShellLayout>

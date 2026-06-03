@@ -1,0 +1,48 @@
+name: Smart Alerts
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: smart-alerts
+  cancel-in-progress: false
+
+jobs:
+  trigger-smart-alerts:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate endpoint
+        shell: bash
+        env:
+          SMART_ALERTS_CRON_ENDPOINT: ${{ secrets.SMART_ALERTS_CRON_ENDPOINT }}
+        run: |
+          if [[ "${SMART_ALERTS_CRON_ENDPOINT}" != */api/notifications/smart-alerts/cron ]]; then
+            echo "SMART_ALERTS_CRON_ENDPOINT must end with /api/notifications/smart-alerts/cron, got: ${SMART_ALERTS_CRON_ENDPOINT}"
+            exit 1
+          fi
+
+      - name: Trigger smart alerts
+        shell: bash
+        env:
+          SMART_ALERTS_CRON_ENDPOINT: ${{ secrets.SMART_ALERTS_CRON_ENDPOINT }}
+          SMART_ALERTS_CRON_SECRET: ${{ secrets.SMART_ALERTS_CRON_SECRET }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [[ -z "${SMART_ALERTS_CRON_ENDPOINT}" ]]; then
+            echo "SMART_ALERTS_CRON_ENDPOINT is required"
+            exit 1
+          fi
+
+          AUTH_SECRET="${SMART_ALERTS_CRON_SECRET:-${CRON_SECRET}}"
+          if [[ -z "${AUTH_SECRET}" ]]; then
+            echo "SMART_ALERTS_CRON_SECRET or CRON_SECRET is required"
+            exit 1
+          fi
+
+          curl --fail-with-body \
+            --request POST \
+            --header "Authorization: Bearer ${AUTH_SECRET}" \
+            --header "Content-Type: application/json" \
+            "${SMART_ALERTS_CRON_ENDPOINT}"

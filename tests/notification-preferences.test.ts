@@ -32,6 +32,15 @@ import {
   saveCurrentUserNotificationPreferences,
 } from "@/lib/actions/notifications";
 
+const smartAlertDefaults = {
+  criticalNewsAlertsEnabled: false,
+  earningsReportAlertsEnabled: false,
+  priceMoveAlertsEnabled: false,
+  priceMoveThresholdPercent: 5,
+  concentrationAlertsEnabled: false,
+  concentrationThresholdPercent: 35,
+};
+
 describe("notification preferences actions", () => {
   beforeEach(() => {
     authGetUser.mockReset();
@@ -52,6 +61,7 @@ describe("notification preferences actions", () => {
       emailDigestEnabled: false,
       smsDigestEnabled: false,
       phoneNumber: "",
+      ...smartAlertDefaults,
     });
   });
 
@@ -60,6 +70,7 @@ describe("notification preferences actions", () => {
       emailDigestEnabled: true,
       smsDigestEnabled: false,
       phoneNumber: "",
+      ...smartAlertDefaults,
     });
 
     expect(result).toEqual({ ok: true });
@@ -69,6 +80,12 @@ describe("notification preferences actions", () => {
         email_digest_enabled: true,
         sms_digest_enabled: false,
         phone_number: null,
+        critical_news_alerts_enabled: false,
+        earnings_report_alerts_enabled: false,
+        price_move_alerts_enabled: false,
+        price_move_threshold_percent: 5,
+        concentration_alerts_enabled: false,
+        concentration_threshold_percent: 35,
       },
       { onConflict: "user_id" },
     );
@@ -79,6 +96,7 @@ describe("notification preferences actions", () => {
       emailDigestEnabled: false,
       smsDigestEnabled: true,
       phoneNumber: "+14165551234",
+      ...smartAlertDefaults,
     });
 
     expect(result).toEqual({ ok: true });
@@ -88,6 +106,12 @@ describe("notification preferences actions", () => {
         email_digest_enabled: false,
         sms_digest_enabled: true,
         phone_number: "+14165551234",
+        critical_news_alerts_enabled: false,
+        earnings_report_alerts_enabled: false,
+        price_move_alerts_enabled: false,
+        price_move_threshold_percent: 5,
+        concentration_alerts_enabled: false,
+        concentration_threshold_percent: 35,
       },
       { onConflict: "user_id" },
     );
@@ -98,6 +122,12 @@ describe("notification preferences actions", () => {
       emailDigestEnabled: true,
       smsDigestEnabled: true,
       phoneNumber: "+14165551234",
+      criticalNewsAlertsEnabled: true,
+      earningsReportAlertsEnabled: true,
+      priceMoveAlertsEnabled: true,
+      priceMoveThresholdPercent: 7.5,
+      concentrationAlertsEnabled: true,
+      concentrationThresholdPercent: 30,
     });
 
     expect(result).toEqual({ ok: true });
@@ -107,6 +137,12 @@ describe("notification preferences actions", () => {
         email_digest_enabled: true,
         sms_digest_enabled: true,
         phone_number: "+14165551234",
+        critical_news_alerts_enabled: true,
+        earnings_report_alerts_enabled: true,
+        price_move_alerts_enabled: true,
+        price_move_threshold_percent: 7.5,
+        concentration_alerts_enabled: true,
+        concentration_threshold_percent: 30,
       },
       { onConflict: "user_id" },
     );
@@ -117,11 +153,29 @@ describe("notification preferences actions", () => {
       emailDigestEnabled: false,
       smsDigestEnabled: true,
       phoneNumber: "416-555-1234",
+      ...smartAlertDefaults,
     });
 
     expect(result).toEqual({
       ok: false,
       error: "Phone number must use E.164 format, for example +14165551234.",
+    });
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it("rejects out-of-range smart alert thresholds", async () => {
+    const result = await saveCurrentUserNotificationPreferences({
+      emailDigestEnabled: false,
+      smsDigestEnabled: false,
+      phoneNumber: "",
+      ...smartAlertDefaults,
+      priceMoveAlertsEnabled: true,
+      priceMoveThresholdPercent: 75,
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: "Price move alert threshold must be between 1% and 50%.",
     });
     expect(upsert).not.toHaveBeenCalled();
   });

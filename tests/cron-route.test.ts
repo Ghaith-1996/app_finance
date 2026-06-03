@@ -74,6 +74,8 @@ describe("POST /api/news/cron", () => {
     expect(body.insertedArticleIds).toEqual(["id-e1", "id-f1", "id-f2", "id-n1", "id-n2", "id-n3"]);
     expect(body.shouldEnrich).toBe(true);
     expect(body.totalInserted).toBe(6);
+    expect(body.tickerCount).toBe(2);
+    expect(body.tickers).toBeUndefined();
     expect(body.ingestBreakdown.finnhub.inserted).toBe(2);
   });
 

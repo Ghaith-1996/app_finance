@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ArrowDown, ArrowUp, ArrowUpDown, ExternalLink, Minus, Newspaper, Plus } from "lucide-react";
 
 import type { Holding } from "@/lib/types";
+import { InvestmentThesisPanel } from "@/components/app/investment-thesis-panel";
 import { recordHoldingAdd, recordHoldingSale } from "@/lib/actions/portfolio";
 import { buttonStyles } from "@/components/ui/button";
 import { sanitizeExternalUrl } from "@/lib/security/external-url";
@@ -524,11 +525,16 @@ export function PortfolioHoldingsTable({
               </button>
 
               {isOpen ? (
-                <div className="mt-3 px-1">
+                <div className="mt-3 space-y-3 px-1">
                   <HoldingAdjustPanel
                     holding={holding}
                     portfolioId={portfolioId}
                     onDone={() => setOpenId(null)}
+                  />
+                  <InvestmentThesisPanel
+                    symbol={holding.symbol}
+                    portfolioId={portfolioId}
+                    scope="holding"
                   />
                 </div>
               ) : null}

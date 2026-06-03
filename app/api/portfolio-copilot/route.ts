@@ -15,6 +15,7 @@ import {
 } from "@/lib/services/ai";
 import type { AIChatErrorCode } from "@/lib/services/ai";
 import { computePortfolioOverview } from "@/lib/services/portfolio";
+import { loadInvestmentThesesForSymbols } from "@/lib/server/investment-theses";
 import { createClient } from "@/lib/supabase/server";
 import {
   AIUsageAccessError,
@@ -284,6 +285,21 @@ export async function POST(request: Request) {
 
     const providerId = providerIdForTier(modelTier);
     const ai = getAIProviderById(providerId);
+    const mappedHoldings = (holdingsResult.data ?? []).map((holding) => ({
+      symbol: (holding.symbol as string) ?? "",
+      company: (holding.company as string) ?? "",
+      sector: (holding.sector as string) ?? "Other",
+      quantity: Number(holding.quantity ?? 0),
+      averageCost: Number(holding.average_cost ?? 0),
+      allocation: Number(holding.allocation ?? 0),
+      price: Number(holding.current_price ?? holding.price ?? 0),
+      dayChange: Number(holding.daily_change ?? 0),
+    }));
+    const investmentTheses = await loadInvestmentThesesForSymbols(
+      supabase,
+      mappedHoldings.map((holding) => holding.symbol),
+      portfolioId,
+    );
 
     let answer: string;
     try {
@@ -296,16 +312,7 @@ export async function POST(request: Request) {
           coverage: overview.coverage,
           primaryGoal: overview.primaryGoal,
         },
-        holdings: (holdingsResult.data ?? []).map((holding) => ({
-          symbol: (holding.symbol as string) ?? "",
-          company: (holding.company as string) ?? "",
-          sector: (holding.sector as string) ?? "Other",
-          quantity: Number(holding.quantity ?? 0),
-          averageCost: Number(holding.average_cost ?? 0),
-          allocation: Number(holding.allocation ?? 0),
-          price: Number(holding.current_price ?? holding.price ?? 0),
-          dayChange: Number(holding.daily_change ?? 0),
-        })),
+        holdings: mappedHoldings,
         insights: (insightsRows ?? []).map((item) => ({
           title: item.title,
           value: item.value,
@@ -342,6 +349,7 @@ export async function POST(request: Request) {
           })
           .filter((item): item is NonNullable<typeof item> => item !== null),
         watchlistSymbols,
+        investmentTheses,
         history,
         question: message,
       });

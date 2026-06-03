@@ -20,6 +20,12 @@ export interface TickerImpact {
   symbol: string;
   effect: StockEffect;
 }
+export interface InvestmentThesisMatch {
+  symbol: string;
+  label: string;
+  detail: string;
+  tone: "neutral" | "watch" | "risk";
+}
 export type MatchReasonCode =
   | "held_ticker_tag"
   | "held_ticker_impact"
@@ -232,6 +238,7 @@ export interface NewsItem {
   matchedStockTags?: string[];
   matchReasonCodes?: MatchReasonCode[];
   matchSources?: MatchSource[];
+  thesisMatches?: InvestmentThesisMatch[];
 
   /* Market mode fields */
   isPortfolioMatch?: boolean;

@@ -8,6 +8,12 @@ vi.mock("@/lib/actions/watchlist", () => ({
   getWatchlistItemDetails: (...args: unknown[]) => getWatchlistItemDetails(...args),
 }));
 
+vi.mock("@/lib/actions/investment-thesis", () => ({
+  getInvestmentThesisState: vi.fn().mockResolvedValue({ ok: true, thesis: null }),
+  saveInvestmentThesis: vi.fn(),
+  deleteInvestmentThesis: vi.fn(),
+}));
+
 import { WatchlistDetailDashboard } from "@/components/app/watchlist-detail-dashboard";
 
 describe("WatchlistDetailDashboard", () => {

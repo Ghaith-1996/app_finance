@@ -163,7 +163,7 @@ async function runFinalize(request: Request) {
 
   return json({
     providerSet: "candidate",
-    tickers: payload.tickers,
+    tickerCount: payload.tickers.length,
     lookbackHours: payload.lookbackHours,
     maxArticles: payload.maxArticles,
     ingest: {

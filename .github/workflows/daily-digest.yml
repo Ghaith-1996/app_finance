@@ -8,9 +8,14 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: daily-digest
+  cancel-in-progress: false
+
 jobs:
   trigger-daily-digest:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Validate DIGEST_CRON_ENDPOINT format
         run: |

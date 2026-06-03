@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import {
   BarChart3,
   Building2,
@@ -8,6 +9,8 @@ import {
   DollarSign,
   ExternalLink,
   Globe,
+  Lightbulb,
+  Newspaper,
   TrendingDown,
   TrendingUp,
   Users,
@@ -25,6 +28,7 @@ import {
 } from "recharts";
 
 import { getWatchlistItemDetails } from "@/lib/actions/watchlist";
+import { InvestmentThesisPanel } from "@/components/app/investment-thesis-panel";
 import type {
   WatchlistDetailData,
   ChartPoint,
@@ -32,6 +36,7 @@ import type {
   FinancialDataPoint,
 } from "@/lib/services/twelvedata";
 import { sanitizeExternalUrl } from "@/lib/security/external-url";
+import { buildWatchlistIntelligence } from "@/lib/watchlist/intelligence";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -157,6 +162,8 @@ export function WatchlistDetailDashboard({ symbol }: Props) {
   return (
     <div className="space-y-4">
       <HeroRow data={data} up={up} />
+      <WatchlistIntelligenceCard data={data} />
+      <InvestmentThesisPanel symbol={data.symbol} scope="watchlist" compact />
 
       {/* Tabs */}
       <div className="flex gap-1 rounded-xl bg-white/[0.04] p-1">
@@ -247,6 +254,68 @@ function HeroRow({ data, up }: { data: WatchlistDetailData; up: boolean }) {
             </p>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function signalToneClass(tone: "good" | "watch" | "risk" | "neutral") {
+  switch (tone) {
+    case "good":
+      return "border-emerald-400/20 bg-emerald-400/10 text-emerald-300";
+    case "watch":
+      return "border-amber-400/20 bg-amber-400/10 text-amber-300";
+    case "risk":
+      return "border-red-400/20 bg-red-400/10 text-red-300";
+    default:
+      return "border-white/10 bg-white/5 text-slate-300";
+  }
+}
+
+function WatchlistIntelligenceCard({ data }: { data: WatchlistDetailData }) {
+  const intelligence = buildWatchlistIntelligence(data);
+
+  return (
+    <div className="rounded-2xl border border-white/[0.06] bg-surface-raised p-5">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-brand">
+            <Lightbulb className="h-3.5 w-3.5" />
+            Watchlist intelligence
+          </div>
+          <p className="mt-3 text-sm leading-6 text-slate-400">
+            {intelligence.summary}
+          </p>
+        </div>
+        <Link
+          href={`/feed?ticker=${encodeURIComponent(data.symbol)}`}
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-brand/25 bg-brand/10 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-brand transition hover:border-brand/40 hover:bg-brand/15"
+        >
+          <Newspaper className="h-3.5 w-3.5" />
+          News
+        </Link>
+      </div>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        {intelligence.signals.map((signal) => (
+          <div
+            key={signal.id}
+            className="border-l border-white/[0.08] pl-3"
+          >
+            <span
+              className={cn(
+                "inline-flex rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider",
+                signalToneClass(signal.tone),
+              )}
+            >
+              {signal.label}
+            </span>
+            <p className="mt-2 text-sm font-bold text-white">{signal.value}</p>
+            <p className="mt-1 text-xs leading-5 text-slate-500">
+              {signal.detail}
+            </p>
+          </div>
+        ))}
       </div>
     </div>
   );

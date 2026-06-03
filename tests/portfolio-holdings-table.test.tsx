@@ -21,6 +21,12 @@ vi.mock("@/lib/actions/portfolio", () => ({
   recordHoldingSale: vi.fn(),
 }));
 
+vi.mock("@/lib/actions/investment-thesis", () => ({
+  getInvestmentThesisState: vi.fn().mockResolvedValue({ ok: true, thesis: null }),
+  saveInvestmentThesis: vi.fn(),
+  deleteInvestmentThesis: vi.fn(),
+}));
+
 import { PortfolioHoldingsTable } from "@/components/app/portfolio-holdings-table";
 
 const baseHolding: Holding = {

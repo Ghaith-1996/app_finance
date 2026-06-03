@@ -4,7 +4,9 @@ import { PLAN_LABELS } from "@/lib/billing/plans";
 import {
   BillingAccessError,
 } from "@/lib/billing/subscriptions";
+import { buildInvestmentThesisMatches } from "@/lib/investment-theses/matching";
 import { computePortfolioOverview } from "@/lib/services/portfolio";
+import { loadInvestmentThesesForSymbols } from "@/lib/server/investment-theses";
 import { createClient } from "@/lib/supabase/server";
 import {
   AIChatError,
@@ -327,7 +329,7 @@ async function loadArticlePromptContext(
       extStatus === "in_progress" ||
       (extStatus !== "complete" && extStatus !== "failed" && extStatus !== "skipped"));
 
-  return {
+  const articleContext = {
     article: {
       headline: article.headline as string,
       source: article.source as string,
@@ -352,6 +354,29 @@ async function loadArticlePromptContext(
       company: row.company as string,
       sector: row.sector as string,
     })),
+  };
+  const matchedSymbols = [
+    ...articleContext.article.stockTags,
+    ...articleContext.article.tickerImpacts.map((impact) => impact.symbol),
+    ...(articleContext.article.matchedHoldings ?? []),
+  ];
+  const investmentTheses = await loadInvestmentThesesForSymbols(
+    supabase,
+    matchedSymbols,
+    portfolioId,
+  );
+
+  return {
+    ...articleContext,
+    investmentTheses,
+    thesisMatches: buildInvestmentThesisMatches(
+      {
+        ...articleContext.article,
+        globalSummary: articleContext.article.globalSummary ?? "",
+        holdings: articleContext.article.matchedHoldings ?? [],
+      },
+      investmentTheses,
+    ),
   };
 }
 
@@ -461,6 +486,29 @@ async function loadPortfolioQuestionContext(
     feedRows = feedResult.data;
   }
 
+  const mappedHoldings = (holdingsResult.data ?? []).map((holding) => ({
+    symbol: (holding.symbol as string) ?? "",
+    company: (holding.company as string) ?? "",
+    sector: (holding.sector as string) ?? "Other",
+    quantity: Number(holding.quantity ?? 0),
+    averageCost: Number(holding.average_cost ?? 0),
+    allocation: Number(holding.allocation ?? 0),
+    price: Number(holding.current_price ?? holding.price ?? 0),
+    dayChange: Number(holding.daily_change ?? 0),
+  }));
+  const watchlistSymbols = [
+    ...new Set(
+      (watchlistResult.data ?? [])
+        .map((row) => String(row.symbol ?? "").toUpperCase())
+        .filter(Boolean),
+    ),
+  ];
+  const investmentTheses = await loadInvestmentThesesForSymbols(
+    supabase,
+    mappedHoldings.map((holding) => holding.symbol),
+    portfolioId,
+  );
+
   return {
     portfolio: {
       name: (portfolio.name as string | null) ?? "My Portfolio",
@@ -470,16 +518,7 @@ async function loadPortfolioQuestionContext(
       coverage: overview.coverage,
       primaryGoal: overview.primaryGoal,
     },
-    holdings: (holdingsResult.data ?? []).map((holding) => ({
-      symbol: (holding.symbol as string) ?? "",
-      company: (holding.company as string) ?? "",
-      sector: (holding.sector as string) ?? "Other",
-      quantity: Number(holding.quantity ?? 0),
-      averageCost: Number(holding.average_cost ?? 0),
-      allocation: Number(holding.allocation ?? 0),
-      price: Number(holding.current_price ?? holding.price ?? 0),
-      dayChange: Number(holding.daily_change ?? 0),
-    })),
+    holdings: mappedHoldings,
     insights: (insightsRows ?? []).map((item) => ({
       title: item.title,
       value: item.value,
@@ -502,11 +541,8 @@ async function loadPortfolioQuestionContext(
         };
       })
       .filter((item): item is NonNullable<typeof item> => item !== null),
-    watchlistSymbols: [...new Set(
-      (watchlistResult.data ?? [])
-        .map((row) => String(row.symbol ?? "").toUpperCase())
-        .filter(Boolean),
-    )],
+    watchlistSymbols,
+    investmentTheses,
   };
 }
 

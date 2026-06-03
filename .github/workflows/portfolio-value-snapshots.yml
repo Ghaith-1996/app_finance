@@ -8,9 +8,14 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: portfolio-value-snapshots
+  cancel-in-progress: false
+
 jobs:
   trigger-portfolio-value-snapshots:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Trigger hourly snapshot route
         env:

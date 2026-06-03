@@ -18,9 +18,11 @@ import {
   type ArticleChatActivityState,
 } from "@/components/app/article-chat-panel";
 import { NewsFeedCard } from "@/components/app/news-feed-card";
+import { SaveArticleButton } from "@/components/app/save-article-button";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonStyles } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
+import { buildScoreExplanation } from "@/lib/feed/score-explanation";
 import {
   NEWS_CATEGORIES,
   type ArticleChatModelTier,
@@ -1508,6 +1510,7 @@ function DetailPanel({
 }) {
   const isMarket = mode === "market";
   const safeStoryUrl = sanitizeExternalUrl(story.url);
+  const scoreExplanation = buildScoreExplanation(story, mode);
 
   return (
     <Panel className="h-fit space-y-5 rounded-2xl border-white/[0.06] bg-surface-raised p-6 shadow-sm">
@@ -1615,7 +1618,70 @@ function DetailPanel({
             </div>
           )}
 
-          <div className="border-t border-white/[0.06] pt-5">
+          {scoreExplanation.factors.length > 0 && (
+            <div className="space-y-4 border-t border-white/[0.06] pt-5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  {scoreExplanation.title}
+                </p>
+                {scoreExplanation.scoreLabel ? (
+                  <span className="text-xs font-semibold uppercase tracking-[0.14em] text-brand">
+                    {scoreExplanation.scoreLabel}
+                  </span>
+                ) : null}
+              </div>
+              <p className="text-sm leading-7 text-slate-400">
+                {scoreExplanation.summary}
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {scoreExplanation.factors.map((factor) => (
+                  <div
+                    key={factor.id}
+                    className="border-l border-white/[0.08] pl-3"
+                  >
+                    <Badge tone={factor.tone} className="text-[10px]">
+                      {factor.label}
+                    </Badge>
+                    <p className="mt-2 text-xs leading-5 text-slate-500">
+                      {factor.detail}
+                    </p>
+                  </div>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Badge tone="neutral">{scoreExplanation.confidenceLabel}</Badge>
+                <Badge tone="neutral">{scoreExplanation.horizonLabel}</Badge>
+              </div>
+            </div>
+          )}
+
+          {(story.thesisMatches ?? []).length > 0 && (
+            <div className="space-y-3 border-t border-white/[0.06] pt-5">
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
+                Thesis tracker
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {(story.thesisMatches ?? []).map((match) => (
+                  <div
+                    key={`${match.symbol}-${match.label}`}
+                    className="border-l border-white/[0.08] pl-3"
+                  >
+                    <Badge
+                      tone={match.tone === "watch" || match.tone === "risk" ? "warning" : "neutral"}
+                      className="text-[10px]"
+                    >
+                      {match.label}
+                    </Badge>
+                    <p className="mt-2 text-xs leading-5 text-slate-500">
+                      {match.detail}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="flex flex-wrap gap-3 border-t border-white/[0.06] pt-5">
             <Button
               type="button"
               variant="secondary"
@@ -1624,6 +1690,9 @@ function DetailPanel({
               <MessageSquare className="mr-2 h-4 w-4" />
               {isChatOpen ? "Hide Ask AI" : "Ask AI about this story"}
             </Button>
+            {story.newsItemId ? (
+              <SaveArticleButton newsItemId={story.newsItemId} />
+            ) : null}
           </div>
 
           {/* Connected holdings — personal only */}

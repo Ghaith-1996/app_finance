@@ -12,6 +12,8 @@ function createAwaitableBuilder<T>(rows: T[]) {
   const builder = {
     eq: () => builder,
     in: () => builder,
+    is: () => builder,
+    or: () => builder,
     contains: () => builder,
     gte: () => builder,
     order: () => builder,
@@ -37,6 +39,7 @@ function createSupabaseMock(
   watchlistSymbols: string[] = [],
   marketRows?: Array<Record<string, unknown>>,
   feedRows?: Array<Record<string, unknown>>,
+  thesisRows: Array<Record<string, unknown>> = [],
 ) {
   const resolvedMarketRows = marketRows ?? [
     {
@@ -164,6 +167,12 @@ function createSupabaseMock(
         };
       }
 
+      if (table === "user_investment_theses") {
+        return {
+          select: () => createAwaitableBuilder(thesisRows),
+        };
+      }
+
       throw new Error(`Unexpected table ${table}`);
     },
   };
@@ -207,6 +216,44 @@ describe("GET /api/feed personal mode", () => {
 
     expect(body.feed[0].matchSources).toEqual(["watchlist"]);
     expect(body.feed[0].matchReasonCodes).toEqual(["watchlist_ticker_tag"]);
+  });
+
+  it("adds thesis matches when a saved risk appears in the story context", async () => {
+    currentSupabaseMock = createSupabaseMock(
+      ["held_ticker_tag"],
+      ["portfolio"],
+      "tag",
+      [],
+      undefined,
+      undefined,
+      [
+        {
+          id: "thesis-1",
+          symbol: "AAPL",
+          portfolio_id: "p1",
+          scope: "holding",
+          thesis: "Device demand can support earnings durability.",
+          risks: ["stronger device demand"],
+          invalidation_notes: "",
+          horizon: "medium",
+          conviction: "medium",
+          created_at: "2026-01-01T00:00:00.000Z",
+          updated_at: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+    );
+
+    const res = await GET(new Request("http://localhost/api/feed?mode=personal&portfolioId=p1"));
+    const body = await res.json();
+
+    expect(body.feed[0].thesisMatches).toEqual([
+      {
+        symbol: "AAPL",
+        label: "AAPL risk",
+        detail: "Touches saved risk: stronger device demand",
+        tone: "watch",
+      },
+    ]);
   });
 
   it("sorts the personal feed by most recent when requested", async () => {

@@ -24,6 +24,7 @@ Still missing locally or not yet production-validated:
 - [ ] `TWELVE_DATA_API_KEY` - required for watchlist detail dashboard
 - [ ] `CRON_SECRET` - required for unattended ingestion via `/api/news/cron`
 - [ ] `DIGEST_CRON_SECRET` - required for `/api/notifications/daily-digest/cron`
+- [ ] `SMART_ALERTS_CRON_SECRET` - optional dedicated secret for `/api/notifications/smart-alerts/cron`; falls back to `CRON_SECRET`
 - [ ] `APP_BASE_URL` - required for canonical digest links
 - [ ] `RESEND_API_KEY` - required for morning digest email delivery
 - [ ] `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and `TWILIO_MESSAGING_SERVICE_SID` - required for morning digest SMS delivery
@@ -32,14 +33,17 @@ Still missing locally or not yet production-validated:
 - [ ] GitHub repository secrets include `CRON_ENDPOINT`, `CRON_SECRET`, `NEXT_PUBLIC_SUPABASE_URL`, and `SUPABASE_SERVICE_ROLE_KEY`
 - [ ] GitHub repository secrets include enabled source credentials (`NEWSAPI_KEY`, `EDGAR_IDENTITY`, `FINNHUB_API_KEY`, and any later provider keys)
 - [ ] GitHub repository secrets include `DIGEST_CRON_ENDPOINT` and `DIGEST_CRON_SECRET`
+- [ ] GitHub repository secrets include `SMART_ALERTS_CRON_ENDPOINT` and either `SMART_ALERTS_CRON_SECRET` or `CRON_SECRET`
 
 ## Database Migrations
 
 Current repo state:
 
-- [x] `supabase/migrations/` currently contains schema history through `024`
+- [x] `supabase/migrations/` currently contains schema history through `028`
 - [x] `024_daily_digest_notifications.sql` exists
 - [x] `024_ticker_earnings_reports.sql` exists
+- [x] `027_smart_alert_preferences.sql` exists
+- [x] `028_notification_alerts.sql` exists
 
 Apply all current migrations in order before launch:
 
@@ -71,6 +75,10 @@ Apply all current migrations in order before launch:
 023_analysis_run_heartbeat.sql
 024_daily_digest_notifications.sql
 024_ticker_earnings_reports.sql
+025_portfolio_value_snapshots.sql
+026_private_user_profiles.sql
+027_smart_alert_preferences.sql
+028_notification_alerts.sql
 ```
 
 RLS verified locally in migration files for expected user-facing tables:
@@ -104,6 +112,7 @@ Repository and workflow files verified locally:
 - [x] `.github/workflows/daily-digest.yml` exists locally
 - [x] `.github/workflows/daily-digest.yml` includes `workflow_dispatch`
 - [x] `.github/workflows/earnings-report-sync.yml` exists locally
+- [x] `.github/workflows/smart-alerts.yml` exists locally
 - [x] `npm run build` completes without errors
 
 Still open before launch:
@@ -111,10 +120,12 @@ Still open before launch:
 - [ ] `.github/workflows/news-cron.yml` is confirmed present on the default branch in GitHub
 - [ ] `.github/workflows/daily-digest.yml` is tracked in git and present on the default branch (it exists locally today but is not tracked)
 - [ ] `.github/workflows/earnings-report-sync.yml` is tracked in git and present on the default branch (it exists locally today but is not tracked)
+- [ ] `.github/workflows/smart-alerts.yml` is tracked in git and present on the default branch
 - [ ] GitHub Actions is enabled for the repository
 - [ ] The `News Cron` workflow is visible in the Actions tab
 - [ ] The `Daily Digest` workflow is visible in the Actions tab
 - [ ] The earnings-report workflow is visible in the Actions tab
+- [ ] The smart-alerts workflow is visible in the Actions tab
 - [ ] Workflow schedules are confirmed in GitHub and match the intended UTC cadence
 
 ## Current Blockers
@@ -162,6 +173,7 @@ Unauthenticated production smoke already checked:
 - [ ] The GitHub runner can execute the Python ingestion worker with production secrets
 - [ ] Enable both digest channels for a test user, run `workflow_dispatch` for `Daily Digest`, and verify one digest page, one email, one SMS, and no duplicate delivery rows
 - [ ] Run `workflow_dispatch` for the earnings-report workflow and verify expected writes to `ticker_earnings_reports`
+- [ ] Run `workflow_dispatch` for the smart-alerts workflow and verify expected writes to `notification_alerts`
 
 ## Rollback
 
@@ -179,3 +191,4 @@ Unauthenticated production smoke already checked:
 - The GitHub scheduler depends on `python -m workers.news_ingestion.cron_runner`, so the runner environment and repository secrets must be verified in production rather than assumed
 - GitHub scheduled workflows run in UTC on the default branch and can be delayed during high-load periods
 - Morning digests are fixed to a `9:00 AM America/New_York` send window; correct delivery depends on digest workflow secrets plus working Resend and Twilio credentials
+- Smart alerts currently persist deduplicated in-app alert rows; email/SMS delivery for those alert rows is not wired yet

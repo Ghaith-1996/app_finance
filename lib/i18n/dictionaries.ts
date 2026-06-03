@@ -44,6 +44,9 @@ export const dictionaries: Record<Locale, Dictionary> = {
       onboarding: "Onboarding",
       analysis: "Analysis",
       feed: "Feed",
+      alerts: "Alerts",
+      search: "Search",
+      saved: "Saved",
       overview: "Overview",
       fullPortfolio: "Full portfolio",
       watchlist: "Watchlist",
@@ -102,8 +105,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
       footerPortfolio: "Portfolio",
     },
     pages: {
-      homeTitle: "Home",
-      homeDescription: "Market conversations and community insights.",
+      homeTitle: "Today Dashboard",
+      homeDescription: "Your portfolio health, alerts, stories, and community signals in one place.",
       analysisEyebrow: "Analysis",
       analysisTitle: "Your AI brief updates automatically",
       analysisDescription:
@@ -166,6 +169,9 @@ export const dictionaries: Record<Locale, Dictionary> = {
       onboarding: "Configuration",
       analysis: "Analyse",
       feed: "Flux",
+      alerts: "Alertes",
+      search: "Recherche",
+      saved: "Sauvegardés",
       overview: "Vue d'ensemble",
       fullPortfolio: "Portefeuille complet",
       watchlist: "Liste de suivi",
@@ -224,8 +230,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
       footerPortfolio: "Portefeuille",
     },
     pages: {
-      homeTitle: "Accueil",
-      homeDescription: "Conversations de marché et insights communautaires.",
+      homeTitle: "Tableau du jour",
+      homeDescription: "Santé du portefeuille, alertes, actualités et signaux communautaires au même endroit.",
       analysisEyebrow: "Analyse",
       analysisTitle: "Votre briefing IA se met à jour automatiquement",
       analysisDescription:

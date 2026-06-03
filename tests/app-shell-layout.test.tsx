@@ -43,6 +43,7 @@ describe("AppShellLayout", () => {
           title="Title"
           description="Description"
           showOnboardingNav={false}
+          unreadAlertCount={0}
         >
           <div>Child content</div>
         </AppShellLayout>
@@ -53,5 +54,25 @@ describe("AppShellLayout", () => {
     expect(screen.queryByRole("link", { name: /onboarding/i })).toBeNull();
     expect(screen.getAllByRole("link", { name: /feed/i }).length).toBeGreaterThan(0);
     expect(createClient).not.toHaveBeenCalled();
+  });
+
+  it("renders an unread alert badge when a count is provided", async () => {
+    const { AppShellLayout } = await import("@/components/app/app-shell-layout");
+    const { PreferencesProvider } = await import("@/components/providers/preferences-provider");
+
+    render(
+      <PreferencesProvider initialTheme="dark" initialLocale="en">
+        <AppShellLayout
+          eyebrow="Feed"
+          title="Title"
+          description="Description"
+          unreadAlertCount={12}
+        >
+          <div>Child content</div>
+        </AppShellLayout>
+      </PreferencesProvider>,
+    );
+
+    expect(screen.getByText("12")).toBeTruthy();
   });
 });

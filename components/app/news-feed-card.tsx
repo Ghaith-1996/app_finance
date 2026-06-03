@@ -1,5 +1,6 @@
 import type { FeedMode, MatchSource, NewsItem } from "@/lib/types";
 
+import { buildScoreExplanation } from "@/lib/feed/score-explanation";
 import { cn, effectLabel, impactTone } from "@/lib/utils";
 
 import { Badge } from "@/components/ui/badge";
@@ -46,6 +47,7 @@ export function NewsFeedCard({
   const isHeadline =
     isMarketHeadlineSource(story.sourceType) && story.sourceType !== "edgar";
   const chips = holdingChips(story, mode);
+  const scoreExplanation = buildScoreExplanation(story, mode);
   const meta = `${story.source.toUpperCase()} · ${formatFeedTimeAgo(story.publishedMinutesAgo)}`;
 
   return (
@@ -109,6 +111,11 @@ export function NewsFeedCard({
               </span>
             );
           })()}
+          {(story.thesisMatches ?? []).length > 0 ? (
+            <span className="rounded-lg bg-sky-500/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-sky-300">
+              Thesis watch
+            </span>
+          ) : null}
         </div>
         <p className="text-right text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-600">
           {meta}
@@ -122,6 +129,54 @@ export function NewsFeedCard({
       <p className="mt-3 line-clamp-3 text-sm leading-relaxed text-slate-400">
         {story.globalSummary || story.aiSummary || ""}
       </p>
+
+      {scoreExplanation.factors.length > 0 ? (
+        <div className="mt-5 border-t border-white/[0.06] pt-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-600">
+              {scoreExplanation.title}
+            </p>
+            {scoreExplanation.scoreLabel ? (
+              <span className="text-xs font-semibold uppercase tracking-[0.14em] text-brand">
+                {scoreExplanation.scoreLabel}
+              </span>
+            ) : null}
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {scoreExplanation.factors.slice(0, 4).map((factor) => (
+              <Badge
+                key={factor.id}
+                tone={factor.tone}
+                className="max-w-full text-[10px]"
+              >
+                {factor.label}
+              </Badge>
+            ))}
+          </div>
+          <p className="mt-3 line-clamp-2 text-xs leading-5 text-slate-500">
+            {scoreExplanation.summary}
+          </p>
+        </div>
+      ) : null}
+
+      {(story.thesisMatches ?? []).length > 0 ? (
+        <div className="mt-5 border-t border-white/[0.06] pt-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-600">
+            Thesis tracker
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {(story.thesisMatches ?? []).map((match) => (
+              <Badge
+                key={`${match.symbol}-${match.label}`}
+                tone={match.tone === "watch" || match.tone === "risk" ? "warning" : "neutral"}
+                className="max-w-full text-[10px]"
+              >
+                {match.detail}
+              </Badge>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       {chips.length > 0 ? (
         <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-white/[0.06] pt-4">

@@ -114,7 +114,7 @@ async function runFinalize(request: Request) {
   });
 
   return json({
-    tickers: payload.tickers,
+    tickerCount: payload.tickers.length,
     lookbackHours: payload.lookbackHours,
     maxArticles: payload.maxArticles,
     ingest: ingestStage,

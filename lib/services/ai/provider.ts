@@ -1,5 +1,6 @@
 import type {
   ArticleChatMessage,
+  InvestmentThesisMatch,
   MatchReasonCode,
   NewsItem,
   NewsCategory,
@@ -66,6 +67,15 @@ export interface ArticleChatContext {
     relevanceScore?: number | null;
   };
   holdings: HoldingContext[];
+  investmentTheses?: Array<{
+    symbol: string;
+    thesis: string;
+    risks: string[];
+    invalidationNotes: string;
+    horizon: string;
+    conviction: string;
+  }>;
+  thesisMatches?: InvestmentThesisMatch[];
   history: Array<Pick<ArticleChatMessage, "role" | "content">>;
   question: string;
 }
@@ -99,6 +109,14 @@ export interface PortfolioCopilotContext {
     }
   >;
   watchlistSymbols?: string[];
+  investmentTheses?: Array<{
+    symbol: string;
+    thesis: string;
+    risks: string[];
+    invalidationNotes: string;
+    horizon: string;
+    conviction: string;
+  }>;
   history: Array<Pick<ArticleChatMessage, "role" | "content">>;
   question: string;
 }

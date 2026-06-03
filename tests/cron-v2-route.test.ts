@@ -128,6 +128,8 @@ describe("POST /api/news/cron/v2", () => {
     const body = await res.json();
 
     expect(body.providerSet).toBe("candidate");
+    expect(body.tickerCount).toBe(2);
+    expect(body.tickers).toBeUndefined();
     expect(body.insertedArticleIds).toEqual([
       "id-ai1", "id-ai2", "id-ai3", "id-e1", "id-g1", "id-g2", "id-nc1", "id-nc2",
     ]);

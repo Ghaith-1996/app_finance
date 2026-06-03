@@ -47,6 +47,14 @@ vi.mock("@/lib/supabase/client", () => ({
   }),
 }));
 
+vi.mock("@/lib/actions/saved-articles", () => ({
+  getSavedArticleState: vi.fn(async () => false),
+  setSavedArticleState: vi.fn(async (_newsItemId: string, saved: boolean) => ({
+    ok: true,
+    saved,
+  })),
+}));
+
 import type { LastIngestSnapshot } from "@/lib/ingest-hint";
 
 let mockSnapshot: LastIngestSnapshot | null = null;

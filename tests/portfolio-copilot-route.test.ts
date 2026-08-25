@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BillingAccessError } from "@/lib/billing/subscriptions";
 import { AIUsageAccessError } from "@/lib/security/ai-access";
+import { portfolioCopilotPrompt } from "@/lib/services/ai/prompts";
 
 vi.mock("@/lib/security/turnstile", () => ({
   verifyTurnstileToken: vi.fn().mockResolvedValue({ success: true }),
@@ -47,8 +48,12 @@ vi.mock("@/lib/services/ai", async () => {
   };
 });
 
-function createSupabaseMock(opts: { currentPlan?: "free" | "premium" | "ultimate" }) {
+function createSupabaseMock(opts: {
+  currentPlan?: "free" | "premium" | "ultimate";
+  watchlistSymbols?: string[];
+}) {
   const currentPeriodEnd = new Date(Date.now() + 86_400_000).toISOString();
+  const watchlistSymbols = opts.watchlistSymbols ?? [];
   const subscriptionRows =
     opts.currentPlan && opts.currentPlan !== "free"
       ? [
@@ -124,6 +129,19 @@ function createSupabaseMock(opts: { currentPlan?: "free" | "premium" | "ultimate
           select: () => ({
             eq: () => ({
               order: async () => ({ data: [], error: null }),
+            }),
+          }),
+        };
+      }
+      if (table === "watchlist_items") {
+        return {
+          select: () => ({
+            eq: async (column: string, value: unknown) => ({
+              data:
+                column === "user_id" && value === "user-1"
+                  ? watchlistSymbols.map((symbol) => ({ symbol }))
+                  : [],
+              error: null,
             }),
           }),
         };
@@ -211,6 +229,60 @@ describe("POST /api/portfolio-copilot", () => {
     const res = await POST(req);
     expect(res.status).toBe(200);
     expect(mockGetAIProviderById).toHaveBeenCalledWith("openrouter");
+  });
+
+  it("passes the authenticated user's watchlist to the copilot prompt", async () => {
+    currentSupabase = createSupabaseMock({ watchlistSymbols: ["NVDA", " msft "] });
+    mockAnswerPortfolioQuestion.mockImplementation((context) =>
+      portfolioCopilotPrompt(context).user,
+    );
+
+    const req = new Request("http://localhost/api/portfolio-copilot", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        portfolioId: "p1",
+        message: "What should I watch next?",
+        watchlistSymbols: ["OTHER_USER_SYMBOL"],
+      }),
+    });
+
+    const res = await POST(req);
+    const body = (await res.json()) as { answer?: string };
+
+    expect(res.status).toBe(200);
+    expect(body.answer).toContain("WATCHLIST\nNVDA, MSFT");
+    expect(body.answer).not.toContain("OTHER_USER_SYMBOL");
+    expect(mockAnswerPortfolioQuestion).toHaveBeenCalledWith(
+      expect.objectContaining({ watchlistSymbols: ["NVDA", "MSFT"] }),
+    );
+  });
+
+  it("keeps an empty authenticated watchlist as an empty copilot context", async () => {
+    currentSupabase = createSupabaseMock({ watchlistSymbols: [] });
+    mockAnswerPortfolioQuestion.mockImplementation((context) =>
+      portfolioCopilotPrompt(context).user,
+    );
+
+    const req = new Request("http://localhost/api/portfolio-copilot", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        portfolioId: "p1",
+        message: "What should I watch next?",
+        watchlistSymbols: ["OTHER_USER_SYMBOL"],
+      }),
+    });
+
+    const res = await POST(req);
+    const body = (await res.json()) as { answer?: string };
+
+    expect(res.status).toBe(200);
+    expect(body.answer).toContain("WATCHLIST\nNo watchlist symbols connected.");
+    expect(body.answer).not.toContain("OTHER_USER_SYMBOL");
+    expect(mockAnswerPortfolioQuestion).toHaveBeenCalledWith(
+      expect.objectContaining({ watchlistSymbols: [] }),
+    );
   });
 
   it("rejects premium requests for free users", async () => {

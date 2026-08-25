@@ -88,7 +88,6 @@ export async function POST(request: Request) {
     message?: string;
     modelTier?: unknown;
     history?: ChatHistoryItem[];
-    watchlistSymbols?: string[];
     turnstileToken?: string;
   } = {};
 
@@ -101,12 +100,6 @@ export async function POST(request: Request) {
   const portfolioId = body.portfolioId?.trim();
   const message = body.message?.trim();
   const modelTier = parseModelTier(body.modelTier);
-  const watchlistSymbols = Array.isArray(body.watchlistSymbols)
-    ? body.watchlistSymbols
-        .map((symbol) => String(symbol).trim().toUpperCase())
-        .filter(Boolean)
-        .slice(0, 25)
-    : [];
   const history = Array.isArray(body.history)
     ? body.history
         .filter(
@@ -196,7 +189,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const [overview, holdingsResult, runResult] = await Promise.all([
+    const [overview, holdingsResult, runResult, watchlistResult] = await Promise.all([
       computePortfolioOverview(supabase, portfolioId),
       supabase
         .from("holdings")
@@ -211,11 +204,25 @@ export async function POST(request: Request) {
         .order("completed_at", { ascending: false })
         .limit(1)
         .maybeSingle(),
+      // The browser may send a stale or forged snapshot, so only this
+      // authenticated user-scoped query is allowed to populate AI context.
+      supabase.from("watchlist_items").select("symbol").eq("user_id", user.id),
     ]);
 
     if (holdingsResult.error) {
       return respondForChat({ error: holdingsResult.error.message }, 500);
     }
+    if (watchlistResult.error) {
+      return respondForChat({ error: watchlistResult.error.message }, 500);
+    }
+
+    const watchlistSymbols = [
+      ...new Set(
+        (watchlistResult.data ?? [])
+          .map((row) => String(row.symbol ?? "").trim().toUpperCase())
+          .filter(Boolean),
+      ),
+    ].slice(0, 25);
 
     const latestRunId = runResult.data?.id ?? null;
     let insightsRows:

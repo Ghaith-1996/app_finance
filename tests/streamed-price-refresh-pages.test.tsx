@@ -68,8 +68,13 @@ vi.mock("@/components/app/portfolio-csv-import-flow", () => ({
 }));
 
 vi.mock("@/components/app/portfolio-copilot-panel", () => ({
-  PortfolioCopilotPanel: () => <div>Copilot panel</div>,
+  PortfolioCopilotPanel: (props: unknown) => PortfolioCopilotPanel(props),
 }));
+
+const PortfolioCopilotPanel = vi.fn((props: unknown) => {
+  void props;
+  return <div>Copilot panel</div>;
+});
 
 vi.mock("@/components/app/portfolio-holdings-table", () => ({
   PortfolioHoldingsTable: () => <div>Holdings table</div>,
@@ -278,6 +283,7 @@ describe("portfolio value surfaces render cached data and manual refresh control
         coverage: "4 stories",
         primaryGoal: "Stay balanced",
       },
+      watchlistSymbols: ["TSLA"],
       insights: [],
       feedHighlights: [],
     });
@@ -367,5 +373,9 @@ describe("portfolio value surfaces render cached data and manual refresh control
     expect(screen.getByText("Refresh prices")).toBeTruthy();
     expect(screen.queryByText("Refreshing performance chart...")).toBeNull();
     expect(screen.queryByText("Loading synced holdings...")).toBeNull();
+    expect(PortfolioCopilotPanel.mock.calls[0]?.[0]).toMatchObject({
+      portfolioId: "portfolio-1",
+      watchlistSymbols: ["TSLA"],
+    });
   });
 });

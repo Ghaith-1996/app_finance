@@ -268,6 +268,7 @@ export default async function FullPortfolioPage() {
     portfolioId,
     portfolioCreatedAt,
     holdings,
+    watchlistSymbols,
     portfolioOverview,
     portfolioValueSnapshots,
     insights,
@@ -461,6 +462,7 @@ export default async function FullPortfolioPage() {
 
             <PortfolioCopilotPanel
               portfolioId={portfolioId}
+              watchlistSymbols={watchlistSymbols}
               allowedTiers={billingSummary.allowedModelTiers}
               defaultModelTier={billingSummary.defaultModelTier}
               initialTurnstileVerified={initialCopilotTurnstileVerified}

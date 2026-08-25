@@ -1468,6 +1468,7 @@ export async function loadFullPortfolioPageData(): Promise<{
   portfolioId: string | null;
   portfolioCreatedAt: string | null;
   holdings: Holding[];
+  watchlistSymbols: string[];
   sourceType: string | null;
   portfolioOverview: PortfolioOverview;
   portfolioValueSnapshots: PortfolioValueSnapshot[];
@@ -1479,7 +1480,7 @@ export async function loadFullPortfolioPageData(): Promise<{
   const portfolio = context.portfolios[0] ?? null;
   const portfolioId = portfolio?.id ?? null;
 
-  if (!portfolioId || !portfolio) {
+  if (!portfolioId || !portfolio || !context.userId) {
     timer.done();
     return {
       showOnboardingNav: context.showOnboardingNav,
@@ -1487,6 +1488,7 @@ export async function loadFullPortfolioPageData(): Promise<{
       portfolioId: null,
       portfolioCreatedAt: null,
       holdings: [],
+      watchlistSymbols: [],
       sourceType: null,
       portfolioOverview: FULL_OVERVIEW_FALLBACK,
       portfolioValueSnapshots: [],
@@ -1495,13 +1497,28 @@ export async function loadFullPortfolioPageData(): Promise<{
     };
   }
 
-  const [holdingRows, latestRun, feedCount, portfolioValueSnapshots] = await Promise.all([
+  const [
+    holdingRows,
+    latestRun,
+    feedCount,
+    portfolioValueSnapshots,
+    watchlistResult,
+  ] = await Promise.all([
     loadHoldingRows(context.supabase, portfolioId),
     loadLatestAnalysisRun(context.supabase, portfolioId),
     loadFeedItemCount(context.supabase, portfolioId),
     loadPortfolioValueSnapshots(context.supabase, portfolioId, { limit: 72 }),
+    context.supabase.from("watchlist_items").select("symbol").eq("user_id", context.userId),
   ]);
   timer.mark("holdings/overview context");
+
+  const watchlistSymbols = [
+    ...new Set(
+      (watchlistResult.data ?? [])
+        .map((row) => String(row.symbol ?? "").trim().toUpperCase())
+        .filter(Boolean),
+    ),
+  ].slice(0, 25);
 
   const [insights, feedHighlights, reportsBySymbol] = await Promise.all([
     loadPortfolioInsightsForRun(context.supabase, latestRun?.id ?? null),
@@ -1525,6 +1542,7 @@ export async function loadFullPortfolioPageData(): Promise<{
     portfolioId,
     portfolioCreatedAt: portfolio.createdAt,
     holdings,
+    watchlistSymbols,
     sourceType: portfolio.sourceType,
     portfolioOverview: buildPortfolioOverview(holdings, {
       lastSyncedAt: portfolio.lastSyncedAt,

@@ -105,6 +105,13 @@ function createSupabaseMock() {
           }),
         };
       }
+      if (table === "watchlist_items") {
+        return {
+          select: () => ({
+            eq: async () => ({ data: [], error: null }),
+          }),
+        };
+      }
       if (table === "analysis_runs") {
         return {
           select: () => ({

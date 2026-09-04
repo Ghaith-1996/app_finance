@@ -1,3 +1,5 @@
+// @vitest-environment node
+
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const spawnMock = vi.fn();
@@ -90,8 +92,11 @@ describe("GET /api/news/health", () => {
     );
 
     const res = await GET(new Request("http://localhost/api/news/health"));
+    const diagnosticBody = await res.clone().json();
 
-    expect(res.status).toBe(200);
+    expect(res.status, JSON.stringify({ body: diagnosticBody, spawnCalls: spawnMock.mock.calls })).toBe(
+      200,
+    );
     const body = await res.json();
     expect(body.ok).toBe(true);
     expect(body.checks[0]).toEqual({ name: "python", ok: true });

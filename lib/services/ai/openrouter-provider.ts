@@ -8,7 +8,7 @@ import type {
   PortfolioCopilotContext,
   Sentiment,
 } from "./provider";
-import { assertNonEmptyArticleChatReply } from "./ai-chat-errors";
+import { AIChatError, assertNonEmptyArticleChatReply } from "./ai-chat-errors";
 import {
   ARTICLE_CHAT_MAX_TOKENS,
   PORTFOLIO_COPILOT_MAX_TOKENS,
@@ -95,7 +95,21 @@ export function createOpenRouterProvider(): IAIProvider {
   if (referer) extraHeaders["HTTP-Referer"] = referer;
   if (title) extraHeaders["X-Title"] = title;
 
-  if (!key) return stubAIProvider;
+  if (!key) {
+    const chatError = new AIChatError(
+      "provider_auth",
+      "OpenRouter is misconfigured: OPENROUTER_API_KEY is missing.",
+    );
+    return {
+      ...stubAIProvider,
+      async answerArticleQuestion() {
+        throw chatError;
+      },
+      async answerPortfolioQuestion() {
+        throw chatError;
+      },
+    };
+  }
 
   function msgs(p: { system: string; user: string }) {
     return [
@@ -202,18 +216,14 @@ export function createOpenRouterProvider(): IAIProvider {
     },
 
     async answerPortfolioQuestion(context: PortfolioCopilotContext) {
-      try {
-        const text = await chatComplete(
-          key,
-          model,
-          msgs(portfolioCopilotPrompt(context)),
-          PORTFOLIO_COPILOT_MAX_TOKENS,
-          extraHeaders,
-        );
-        return text ?? (await stubAIProvider.answerPortfolioQuestion(context));
-      } catch {
-        return stubAIProvider.answerPortfolioQuestion(context);
-      }
+      const text = await chatComplete(
+        key,
+        model,
+        msgs(portfolioCopilotPrompt(context)),
+        PORTFOLIO_COPILOT_MAX_TOKENS,
+        extraHeaders,
+      );
+      return assertNonEmptyArticleChatReply(text);
     },
   };
 }

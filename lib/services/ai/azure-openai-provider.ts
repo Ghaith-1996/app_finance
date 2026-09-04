@@ -268,7 +268,7 @@ export function createAzureOpenAIProvider(): IAIProvider {
 
     async answerArticleQuestion(context: ArticleChatContext) {
       const p = articleChatPrompt(context);
-      const request = msgs(p, context.history);
+      const request = msgs(p);
       const text = await respond(
         key,
         baseUrl,
@@ -282,22 +282,18 @@ export function createAzureOpenAIProvider(): IAIProvider {
     },
 
     async answerPortfolioQuestion(context: PortfolioCopilotContext) {
-      try {
-        const p = portfolioCopilotPrompt(context);
-        const request = msgs(p, context.history);
-        const text = await respond(
-          key,
-          baseUrl,
-          model,
-          request.system,
-          request.input,
-          PORTFOLIO_COPILOT_MAX_TOKENS,
-          reasoningEffort,
-        );
-        return text ?? (await stubAIProvider.answerPortfolioQuestion(context));
-      } catch {
-        return stubAIProvider.answerPortfolioQuestion(context);
-      }
+      const p = portfolioCopilotPrompt(context);
+      const request = msgs(p);
+      const text = await respond(
+        key,
+        baseUrl,
+        model,
+        request.system,
+        request.input,
+        PORTFOLIO_COPILOT_MAX_TOKENS,
+        reasoningEffort,
+      );
+      return assertNonEmptyArticleChatReply(text);
     },
   };
 }

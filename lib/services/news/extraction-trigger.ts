@@ -24,7 +24,11 @@ export function spawnArticleExtractionWorker(articleIds: string[]): void {
 
   const proc = spawn("python", args, opts);
   proc.on("error", () => {
-    spawn("python3", args, opts).unref();
+    const fallback = spawn("python3", args, opts);
+    fallback.on("error", () => {
+      /* Best-effort extraction: neither Python executable is available. */
+    });
+    fallback.unref();
   });
   proc.unref();
 }

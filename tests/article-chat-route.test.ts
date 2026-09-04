@@ -50,6 +50,9 @@ vi.mock("@/lib/services/ai", async () => {
 let insertAssistantCalls = 0;
 let insertUserCalls = 0;
 const messageRows: Array<{ id: string; role: string; content: string; created_at: string }> = [];
+const insertedMessageBatches: Array<
+  Array<{ role: string; content: string; thread_id: string; created_at?: string }>
+> = [];
 
 function createSupabaseMock(opts: {
   insertUserError?: Error | null;
@@ -151,25 +154,35 @@ function createSupabaseMock(opts: {
       }
       if (table === "article_chat_messages") {
         return {
-          insert: (row: { role: string; content: string; thread_id: string }) => {
-            if (row.role === "user") {
-              insertUserCalls += 1;
-              messageRows.push({
-                id: `u-${insertUserCalls}`,
-                role: "user",
-                content: row.content,
-                created_at: new Date().toISOString(),
-              });
-              if (opts.insertUserError) return Promise.resolve({ error: opts.insertUserError });
-              return Promise.resolve({ error: null });
+          insert: (
+            value:
+              | { role: string; content: string; thread_id: string; created_at?: string }
+              | Array<{ role: string; content: string; thread_id: string; created_at?: string }>,
+          ) => {
+            const rows = Array.isArray(value) ? value : [value];
+            insertedMessageBatches.push(rows);
+            if (opts.insertUserError && rows.some((row) => row.role === "user")) {
+              return Promise.resolve({ error: opts.insertUserError });
             }
-            insertAssistantCalls += 1;
-            messageRows.push({
-              id: `a-${insertAssistantCalls}`,
-              role: "assistant",
-              content: row.content,
-              created_at: new Date().toISOString(),
-            });
+            for (const row of rows) {
+              if (row.role === "user") {
+                insertUserCalls += 1;
+                messageRows.push({
+                  id: `u-${insertUserCalls}`,
+                  role: "user",
+                  content: row.content,
+                  created_at: row.created_at ?? new Date().toISOString(),
+                });
+                continue;
+              }
+              insertAssistantCalls += 1;
+              messageRows.push({
+                id: `a-${insertAssistantCalls}`,
+                role: "assistant",
+                content: row.content,
+                created_at: row.created_at ?? new Date().toISOString(),
+              });
+            }
             return Promise.resolve({ error: null });
           },
           select: () => ({
@@ -297,6 +310,7 @@ describe("POST /api/article-chat", () => {
     insertAssistantCalls = 0;
     insertUserCalls = 0;
     messageRows.length = 0;
+    insertedMessageBatches.length = 0;
     mockAnswerArticleQuestion.mockReset();
     mockAnswerPortfolioQuestion.mockReset();
     mockAssertUserCanUseAI.mockReset();
@@ -331,7 +345,7 @@ describe("POST /api/article-chat", () => {
     expect(mockGetAIProviderById).toHaveBeenCalledWith("openrouter");
   });
 
-  it("returns 503 and does not insert assistant when AI throws AIChatError", async () => {
+  it("returns 503 without persisting either half of a failed exchange", async () => {
     mockAnswerArticleQuestion.mockRejectedValue(new AIChatError("provider_unavailable", "down"));
 
     const req = new Request("http://localhost/api/article-chat", {
@@ -349,7 +363,7 @@ describe("POST /api/article-chat", () => {
     const body = (await res.json()) as { error?: string; code?: string };
     expect(body.error).toMatch(/temporarily unavailable/i);
     expect(body.code).toBe("provider_unavailable");
-    expect(insertUserCalls).toBe(1);
+    expect(insertUserCalls).toBe(0);
     expect(insertAssistantCalls).toBe(0);
     expect(mockGetAIProviderById).toHaveBeenCalledWith("openrouter");
   });
@@ -509,6 +523,44 @@ describe("POST /api/article-chat", () => {
     expect(body.error).toMatch(/too long/i);
   });
 
+  it("returns actionable copy when the upstream provider is rate limited", async () => {
+    mockAnswerArticleQuestion.mockRejectedValue(
+      new Error("OpenRouter HTTP 429: Provider returned too many requests"),
+    );
+
+    const req = new Request("http://localhost/api/article-chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ portfolioId: "p1", newsItemId: "n1", message: "test" }),
+    });
+
+    const res = await POST(req);
+    const body = (await res.json()) as { error?: string; code?: string };
+
+    expect(res.status).toBe(503);
+    expect(body.code).toBe("provider_rate_limited");
+    expect(body.error).toMatch(/busy|rate.?limited/i);
+  });
+
+  it("returns actionable copy when the provider rejects oversized context", async () => {
+    mockAnswerArticleQuestion.mockRejectedValue(
+      new Error("Azure OpenAI HTTP 400: maximum context length exceeded"),
+    );
+
+    const req = new Request("http://localhost/api/article-chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ portfolioId: "p1", newsItemId: "n1", message: "test" }),
+    });
+
+    const res = await POST(req);
+    const body = (await res.json()) as { error?: string; code?: string };
+
+    expect(res.status).toBe(503);
+    expect(body.code).toBe("provider_context_limit");
+    expect(body.error).toMatch(/too much context/i);
+  });
+
   it("returns provider_bad_response code for empty model output", async () => {
     mockAnswerArticleQuestion.mockRejectedValue(
       new AIChatError("provider_bad_response", "Model returned an empty answer."),
@@ -543,8 +595,83 @@ describe("POST /api/article-chat", () => {
     const res = await POST(req);
     expect(res.status).toBe(200);
     expect(insertAssistantCalls).toBe(1);
+    expect(insertedMessageBatches).toHaveLength(1);
+    expect(insertedMessageBatches[0]?.map((row) => row.role)).toEqual(["user", "assistant"]);
+    expect(
+      Date.parse(insertedMessageBatches[0]?.[0]?.created_at ?? "") <
+        Date.parse(insertedMessageBatches[0]?.[1]?.created_at ?? ""),
+    ).toBe(true);
     const body = (await res.json()) as { messages?: Array<{ role: string; content: string }> };
     expect(body.messages?.some((m) => m.role === "assistant" && m.content.includes("real answer"))).toBe(true);
+  });
+
+  it("passes prior thread messages without duplicating the current question in history", async () => {
+    messageRows.push({
+      id: "prior-assistant",
+      role: "assistant",
+      content: "Earlier answer",
+      created_at: "2026-03-24T12:00:00.000Z",
+    });
+    mockAnswerArticleQuestion.mockImplementation(async (context) =>
+      JSON.stringify({ history: context.history, question: context.question }),
+    );
+
+    const req = new Request("http://localhost/api/article-chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        portfolioId: "p1",
+        newsItemId: "n1",
+        message: "Current question",
+      }),
+    });
+
+    const res = await POST(req);
+    const body = (await res.json()) as {
+      messages?: Array<{ role: string; content: string }>;
+    };
+    const assistantReply = body.messages?.findLast((message) => message.role === "assistant");
+
+    expect(res.status).toBe(200);
+    expect(JSON.parse(assistantReply?.content ?? "{}")).toEqual({
+      history: [{ role: "assistant", content: "Earlier answer" }],
+      question: "Current question",
+    });
+  });
+
+  it("does not add a failed question to history when the user retries", async () => {
+    mockAnswerArticleQuestion
+      .mockRejectedValueOnce(new AIChatError("provider_unavailable", "down"))
+      .mockImplementationOnce(async (context) =>
+        JSON.stringify({ history: context.history, question: context.question }),
+      );
+
+    const makeRequest = () =>
+      new Request("http://localhost/api/article-chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          portfolioId: "p1",
+          newsItemId: "n1",
+          message: "Retry this question",
+        }),
+      });
+
+    const firstResponse = await POST(makeRequest());
+    const retryResponse = await POST(makeRequest());
+    const body = (await retryResponse.json()) as {
+      messages?: Array<{ role: string; content: string }>;
+    };
+    const assistantReply = body.messages?.findLast((entry) => entry.role === "assistant");
+
+    expect(firstResponse.status).toBe(503);
+    expect(retryResponse.status).toBe(200);
+    expect(JSON.parse(assistantReply?.content ?? "{}")).toEqual({
+      history: [],
+      question: "Retry this question",
+    });
+    expect(insertUserCalls).toBe(1);
+    expect(insertAssistantCalls).toBe(1);
   });
 
   it("returns 429 with retry metadata when the durable burst limit is hit", async () => {

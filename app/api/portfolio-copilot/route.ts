@@ -64,6 +64,10 @@ function userFacingMessage(code: AIChatErrorCode): string {
       return "AI provider credentials are invalid or missing. An admin needs to check the API key and deployment configuration.";
     case "provider_timeout":
       return "The AI provider took too long to respond. Please try again in a moment.";
+    case "provider_rate_limited":
+      return "The selected AI provider is busy or rate-limited. Please try again shortly.";
+    case "provider_context_limit":
+      return "This conversation contains too much context for the AI provider. Please try again with a shorter question.";
     case "provider_bad_response":
       return "The AI provider returned an unusable response. Please try again or rephrase your question.";
     case "provider_unavailable":

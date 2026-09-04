@@ -134,23 +134,29 @@ function createSupabaseMock() {
       }
       if (table === "article_chat_messages") {
         return {
-          insert: (row: { role: string; content: string }) => {
-            if (row.role === "user") {
-              insertUserCalls += 1;
-              messageRows.push({
-                id: `u-${insertUserCalls}`,
-                role: "user",
-                content: row.content,
-                created_at: new Date().toISOString(),
-              });
-            } else {
-              insertAssistantCalls += 1;
-              messageRows.push({
-                id: `a-${insertAssistantCalls}`,
-                role: "assistant",
-                content: row.content,
-                created_at: new Date().toISOString(),
-              });
+          insert: (
+            value:
+              | { role: string; content: string }
+              | Array<{ role: string; content: string }>,
+          ) => {
+            for (const row of Array.isArray(value) ? value : [value]) {
+              if (row.role === "user") {
+                insertUserCalls += 1;
+                messageRows.push({
+                  id: `u-${insertUserCalls}`,
+                  role: "user",
+                  content: row.content,
+                  created_at: new Date().toISOString(),
+                });
+              } else {
+                insertAssistantCalls += 1;
+                messageRows.push({
+                  id: `a-${insertAssistantCalls}`,
+                  role: "assistant",
+                  content: row.content,
+                  created_at: new Date().toISOString(),
+                });
+              }
             }
             return Promise.resolve({ error: null });
           },

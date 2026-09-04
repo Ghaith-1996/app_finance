@@ -69,6 +69,7 @@ describe("portfolio copilot token budgets", () => {
       max_output_tokens: number;
     };
     expect(body.max_output_tokens).toBe(PORTFOLIO_COPILOT_MAX_TOKENS);
+    expect(JSON.stringify(body).match(/Earlier question/g)).toHaveLength(1);
   });
 
   it("uses 2000 tokens for the OpenAI portfolio-copilot path", async () => {
@@ -91,6 +92,7 @@ describe("portfolio copilot token budgets", () => {
       max_tokens: number;
     };
     expect(body.max_tokens).toBe(PORTFOLIO_COPILOT_MAX_TOKENS);
+    expect(JSON.stringify(body).match(/Earlier question/g)).toHaveLength(1);
   });
 
   it("uses 2000 tokens for the OpenRouter portfolio-copilot path", async () => {
@@ -114,6 +116,7 @@ describe("portfolio copilot token budgets", () => {
       max_tokens: number;
     };
     expect(body.max_tokens).toBe(PORTFOLIO_COPILOT_MAX_TOKENS);
+    expect(JSON.stringify(body).match(/Earlier question/g)).toHaveLength(1);
   });
 
   it("uses 2000 tokens for the Mistral portfolio-copilot path", async () => {
@@ -137,6 +140,7 @@ describe("portfolio copilot token budgets", () => {
       max_tokens: number;
     };
     expect(body.max_tokens).toBe(PORTFOLIO_COPILOT_MAX_TOKENS);
+    expect(JSON.stringify(body).match(/Earlier question/g)).toHaveLength(1);
   });
 
   it("uses 2000 tokens for the Anthropic portfolio-copilot path", async () => {
@@ -159,5 +163,6 @@ describe("portfolio copilot token budgets", () => {
       max_tokens: number;
     };
     expect(body.max_tokens).toBe(PORTFOLIO_COPILOT_MAX_TOKENS);
+    expect(JSON.stringify(body).match(/Earlier question/g)).toHaveLength(1);
   });
 });

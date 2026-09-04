@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  articleChatPrompt,
   articleEnrichmentPrompt,
   portfolioMatchPrompt,
   portfolioCopilotPrompt,
@@ -128,6 +129,58 @@ describe("AI prompt builders", () => {
       expect(system).toContain("title");
       expect(system).toContain("article detail");
       expect(user).toContain("Detailed article body.");
+    });
+  });
+
+  describe("articleChatPrompt", () => {
+    it("caps each persisted history entry at 4000 characters", () => {
+      const longHistory = "H".repeat(4_500);
+      const { user } = articleChatPrompt({
+        article: {
+          headline: "Headline",
+          source: "Source",
+          publishedAt: "2026-03-24T12:00:00.000Z",
+          category: "other",
+          stockTags: [],
+          tickerImpacts: [],
+        },
+        holdings: [],
+        history: [{ role: "assistant", content: longHistory }],
+        question: "What matters?",
+      });
+
+      expect(user).toContain("H".repeat(4_000));
+      expect(user).not.toContain("H".repeat(4_001));
+    });
+
+    it("caps saved-thesis text at the domain limit", () => {
+      const longThesis = "T".repeat(1_500);
+      const { user } = articleChatPrompt({
+        article: {
+          headline: "Headline",
+          source: "Source",
+          publishedAt: "2026-03-24T12:00:00.000Z",
+          category: "other",
+          stockTags: ["NVDA"],
+          tickerImpacts: [],
+        },
+        holdings: [],
+        investmentTheses: [
+          {
+            symbol: "NVDA",
+            thesis: longThesis,
+            risks: [],
+            invalidationNotes: "",
+            horizon: "long",
+            conviction: "high",
+          },
+        ],
+        history: [],
+        question: "What matters?",
+      });
+
+      expect(user).toContain("T".repeat(1_200));
+      expect(user).not.toContain("T".repeat(1_201));
     });
   });
 

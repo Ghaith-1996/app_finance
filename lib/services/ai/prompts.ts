@@ -16,20 +16,34 @@ import {
 } from "./holding-name-utils";
 
 const CATEGORIES_CSV = NEWS_CATEGORIES.join(", ");
+const CHAT_HISTORY_LIMIT = 12;
+const CHAT_HISTORY_ITEM_MAX_CHARS = 4_000;
+const INVESTMENT_THESIS_LIMIT = 12;
+const INVESTMENT_THESIS_FIELD_MAX_CHARS = 1_200;
+const INVESTMENT_THESIS_RISK_LIMIT = 8;
+
+function capPromptText(value: string, maxChars: number): string {
+  return value.slice(0, maxChars);
+}
 
 function formatInvestmentThesesBlock(
   theses: PortfolioCopilotContext["investmentTheses"] | ArticleChatContext["investmentTheses"],
 ): string {
   if (!theses?.length) return "No saved investment theses.";
   return theses
-    .slice(0, 12)
+    .slice(0, INVESTMENT_THESIS_LIMIT)
     .map((item) => {
-      const risks = item.risks.length ? item.risks.join("; ") : "none";
+      const risks = item.risks.length
+        ? item.risks
+            .slice(0, INVESTMENT_THESIS_RISK_LIMIT)
+            .map((risk) => capPromptText(risk, INVESTMENT_THESIS_FIELD_MAX_CHARS))
+            .join("; ")
+        : "none";
       return [
         `${item.symbol}`,
-        `Thesis: ${item.thesis || "none"}`,
+        `Thesis: ${capPromptText(item.thesis, INVESTMENT_THESIS_FIELD_MAX_CHARS) || "none"}`,
         `Risks: ${risks}`,
-        `Review trigger: ${item.invalidationNotes || "none"}`,
+        `Review trigger: ${capPromptText(item.invalidationNotes, INVESTMENT_THESIS_FIELD_MAX_CHARS) || "none"}`,
         `Horizon: ${item.horizon}`,
         `Conviction: ${item.conviction}`,
       ].join("\n");
@@ -229,7 +243,11 @@ export function articleChatPrompt(
     : "None";
   const historyBlock = context.history.length
     ? context.history
-        .map((msg) => `${msg.role.toUpperCase()}: ${msg.content}`)
+        .slice(-CHAT_HISTORY_LIMIT)
+        .map(
+          (msg) =>
+            `${msg.role.toUpperCase()}: ${capPromptText(msg.content, CHAT_HISTORY_ITEM_MAX_CHARS)}`,
+        )
         .join("\n")
     : "No prior conversation.";
   const matchedHoldings = article.matchedHoldings?.length

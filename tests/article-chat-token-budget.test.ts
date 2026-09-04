@@ -64,8 +64,13 @@ describe("article chat token budgets", () => {
 
     const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as {
       max_output_tokens: number;
+      input: Array<{ role: string; content: string }>;
     };
     expect(body.max_output_tokens).toBe(ARTICLE_CHAT_MAX_TOKENS);
+    expect(
+      body.input.filter((message) => message.content.includes("Earlier question")),
+    ).toHaveLength(1);
+    expect(JSON.stringify(body).match(/Why does this matter\?/g)).toHaveLength(1);
   });
 
   it("uses 2000 tokens for the OpenAI article-chat path", async () => {
@@ -86,8 +91,13 @@ describe("article chat token budgets", () => {
 
     const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as {
       max_tokens: number;
+      messages: Array<{ role: string; content: string }>;
     };
     expect(body.max_tokens).toBe(ARTICLE_CHAT_MAX_TOKENS);
+    expect(
+      body.messages.filter((message) => message.content.includes("Earlier question")),
+    ).toHaveLength(1);
+    expect(JSON.stringify(body).match(/Why does this matter\?/g)).toHaveLength(1);
   });
 
   it("uses 2000 tokens for the OpenRouter article-chat path", async () => {
@@ -109,8 +119,13 @@ describe("article chat token budgets", () => {
 
     const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as {
       max_tokens: number;
+      messages: Array<{ role: string; content: string }>;
     };
     expect(body.max_tokens).toBe(ARTICLE_CHAT_MAX_TOKENS);
+    expect(
+      body.messages.filter((message) => message.content.includes("Earlier question")),
+    ).toHaveLength(1);
+    expect(JSON.stringify(body).match(/Why does this matter\?/g)).toHaveLength(1);
   });
 
   it("uses 2000 tokens for the Mistral article-chat path", async () => {
@@ -132,8 +147,13 @@ describe("article chat token budgets", () => {
 
     const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as {
       max_tokens: number;
+      messages: Array<{ role: string; content: string }>;
     };
     expect(body.max_tokens).toBe(ARTICLE_CHAT_MAX_TOKENS);
+    expect(
+      body.messages.filter((message) => message.content.includes("Earlier question")),
+    ).toHaveLength(1);
+    expect(JSON.stringify(body).match(/Why does this matter\?/g)).toHaveLength(1);
   });
 
   it("uses 2000 tokens for the Anthropic article-chat path", async () => {
@@ -156,5 +176,6 @@ describe("article chat token budgets", () => {
       max_tokens: number;
     };
     expect(body.max_tokens).toBe(ARTICLE_CHAT_MAX_TOKENS);
+    expect(JSON.stringify(body).match(/Why does this matter\?/g)).toHaveLength(1);
   });
 });

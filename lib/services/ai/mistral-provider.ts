@@ -226,7 +226,7 @@ export function createMistralProvider(): IAIProvider {
 
     async answerArticleQuestion(context: ArticleChatContext) {
       const p = articleChatPrompt(context);
-      const request = msgs(p, context.history);
+      const request = msgs(p);
       const text = await respond(
         key,
         model,
@@ -238,20 +238,16 @@ export function createMistralProvider(): IAIProvider {
     },
 
     async answerPortfolioQuestion(context: PortfolioCopilotContext) {
-      try {
-        const p = portfolioCopilotPrompt(context);
-        const request = msgs(p, context.history);
-        const text = await respond(
-          key,
-          model,
-          request.system,
-          request.input,
-          PORTFOLIO_COPILOT_MAX_TOKENS,
-        );
-        return text ?? (await stubAIProvider.answerPortfolioQuestion(context));
-      } catch {
-        return stubAIProvider.answerPortfolioQuestion(context);
-      }
+      const p = portfolioCopilotPrompt(context);
+      const request = msgs(p);
+      const text = await respond(
+        key,
+        model,
+        request.system,
+        request.input,
+        PORTFOLIO_COPILOT_MAX_TOKENS,
+      );
+      return assertNonEmptyArticleChatReply(text);
     },
   };
 }

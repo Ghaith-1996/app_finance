@@ -95,6 +95,10 @@ function userFacingMessage(code: AIChatErrorCode): string {
       return "AI provider credentials are invalid or missing. An admin needs to check the API key and deployment configuration.";
     case "provider_timeout":
       return "The AI provider took too long to respond. Please try again in a moment.";
+    case "provider_rate_limited":
+      return "The selected AI provider is busy or rate-limited. Please try again shortly.";
+    case "provider_context_limit":
+      return "This conversation contains too much context for the AI provider. Please try again with a shorter question.";
     case "provider_bad_response":
       return "The AI provider returned an unusable response. Please try again or rephrase your question.";
     case "provider_unavailable":
@@ -756,30 +760,14 @@ export async function POST(request: Request) {
     }
 
     const threadId = await getOrCreateThread(supabase, user.id, portfolioId, newsItemId);
-
-    const { error: insertUserError } = await supabase
-      .from("article_chat_messages")
-      .insert({
-        thread_id: threadId,
-        role: "user",
-        content: message,
-      });
-
-    if (insertUserError) {
-      return respondForChat({ error: insertUserError.message }, 500);
-    }
-
-    const recentMessages = await loadMessages(supabase, threadId);
+    const priorMessages = await loadMessages(supabase, threadId);
     const promptContext = await loadArticlePromptContext(supabase, portfolioId, newsItemId);
 
     let answer: string;
     try {
       answer = await ai.answerArticleQuestion({
         ...promptContext,
-        history: recentMessages.slice(-12).map((msg) => ({
-          role: msg.role,
-          content: msg.content,
-        })),
+        history: parseHistory(priorMessages),
         question: message,
       });
     } catch (err) {
@@ -800,16 +788,27 @@ export async function POST(request: Request) {
       );
     }
 
-    const { error: insertAssistantError } = await supabase
+    const userCreatedAt = new Date();
+    const assistantCreatedAt = new Date(userCreatedAt.getTime() + 1);
+    const { error: insertMessagesError } = await supabase
       .from("article_chat_messages")
-      .insert({
-        thread_id: threadId,
-        role: "assistant",
-        content: answer,
-      });
+      .insert([
+        {
+          thread_id: threadId,
+          role: "user",
+          content: message,
+          created_at: userCreatedAt.toISOString(),
+        },
+        {
+          thread_id: threadId,
+          role: "assistant",
+          content: answer,
+          created_at: assistantCreatedAt.toISOString(),
+        },
+      ]);
 
-    if (insertAssistantError) {
-      return respondForChat({ error: insertAssistantError.message }, 500);
+    if (insertMessagesError) {
+      return respondForChat({ error: insertMessagesError.message }, 500);
     }
 
     const { error: updateThreadError } = await supabase

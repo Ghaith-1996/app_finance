@@ -24,10 +24,6 @@ export const stubAIProvider: IAIProvider = {
     return "neutral";
   },
 
-  async scoreRelevance() {
-    return 0;
-  },
-
   async assessPortfolioMatch(): Promise<PortfolioMatchAssessment> {
     return {
       relevanceScore: 0,
@@ -60,11 +56,6 @@ export const stubAIProvider: IAIProvider = {
         detail: "Upcoming catalysts may affect portfolio names; check the feed for updates.",
       },
     ];
-  },
-
-  async explainWhyItMatters(article: string, holdings: HoldingContext[]) {
-    const symbols = holdings.map((h) => h.symbol).slice(0, 3).join(", ");
-    return `This story may affect positions such as ${symbols}. ${article.slice(0, 150)}...`;
   },
 
   async analyzeArticle(_headline: string, _content: string, hintTickers?: string[]): Promise<ArticleAnalysis> {

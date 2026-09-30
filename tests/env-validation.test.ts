@@ -12,40 +12,20 @@ describe("env validation", () => {
     process.env = ENV_BACKUP;
   });
 
-  it("requireFinnhubKey throws when FINNHUB_API_KEY is missing", async () => {
-    delete process.env.FINNHUB_API_KEY;
-    const { requireFinnhubKey } = await import("@/lib/env");
-    expect(() => requireFinnhubKey()).toThrow("FINNHUB_API_KEY");
+  it("requires the digest cron secret when missing and returns it when configured", async () => {
+    const { requireDigestCronSecret } = await import("@/lib/env");
+    delete process.env.DIGEST_CRON_SECRET;
+    expect(() => requireDigestCronSecret()).toThrow("DIGEST_CRON_SECRET");
+    process.env.DIGEST_CRON_SECRET = "digest_test_secret";
+    expect(requireDigestCronSecret()).toBe("digest_test_secret");
   });
 
-  it("requireFinnhubKey returns value when set", async () => {
-    process.env.FINNHUB_API_KEY = "fk_test";
-    const { requireFinnhubKey } = await import("@/lib/env");
-    expect(requireFinnhubKey()).toBe("fk_test");
-  });
-
-  it("requireTwelveDataKey throws when TWELVE_DATA_API_KEY is missing", async () => {
-    delete process.env.TWELVE_DATA_API_KEY;
-    const { requireTwelveDataKey } = await import("@/lib/env");
-    expect(() => requireTwelveDataKey()).toThrow("TWELVE_DATA_API_KEY");
-  });
-
-  it("requireTwelveDataKey returns value when set", async () => {
-    process.env.TWELVE_DATA_API_KEY = "td_test";
-    const { requireTwelveDataKey } = await import("@/lib/env");
-    expect(requireTwelveDataKey()).toBe("td_test");
-  });
-
-  it("hasKey returns true when variable exists", async () => {
-    process.env.FINNHUB_API_KEY = "yes";
-    const { hasKey } = await import("@/lib/env");
-    expect(hasKey("FINNHUB_API_KEY")).toBe(true);
-  });
-
-  it("hasKey returns false when variable is absent", async () => {
-    delete process.env.SOME_MISSING_KEY;
-    const { hasKey } = await import("@/lib/env");
-    expect(hasKey("SOME_MISSING_KEY")).toBe(false);
+  it("requires the Resend API key when missing and returns it when configured", async () => {
+    const { requireResendApiKey } = await import("@/lib/env");
+    delete process.env.RESEND_API_KEY;
+    expect(() => requireResendApiKey()).toThrow("RESEND_API_KEY");
+    process.env.RESEND_API_KEY = "resend_test_key";
+    expect(requireResendApiKey()).toBe("resend_test_key");
   });
 });
 

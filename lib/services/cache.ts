@@ -18,10 +18,6 @@ export function cacheSet<T>(key: string, value: T, ttlMs: number = DEFAULT_TTL_M
   store.set(key, { value, expiresAt: Date.now() + ttlMs });
 }
 
-export function cacheDel(key: string): void {
-  store.delete(key);
-}
-
 /** Fetch-through helper: returns cached value if fresh, otherwise calls `fn` and caches the result. */
 export async function cached<T>(
   key: string,

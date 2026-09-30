@@ -131,21 +131,6 @@ export function sentimentPrompt(
 }
 
 // ---------------------------------------------------------------------------
-// Relevance scoring
-// ---------------------------------------------------------------------------
-
-export function relevancePrompt(
-  article: string,
-  holdings: HoldingContext[],
-): { system: string; user: string } {
-  const symbols = holdings.map((h) => h.symbol).join(", ");
-  return {
-    system: `Reply with a number from 0 to 100 indicating how relevant this news is to an investor holding: ${symbols}. Only output the number.`,
-    user: article.slice(0, 1000),
-  };
-}
-
-// ---------------------------------------------------------------------------
 // Structured portfolio match assessment
 // ---------------------------------------------------------------------------
 
@@ -173,21 +158,6 @@ export function portfolioMatchPrompt(
       "Return JSON only with this exact shape: " +
       '{"relevanceScore":0,"whyItMatters":"","matchedHoldings":["AAPL"],"matchReasonCodes":["sector_exposure_explicit"]}',
     user: article.slice(0, 4000),
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Why it matters
-// ---------------------------------------------------------------------------
-
-export function whyItMattersPrompt(
-  article: string,
-  holdings: HoldingContext[],
-): { system: string; user: string } {
-  const symbols = holdings.map((h) => h.symbol).join(", ");
-  return {
-    system: `In one sentence, explain why this news matters to an investor holding: ${symbols}. Focus on direct portfolio impact.`,
-    user: article.slice(0, 3000),
   };
 }
 

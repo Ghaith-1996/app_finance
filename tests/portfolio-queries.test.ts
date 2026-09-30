@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  buildPortfolioQueries,
-  MAX_PORTFOLIO_QUERIES,
-} from "@/lib/services/news/portfolio-queries";
+import { buildPortfolioQueries } from "@/lib/services/news/portfolio-queries";
 
 describe("buildPortfolioQueries", () => {
   it("builds deterministic company+ticker search queries", () => {
@@ -44,14 +41,14 @@ describe("buildPortfolioQueries", () => {
     expect(queries).toEqual(['"Apple Inc" AAPL stock']);
   });
 
-  it("caps the query count at MAX_PORTFOLIO_QUERIES", () => {
+  it("caps the query count at 8", () => {
     const holdings = Array.from({ length: 20 }, (_, i) => ({
       symbol: `SYM${String(i).padStart(2, "0")}`,
       company: `Company ${i}`,
     }));
 
     const queries = buildPortfolioQueries(holdings);
-    expect(queries.length).toBe(MAX_PORTFOLIO_QUERIES);
+    expect(queries).toHaveLength(8);
   });
 
   it("deduplicates identical queries", () => {
@@ -82,9 +79,5 @@ describe("buildPortfolioQueries", () => {
     ]);
 
     expect(queries).toEqual(['"TSLA" stock']);
-  });
-
-  it("exports MAX_PORTFOLIO_QUERIES as 8", () => {
-    expect(MAX_PORTFOLIO_QUERIES).toBe(8);
   });
 });

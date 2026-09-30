@@ -47,7 +47,6 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class SourceConfig:
-    key: str
     label: str
     fetcher: Callable[..., SourceFetchBundle]
     uses_tickers: bool = False
@@ -61,7 +60,6 @@ class SourceConfig:
 
 SOURCE_REGISTRY: dict[str, SourceConfig] = {
     "edgar": SourceConfig(
-        key="edgar",
         label="EDGAR",
         fetcher=fetch_edgar_news,
         uses_tickers=True,
@@ -71,7 +69,6 @@ SOURCE_REGISTRY: dict[str, SourceConfig] = {
         import_label="edgartools",
     ),
     "newsapi": SourceConfig(
-        key="newsapi",
         label="NewsAPI",
         fetcher=fetch_newsapi_news,
         env_var="NEWSAPI_KEY",
@@ -80,7 +77,6 @@ SOURCE_REGISTRY: dict[str, SourceConfig] = {
         import_label="newsapi-python",
     ),
     "gnews": SourceConfig(
-        key="gnews",
         label="GNews",
         fetcher=fetch_gnews_news,
         accepts_gnews_queries=True,
@@ -94,7 +90,6 @@ VALID_SOURCES = frozenset(SOURCE_REGISTRY)
 CANDIDATE_SOURCE_REGISTRY: dict[str, SourceConfig] = {
     "edgar": SOURCE_REGISTRY["edgar"],
     "newsapi_ai": SourceConfig(
-        key="newsapi_ai",
         label="NewsAPI.ai",
         fetcher=fetch_newsapi_ai_news,
         accepts_queries=True,
@@ -103,7 +98,6 @@ CANDIDATE_SOURCE_REGISTRY: dict[str, SourceConfig] = {
     ),
     "gnews": SOURCE_REGISTRY["gnews"],
     "newscatcher": SourceConfig(
-        key="newscatcher",
         label="NewsCatcher",
         fetcher=fetch_newscatcher_news,
         accepts_queries=True,
@@ -111,8 +105,6 @@ CANDIDATE_SOURCE_REGISTRY: dict[str, SourceConfig] = {
         env_error="Missing. Optional warning-only check for candidate NewsCatcher article search.",
     ),
 }
-
-CANDIDATE_VALID_SOURCES = frozenset(CANDIDATE_SOURCE_REGISTRY)
 
 PROVIDER_SETS: dict[str, dict[str, SourceConfig]] = {
     "current": SOURCE_REGISTRY,
@@ -328,16 +320,14 @@ def _summarize_ingest(
         for key in failed_sources:
             err = bundles[key].error or "Unknown fetch error"
             failure_parts.append(f"{_label_for(key)} failed ({err})")
-        if surviving_keys:
-            survivor_parts = [
-                f"{_label_for(key)} {_outcome_human(bundles[key].outcome)}"
-                for key in surviving_keys
-            ]
-            return (
-                "partial",
-                f"{'; '.join(failure_parts)}. {'; '.join(survivor_parts)}; no new rows inserted.",
-            )
-        return "failed", "; ".join(failure_parts)
+        survivor_parts = [
+            f"{_label_for(key)} {_outcome_human(bundles[key].outcome)}"
+            for key in surviving_keys
+        ]
+        return (
+            "partial",
+            f"{'; '.join(failure_parts)}. {'; '.join(survivor_parts)}; no new rows inserted.",
+        )
 
     all_empty = all(
         bundles[key].outcome in {"empty_window", "skipped"} or bundles[key].fetched == 0

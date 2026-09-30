@@ -26,7 +26,6 @@ from supabase import create_client
 from .main import run as run_worker
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
-logger = logging.getLogger(__name__)
 
 
 def _get_supabase_client():

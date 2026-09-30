@@ -130,23 +130,6 @@ export function buildHoldingNameMetadata(
   });
 }
 
-export function holdingAppearsInText(
-  normalizedText: string,
-  holding: HoldingNameMetadata,
-): boolean {
-  return (
-    containsNormalizedTerm(normalizedText, holding.symbol) ||
-    holdingAliasAppearsInText(normalizedText, holding)
-  );
-}
-
-export function holdingAliasAppearsInText(
-  normalizedText: string,
-  holding: HoldingNameMetadata,
-): boolean {
-  return holding.aliases.some((alias) => containsNormalizedTerm(normalizedText, alias));
-}
-
 export function formatHoldingForPrompt(
   holding: HoldingContext,
   metadata: HoldingNameMetadata,

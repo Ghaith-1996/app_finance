@@ -10,25 +10,13 @@ export type AIProviderId = "azure" | "anthropic" | "openai" | "openrouter" | "mi
 export type {
   IAIProvider,
   HoldingContext,
-  NewsContext,
-  Sentiment,
-  ImpactLevel,
-  ArticleAnalysis,
   PortfolioMatchAssessment,
 } from "./provider";
-export type { ArticleChatContext, PortfolioCopilotContext } from "./provider";
-export { stubAIProvider } from "./stub-provider";
 export type { AIChatErrorCode } from "./ai-chat-errors";
 export {
   AIChatError,
-  assertNonEmptyArticleChatReply,
   toArticleChatError,
 } from "./ai-chat-errors";
-export { createOpenAIProvider } from "./openai-provider";
-export { createAnthropicProvider } from "./anthropic-provider";
-export { createAzureOpenAIProvider } from "./azure-openai-provider";
-export { createOpenRouterProvider } from "./openrouter-provider";
-export { createMistralProvider } from "./mistral-provider";
 
 export function getAIProviderById(id: AIProviderId): IAIProvider {
   if (id === "azure") {

@@ -3,9 +3,9 @@
  * distinguish "no articles in lookback" from ingestion / source failures.
  */
 
-export const LAST_INGEST_STORAGE_KEY = "app_finance_last_ingest";
+const LAST_INGEST_STORAGE_KEY = "app_finance_last_ingest";
 
-export interface IngestSourceSnapshot {
+interface IngestSourceSnapshot {
   fetched?: number;
   inserted?: number;
   skipped?: number;
@@ -38,15 +38,6 @@ export function readLastIngestSnapshot(): LastIngestSnapshot | null {
     return JSON.parse(raw) as LastIngestSnapshot;
   } catch {
     return null;
-  }
-}
-
-export function writeLastIngestSnapshot(data: LastIngestSnapshot): void {
-  if (typeof window === "undefined") return;
-  try {
-    sessionStorage.setItem(LAST_INGEST_STORAGE_KEY, JSON.stringify(data));
-  } catch {
-    /* private mode / quota */
   }
 }
 

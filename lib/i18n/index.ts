@@ -15,7 +15,7 @@ function lookup(dict: Dictionary, path: string): string {
   return typeof current === "string" ? current : path;
 }
 
-export function getDictionary(locale: Locale): Dictionary {
+function getDictionary(locale: Locale): Dictionary {
   return dictionaries[locale] ?? dictionaries.en;
 }
 

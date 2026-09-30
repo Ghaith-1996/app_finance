@@ -74,7 +74,7 @@ function roundMoney(value: number): number {
   return Math.round(value * 10_000) / 10_000;
 }
 
-export function startOfUtcHour(date: Date): string {
+function startOfUtcHour(date: Date): string {
   const bucket = new Date(date);
   bucket.setUTCMinutes(0, 0, 0);
   return bucket.toISOString();

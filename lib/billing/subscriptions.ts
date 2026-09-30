@@ -6,7 +6,6 @@ import {
   allowedModelTiersForPlan,
   defaultModelTierForPlan,
   parsePlanKey,
-  requiredPlanForTier,
   type PlanKey,
 } from "@/lib/billing/plans";
 import {
@@ -79,7 +78,7 @@ function selectCurrentSubscription(rows: SubscriptionRow[]): SubscriptionRow | n
   return rows[0] ?? null;
 }
 
-export function buildBillingState(input: {
+function buildBillingState(input: {
   customerId?: string | null;
   rows: SubscriptionRow[];
 }): BillingState {
@@ -195,23 +194,6 @@ export async function getCurrentUserBillingSummary(): Promise<BillingSummary> {
   }
 
   return getBillingSummaryForUser(user.id, user.email, user);
-}
-
-export async function assertUserCanUseModelTier(
-  user: Pick<User, "id" | "email">,
-  tier: ArticleChatModelTier,
-): Promise<BillingSummary> {
-  const summary = await getBillingSummaryForUser(user.id, user.email, user);
-
-  if (!summary.allowedModelTiers.includes(tier)) {
-    throw new BillingAccessError({
-      currentPlan: summary.planKey,
-      requiredPlan: requiredPlanForTier(tier),
-      requestedTier: tier,
-    });
-  }
-
-  return summary;
 }
 
 export function deriveStripeCustomerName(user: User): string | undefined {

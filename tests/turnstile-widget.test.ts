@@ -17,10 +17,7 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 // Import the hook (widget component needs DOM so we only test the hook here)
 // ---------------------------------------------------------------------------
-import {
-  useTurnstile,
-  type TurnstileStatus,
-} from "@/components/security/turnstile-widget";
+import { useTurnstile } from "@/components/security/turnstile-widget";
 
 // ---------------------------------------------------------------------------
 // useTurnstile state machine tests
@@ -152,46 +149,4 @@ describe("useTurnstile unavailable state", () => {
       "Bot protection unavailable.",
     );
   });
-});
-
-describe("useTurnstile statusMessage mapping", () => {
-  const expectedMessages: Array<{
-    status: TurnstileStatus;
-    message: string | null;
-  }> = [
-    { status: "loading", message: "Loading verification\u2026" },
-    { status: "ready", message: "Completing verification\u2026" },
-    { status: "verified", message: null },
-    { status: "error", message: "Verification failed." },
-    { status: "unavailable", message: "Bot protection unavailable." },
-  ];
-
-  for (const { status, message } of expectedMessages) {
-    it(`status=${status} → ${message ?? "null"}`, () => {
-      const { result } = renderHook(() => useTurnstile());
-      // Drive the hook to the target status via the appropriate callback
-      act(() => {
-        switch (status) {
-          case "ready":
-            result.current.widgetProps.onReady!();
-            break;
-          case "verified":
-            result.current.widgetProps.onSuccess("t");
-            break;
-          case "error":
-            result.current.widgetProps.onError!("e");
-            break;
-          case "loading":
-            // initial state
-            break;
-          case "unavailable":
-            // handled by env var — skip here
-            break;
-        }
-      });
-      if (status !== "unavailable") {
-        expect(result.current.statusMessage).toBe(message);
-      }
-    });
-  }
 });

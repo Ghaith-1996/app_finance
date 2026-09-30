@@ -80,7 +80,7 @@ async function get<T>(path: string, params: Record<string, string> = {}): Promis
   }
 }
 
-export interface FinnhubSearchResult {
+interface FinnhubSearchResult {
   symbol: string;
   description: string;
   type: string;

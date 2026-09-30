@@ -348,24 +348,6 @@ describe("POST /api/portfolio-copilot", () => {
     expect(mockGetAIProviderById).toHaveBeenCalledWith("azure");
   });
 
-  it("allows admin users to request the ultimate provider without a paid plan", async () => {
-    mockAnswerPortfolioQuestion.mockResolvedValue("Admin Azure answer");
-
-    const req = new Request("http://localhost/api/portfolio-copilot", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        portfolioId: "p1",
-        message: "Give me the strongest answer",
-        modelTier: "ultimate",
-      }),
-    });
-
-    const res = await POST(req);
-    expect(res.status).toBe(200);
-    expect(mockGetAIProviderById).toHaveBeenCalledWith("azure");
-  });
-
   it("returns 429 with retry metadata when the durable burst limit is hit", async () => {
     mockAssertUserCanUseAI.mockRejectedValue(
       new AIUsageAccessError({

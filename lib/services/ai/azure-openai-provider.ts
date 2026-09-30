@@ -18,10 +18,7 @@ import { validateAzureConfig } from "@/lib/env";
 import { createLogger } from "@/lib/logger";
 
 const azureLog = createLogger("azure-openai");
-import {
-  parseNumericRelevance,
-  parsePortfolioMatchAssessment,
-} from "./portfolio-match";
+import { parsePortfolioMatchAssessment } from "./portfolio-match";
 import {
   articleEnrichmentPrompt,
   articleChatPrompt,
@@ -29,8 +26,6 @@ import {
   portfolioMatchPrompt,
   summaryPrompt,
   sentimentPrompt,
-  relevancePrompt,
-  whyItMattersPrompt,
   insightsPrompt,
 } from "./prompts";
 
@@ -193,16 +188,6 @@ export function createAzureOpenAIProvider(): IAIProvider {
       return stubAIProvider.scoreSentiment(article);
     },
 
-    async scoreRelevance(article, holdings) {
-      try {
-        const p = relevancePrompt(article, holdings);
-        const raw = await respond(key, baseUrl, model, p.system, p.user, 32, reasoningEffort);
-        return parseNumericRelevance(raw);
-      } catch {
-        return stubAIProvider.scoreRelevance(article, holdings);
-      }
-    },
-
     async assessPortfolioMatch(article, holdings): Promise<PortfolioMatchAssessment> {
       try {
         const p = portfolioMatchPrompt(article, holdings);
@@ -225,16 +210,6 @@ export function createAzureOpenAIProvider(): IAIProvider {
         /* fallback */
       }
       return stubAIProvider.generateInsights(holdings, newsContexts);
-    },
-
-    async explainWhyItMatters(article, holdings) {
-      try {
-        const p = whyItMattersPrompt(article, holdings);
-        const text = await respond(key, baseUrl, model, p.system, p.user, 100, reasoningEffort);
-        return text ?? (await stubAIProvider.explainWhyItMatters(article, holdings));
-      } catch {
-        return stubAIProvider.explainWhyItMatters(article, holdings);
-      }
     },
 
     async analyzeArticle(headline, content, hintTickers): Promise<ArticleAnalysis> {

@@ -36,7 +36,7 @@ type PortfolioSummary = {
   createdAt: string;
 };
 
-export type HomeDashboardEarningsItem = {
+type HomeDashboardEarningsItem = {
   symbol: string;
   title: string;
   reportDate: string | null;
@@ -44,7 +44,7 @@ export type HomeDashboardEarningsItem = {
   href: string;
 };
 
-export type HomeDashboardDigest = {
+type HomeDashboardDigest = {
   id: string;
   digestDate: string;
   summaryLine: string;
@@ -53,14 +53,14 @@ export type HomeDashboardDigest = {
   bearishSymbols: string[];
 };
 
-export type HomeDashboardNotificationState = {
+type HomeDashboardNotificationState = {
   emailDigestEnabled: boolean;
   smsDigestEnabled: boolean;
   hasPhoneNumber: boolean;
   smartAlertRuleCount: number;
 };
 
-export type HomeDashboardAlert = {
+type HomeDashboardAlert = {
   id: string;
   alertType: string;
   severity: string;
@@ -70,7 +70,7 @@ export type HomeDashboardAlert = {
   createdAt: string;
 };
 
-export type HomeDashboardChangeItem = {
+type HomeDashboardChangeItem = {
   id: string;
   title: string;
   detail: string;
@@ -78,7 +78,7 @@ export type HomeDashboardChangeItem = {
   tone: "good" | "watch" | "risk" | "neutral";
 };
 
-export type HomeDashboardActivityItem = {
+type HomeDashboardActivityItem = {
   id: string;
   title: string;
   detail: string;
@@ -87,9 +87,9 @@ export type HomeDashboardActivityItem = {
   type: "sync" | "analysis" | "digest" | "alert" | "earnings" | "thesis" | "saved";
 };
 
-export type HomeDashboardTimelineItem = HomeDashboardActivityItem;
+type HomeDashboardTimelineItem = HomeDashboardActivityItem;
 
-export type HomeDashboardRiskRadarItem = {
+type HomeDashboardRiskRadarItem = {
   id: string;
   title: string;
   detail: string;
@@ -97,7 +97,7 @@ export type HomeDashboardRiskRadarItem = {
   tone: "good" | "watch" | "risk" | "neutral";
 };
 
-export type HomeDashboardFreshnessItem = {
+type HomeDashboardFreshnessItem = {
   id: string;
   label: string;
   value: string;

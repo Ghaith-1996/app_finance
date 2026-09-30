@@ -71,7 +71,7 @@ async function get<T>(path: string, params: Record<string, string> = {}): Promis
 // Raw Twelve Data response types
 // ---------------------------------------------------------------------------
 
-export interface TDQuote {
+interface TDQuote {
   symbol?: string;
   name?: string;
   exchange?: string;
@@ -90,7 +90,7 @@ export interface TDQuote {
   is_market_open?: boolean;
 }
 
-export interface TDProfile {
+interface TDProfile {
   symbol?: string;
   name?: string;
   exchange?: string;
@@ -104,7 +104,7 @@ export interface TDProfile {
   type?: string;
 }
 
-export interface TDTimeSeriesValue {
+interface TDTimeSeriesValue {
   datetime: string;
   close: string;
   open?: string;
@@ -227,7 +227,7 @@ export interface FinancialDataPoint {
   freeCashFlow: number | null;
 }
 
-export interface SectionWarning {
+interface SectionWarning {
   section: string;
   code: FailureCode;
   message: string;

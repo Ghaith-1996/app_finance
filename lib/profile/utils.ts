@@ -22,7 +22,7 @@ export type UserProfileValidationResult =
     }
   | { ok: false; error: string };
 
-export function normalizeHandle(input: string): string {
+function normalizeHandle(input: string): string {
   return input.trim().replace(/^@+/, "").toLowerCase();
 }
 

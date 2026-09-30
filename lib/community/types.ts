@@ -5,10 +5,6 @@ export interface CommunityAuthor {
   handle: string | null;
 }
 
-export interface CommunityTickerTag {
-  ticker: string;
-}
-
 export interface CommunityPost {
   id: string;
   author: CommunityAuthor;

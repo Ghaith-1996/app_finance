@@ -3,11 +3,9 @@ import type { ArticleChatModelTier } from "@/lib/types";
 
 export type TieredProviderId = Extract<AIProviderId, "azure" | "mistral" | "openrouter">;
 
-export const PLAN_KEYS = ["free", "premium", "ultimate"] as const;
-export type PlanKey = (typeof PLAN_KEYS)[number];
+export type PlanKey = "free" | "premium" | "ultimate";
 
-export const PAID_PLAN_KEYS = ["premium", "ultimate"] as const;
-export type PaidPlanKey = (typeof PAID_PLAN_KEYS)[number];
+export type PaidPlanKey = "premium" | "ultimate";
 
 export const PLAN_LABELS: Record<PlanKey, string> = {
   free: "Free",
@@ -21,7 +19,7 @@ export const MODEL_TIER_LABELS: Record<ArticleChatModelTier, string> = {
   ultimate: "Ultimate",
 };
 
-export const MODEL_TIERS_BY_PLAN: Record<PlanKey, ArticleChatModelTier[]> = {
+const MODEL_TIERS_BY_PLAN: Record<PlanKey, ArticleChatModelTier[]> = {
   free: ["free"],
   premium: ["free", "premium"],
   ultimate: ["free", "premium", "ultimate"],
@@ -60,10 +58,6 @@ export function providerIdForTier(tier: ArticleChatModelTier): TieredProviderId 
 
 export function allowedModelTiersForPlan(planKey: PlanKey): ArticleChatModelTier[] {
   return MODEL_TIERS_BY_PLAN[planKey];
-}
-
-export function isTierAllowedForPlan(planKey: PlanKey, tier: ArticleChatModelTier): boolean {
-  return MODEL_TIERS_BY_PLAN[planKey].includes(tier);
 }
 
 export function defaultModelTierForPlan(planKey: PlanKey): ArticleChatModelTier {

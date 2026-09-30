@@ -1,4 +1,4 @@
-export type Sentiment = "positive" | "watch" | "negative" | "neutral";
+type Sentiment = "positive" | "watch" | "negative" | "neutral";
 export type ImpactLevel = "High" | "Medium" | "Low";
 export type StockEffect = "bullish" | "bearish" | "neutral";
 export type LatestEarningsReportSource = "company" | "sec";
@@ -35,14 +35,6 @@ export type MatchReasonCode =
   | "watchlist_ticker_impact";
 
 export type MatchSource = "portfolio" | "watchlist";
-export type ProviderStatus = "Roadmap" | "Preview" | "Demo";
-export type AnalysisStage =
-  | "queued"
-  | "processing_holdings"
-  | "mapping_news"
-  | "generating_insights"
-  | "complete"
-  | "degraded";
 
 export interface SiteStat {
   label: string;
@@ -71,16 +63,6 @@ export interface WorkflowStep {
   step: string;
   title: string;
   description: string;
-}
-
-export interface Provider {
-  id: string;
-  name: string;
-  summary: string;
-  status: ProviderStatus;
-  accent: string;
-  capabilities: string[];
-  ctaLabel: string;
 }
 
 export interface Holding extends LatestEarningsReportFields {
@@ -137,13 +119,6 @@ export interface HoldingResolutionCandidate {
 
 export type SaveMode = "replace" | "merge";
 
-export interface AnalysisStep {
-  id: AnalysisStage;
-  title: string;
-  detail: string;
-  status: "complete" | "current" | "upcoming";
-}
-
 export interface PortfolioOverview {
   totalValue: number;
   dayChange: number;
@@ -154,7 +129,7 @@ export interface PortfolioOverview {
   primaryGoal: string;
 }
 
-export type PortfolioPricingRefreshStatus = "updated" | "no_quotes" | "error";
+type PortfolioPricingRefreshStatus = "updated" | "no_quotes" | "error";
 
 export interface PortfolioPricingRefreshResult {
   status: PortfolioPricingRefreshStatus;
@@ -205,7 +180,7 @@ export type NewsSourceType =
   | "newscatcher"
   | "seed"
   | "other";
-export type SourceConfidence = "high" | "standard";
+type SourceConfidence = "high" | "standard";
 export type FeedMode = "personal" | "market";
 export type FeedSort = "match" | "recent" | "hot" | "oldest";
 
@@ -256,9 +231,8 @@ export interface FAQItem {
   answer: string;
 }
 
-export type ArticleChatRole = "user" | "assistant";
-export const ARTICLE_CHAT_MODEL_TIERS = ["free", "premium", "ultimate"] as const;
-export type ArticleChatModelTier = (typeof ARTICLE_CHAT_MODEL_TIERS)[number];
+type ArticleChatRole = "user" | "assistant";
+export type ArticleChatModelTier = "free" | "premium" | "ultimate";
 
 export interface ArticleChatMessage {
   id: string;
@@ -269,20 +243,20 @@ export interface ArticleChatMessage {
 
 /* ── Use-case marketing section ── */
 
-export interface UseCasePreviewHolding {
+interface UseCasePreviewHolding {
   symbol: string;
   company: string;
   change: number;
   highlight?: boolean;
 }
 
-export interface UseCasePreviewStory {
+interface UseCasePreviewStory {
   headline: string;
   source: string;
   relevance: number;
 }
 
-export interface UseCasePreview {
+interface UseCasePreview {
   /** Mock portfolio value shown in the preview */
   portfolioValue?: string;
   /** Mock portfolio day change shown in the preview */

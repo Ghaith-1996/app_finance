@@ -61,10 +61,6 @@ if (!rawBaseUrl) {
 } else if (!/\.openai\.azure\.com/i.test(rawBaseUrl)) {
   issues.push(`AZURE_OPENAI_BASE_URL: expected *.openai.azure.com, got "${rawBaseUrl}"`);
 }
-if (!model) {
-  issues.push("AZURE_OPENAI_MODEL: missing (must match your Azure deployment name)");
-}
-
 if (issues.length > 0) {
   console.error("Config issues found:");
   for (const i of issues) console.error(`  - ${i}`);

@@ -90,16 +90,6 @@ describe("chat-turnstile-grant", () => {
     expect(story.startsWith("cv_")).toBe(true);
   });
 
-  it("produces a stable name for the same scope across calls", async () => {
-    const { chatGrantCookieName } = await loadModule();
-    const scope = {
-      userId: "user-1",
-      surface: "portfolio-copilot" as const,
-      portfolioId: "p-1",
-    };
-    expect(chatGrantCookieName(scope)).toBe(chatGrantCookieName(scope));
-  });
-
   // -------------------------------------------------------------------------
   // Cookie value signing / validation
   // -------------------------------------------------------------------------
@@ -131,9 +121,9 @@ describe("chat-turnstile-grant", () => {
     const value = buildChatGrantCookieValue(scope);
     // Flip the last character of the signature portion.
     const parts = value.split(".");
-    const sig = parts[1];
+    const sig = parts[2];
     const tampered =
-      parts[0] +
+      parts.slice(0, 2).join(".") +
       "." +
       sig.slice(0, -1) +
       (sig.slice(-1) === "A" ? "B" : "A");

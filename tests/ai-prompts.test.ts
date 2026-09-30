@@ -6,8 +6,6 @@ import {
   portfolioCopilotPrompt,
   summaryPrompt,
   sentimentPrompt,
-  relevancePrompt,
-  whyItMattersPrompt,
   insightsPrompt,
 } from "@/lib/services/ai/prompts";
 import { NEWS_CATEGORIES } from "@/lib/types";
@@ -78,22 +76,6 @@ describe("AI prompt builders", () => {
       expect(system).toContain("exactly one word");
       expect(system).toContain("positive");
       expect(system).toContain("neutral");
-    });
-  });
-
-  describe("relevancePrompt", () => {
-    it("asks for 0-100 number with symbols", () => {
-      const { system } = relevancePrompt("text", holdings);
-      expect(system).toContain("0 to 100");
-      expect(system).toContain("AAPL");
-    });
-  });
-
-  describe("whyItMattersPrompt", () => {
-    it("asks for one sentence with portfolio context", () => {
-      const { system } = whyItMattersPrompt("article", holdings);
-      expect(system).toContain("one sentence");
-      expect(system).toContain("MSFT");
     });
   });
 
@@ -237,15 +219,6 @@ describe("AI prompt builders", () => {
       expect(user).toContain("AI accelerator demand stays durable.");
       expect(user).toContain("gross margin pressure");
       expect(user).toContain("Data center growth slows");
-    });
-  });
-
-  describe("all providers reuse the same prompt content", () => {
-    it("enrichment prompt output is deterministic for same inputs", () => {
-      const a = articleEnrichmentPrompt("H", "C", ["AAPL"]);
-      const b = articleEnrichmentPrompt("H", "C", ["AAPL"]);
-      expect(a.system).toBe(b.system);
-      expect(a.user).toBe(b.user);
     });
   });
 });

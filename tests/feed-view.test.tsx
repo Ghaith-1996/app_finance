@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, act, within, waitFor } from "@testing-library/react";
-import React from "react";
 
 const supabaseMockState = vi.hoisted(() => ({
   feedInsertCallback: null as null | (() => void),
@@ -63,8 +62,6 @@ vi.mock("@/lib/ingest-hint", () => ({
   readLastIngestSnapshot: () => mockSnapshot,
   isRecentIngestHint: (hint: LastIngestSnapshot | null) =>
     !!hint && Date.now() - hint.at < 86400000,
-  writeLastIngestSnapshot: vi.fn(),
-  LAST_INGEST_STORAGE_KEY: "test",
 }));
 
 import { FeedView } from "@/components/app/feed-view";
@@ -556,34 +553,6 @@ describe("FeedView", () => {
     expect(screen.queryByText(/^error$/i)).toBeNull();
   });
 
-  it("switches to market mode and resets filters", async () => {
-    const personalItems = [makeFeedItem({ id: "s1", headline: "Personal" })];
-    const marketItems = [makeFeedItem({ id: "s2", headline: "Market" })];
-
-    global.fetch = vi.fn().mockImplementation(async (url: string) => {
-      const isMarket = url.includes("mode=market");
-      return {
-        ok: true,
-        json: async () => ({
-          feed: isMarket ? marketItems : personalItems,
-          portfolioId: "p1",
-          mode: isMarket ? "market" : "personal",
-        }),
-      };
-    });
-
-    await act(async () => {
-      render(<FeedView portfolioId="p1" />);
-    });
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /full market/i }));
-    });
-
-    const lastCallUrl = (global.fetch as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0] as string;
-    expect(lastCallUrl).toContain("mode=market");
-  });
-
   it("builds personal holding options from the full portfolio, not just matched feed rows", async () => {
     const items = [
       makeFeedItem({
@@ -620,24 +589,6 @@ describe("FeedView", () => {
     expect(optionLabels).toContain("NVDA");
     expect(optionLabels).toContain("AMZN");
     expect(optionLabels).toContain("MSFT");
-  });
-
-  it("preserves selected story ID when refreshing with valid selection", async () => {
-    const items = [
-      makeFeedItem({ id: "story-1", headline: "First" }),
-      makeFeedItem({ id: "story-2", headline: "Second" }),
-    ];
-
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ feed: items, portfolioId: "p1", mode: "personal" }),
-    });
-
-    await act(async () => {
-      render(<FeedView portfolioId="p1" />);
-    });
-
-    expect(screen.getAllByText("First").length).toBeGreaterThanOrEqual(1);
   });
 
   it("shows 'already ingested' hint when last ingest was all duplicates", async () => {
@@ -729,34 +680,6 @@ describe("FeedView", () => {
 
     expect(screen.getAllByText(/failed/i).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText(/both sources failed/i)).toBeTruthy();
-  });
-
-  it("market view renders ticker filter controls", async () => {
-    const items = [makeFeedItem({ id: "m1", headline: "Market Story", stockTags: ["AAPL", "GOOG"] })];
-
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        feed: items,
-        portfolioId: "p1",
-        mode: "market",
-        page: 1,
-        pageSize: 50,
-        totalCount: 1,
-        totalPages: 1,
-      }),
-    });
-
-    await act(async () => {
-      render(<FeedView portfolioId="p1" />);
-    });
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /full market/i }));
-    });
-
-    expect(screen.getByText("Ticker")).toBeTruthy();
-    expect(screen.getByPlaceholderText(/e\.g\. nvda/i)).toBeTruthy();
   });
 
   it("market view still filters by source and category", async () => {

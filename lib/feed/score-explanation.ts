@@ -2,14 +2,14 @@ import type { FeedMode, MatchReasonCode, NewsItem } from "@/lib/types";
 import { isMarketHeadlineSource } from "@/lib/services/news/source-config";
 import { categoryLabel, effectLabel, matchReasonLabel } from "@/lib/utils";
 
-export type ScoreExplanationTone =
+type ScoreExplanationTone =
   | "brand"
   | "success"
   | "warning"
   | "danger"
   | "neutral";
 
-export interface ScoreExplanationFactor {
+interface ScoreExplanationFactor {
   id: string;
   label: string;
   detail: string;

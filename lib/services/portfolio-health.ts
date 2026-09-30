@@ -2,7 +2,7 @@ import type { Holding, PortfolioFeedHighlight } from "@/lib/types";
 
 export type PortfolioHealthTone = "good" | "watch" | "risk" | "neutral";
 
-export type PortfolioHealthFactor = {
+type PortfolioHealthFactor = {
   id:
     | "position_concentration"
     | "sector_balance"
@@ -16,7 +16,7 @@ export type PortfolioHealthFactor = {
   tone: PortfolioHealthTone;
 };
 
-export type PortfolioHealthItem = {
+type PortfolioHealthItem = {
   title: string;
   detail: string;
   tone: PortfolioHealthTone;

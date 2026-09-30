@@ -49,7 +49,7 @@ export type FeedResolverResult =
   | { ok: true; data: FeedResponsePayload }
   | { ok: false; status: number; error: string };
 
-export function effectiveRecencyCap(maxMinutesParam: string | null): number {
+function effectiveRecencyCap(maxMinutesParam: string | null): number {
   if (!maxMinutesParam) return FEED_MAX_AGE_MINUTES;
   const parsed = parseInt(maxMinutesParam, 10);
   if (Number.isNaN(parsed) || parsed < 0) return FEED_MAX_AGE_MINUTES;
@@ -68,11 +68,11 @@ export function parseFeedPageSize(pageSizeParam: string | null): number {
   return Math.min(MAX_PAGE_SIZE, Math.max(MIN_PAGE_SIZE, parsed));
 }
 
-export function defaultFeedSort(mode: FeedMode): FeedSort {
+function defaultFeedSort(mode: FeedMode): FeedSort {
   return mode === "market" ? "recent" : "match";
 }
 
-export function parseFeedSort(
+function parseFeedSort(
   sortParam: string | null | undefined,
   mode: FeedMode,
 ): FeedSort {
@@ -902,5 +902,3 @@ async function buildMarketPayload(
     totalPages: paginated.totalPages,
   };
 }
-
-export { NO_HOT_NEWS_SORT_NOTICE };

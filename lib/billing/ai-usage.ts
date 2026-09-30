@@ -6,10 +6,10 @@ import type { PlanKey } from "@/lib/billing/plans";
 import type { ArticleChatModelTier } from "@/lib/types";
 import { createServiceClient } from "@/lib/supabase/service";
 
-export const AI_USAGE_TIME_ZONE = "America/Toronto";
-export const AI_SHARED_SURFACE = "shared_ai";
+const AI_USAGE_TIME_ZONE = "America/Toronto";
+const AI_SHARED_SURFACE = "shared_ai";
 
-export type AIQuotaWindow = "day" | "month";
+type AIQuotaWindow = "day" | "month";
 
 export type AIQuotaSummary = {
   aiQuotaLimit: number;
@@ -17,10 +17,6 @@ export type AIQuotaSummary = {
   aiQuotaUsed: number;
   aiQuotaRemaining: number;
   aiQuotaResetsAt: string;
-};
-
-export type AIQuotaCheckResult = AIQuotaSummary & {
-  allowed: boolean;
 };
 
 export type AIQuotaAtomicCheckResult = AIQuotaSummary & {
@@ -180,10 +176,6 @@ function normalizePlanKey(value: string | null | undefined, fallback: PlanKey): 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 type RpcCapableClient = Pick<SupabaseClient, "rpc"> | ServiceClient;
 
-export function getAIQuotaPolicy(planKey: PlanKey): { limit: number; window: AIQuotaWindow } {
-  return AI_QUOTA_POLICY[planKey];
-}
-
 export function getDefaultAIQuotaSummary(planKey: PlanKey): AIQuotaSummary {
   return buildFallbackSummary(planKey);
 }
@@ -205,30 +197,6 @@ export async function loadAIQuotaSummary(
   }
 
   return normalizeQuotaSummary(planKey, getRpcRow<AIQuotaRpcRow>(data));
-}
-
-export async function consumeAIQuota(input: {
-  userId: string;
-  planKey: PlanKey;
-  surface?: string;
-}): Promise<AIQuotaCheckResult> {
-  const supabase = createServiceClient();
-  const { data, error } = await supabase.rpc("consume_ai_quota", {
-    p_user_id: input.userId,
-    p_plan_key: input.planKey,
-    p_surface: input.surface ?? AI_SHARED_SURFACE,
-    p_time_zone: AI_USAGE_TIME_ZONE,
-  });
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  const row = getRpcRow<AIQuotaRpcRow>(data);
-  return {
-    allowed: row?.allowed !== false,
-    ...normalizeQuotaSummary(input.planKey, row),
-  };
 }
 
 export async function consumeAIQuotaForUser(input: {

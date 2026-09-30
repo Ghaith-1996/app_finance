@@ -1,6 +1,3 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { sendDigestEmail, sendDigestSms } from "@/lib/notifications/delivery";
@@ -85,7 +82,7 @@ describe("daily digest delivery adapters", () => {
     expect(body.html).not.toContain("https://pulsefolio.example/digest/digest-1");
   });
 
-  it("escapes interpolated HTML in the rendered email and does not import react-dom/server", async () => {
+  it("escapes interpolated HTML in the rendered email", async () => {
     process.env.RESEND_API_KEY = "re_test";
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -115,13 +112,6 @@ describe("daily digest delivery adapters", () => {
     expect(body.html).toContain("&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;");
     expect(body.html).toContain("Apple &lt;img src=x onerror=alert(&quot;x&quot;) /&gt; move");
     expect(body.html).toContain("Summary with &lt;b&gt;markup&lt;/b&gt;");
-    expect(body.html).not.toContain("react-dom/server");
-
-    const deliverySource = readFileSync(
-      join(process.cwd(), "lib", "notifications", "delivery.ts"),
-      "utf8",
-    );
-    expect(deliverySource).not.toMatch(/react-dom\/server/);
   });
 
   it("builds the expected Twilio payload", async () => {

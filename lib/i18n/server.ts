@@ -1,7 +1,7 @@
 import { createTranslator } from "@/lib/i18n";
 import { type Locale } from "@/lib/preferences";
 
-export async function getRequestLocale(): Promise<Locale> {
+async function getRequestLocale(): Promise<Locale> {
   return "en";
 }
 

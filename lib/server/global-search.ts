@@ -4,7 +4,7 @@ import { isAdminUser } from "@/lib/security/admin";
 import { sanitizeExternalUrl } from "@/lib/security/external-url";
 import { createClient } from "@/lib/supabase/server";
 
-export type GlobalSearchResult = {
+type GlobalSearchResult = {
   id: string;
   type: "holding" | "watchlist" | "article" | "saved" | "alert" | "thesis";
   title: string;

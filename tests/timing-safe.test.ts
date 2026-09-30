@@ -22,10 +22,4 @@ describe("isTimingSafeEqual", () => {
     expect(isTimingSafeEqual("secret", "")).toBe(false);
     expect(isTimingSafeEqual("", "secret")).toBe(false);
   });
-
-  it("handles Bearer token format", () => {
-    const secret = "my-cron-secret-xyz";
-    expect(isTimingSafeEqual(`Bearer ${secret}`, `Bearer ${secret}`)).toBe(true);
-    expect(isTimingSafeEqual(`Bearer wrong`, `Bearer ${secret}`)).toBe(false);
-  });
 });

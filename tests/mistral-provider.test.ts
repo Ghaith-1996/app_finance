@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { AIChatError } from "@/lib/services/ai/ai-chat-errors";
 import { createMistralProvider } from "@/lib/services/ai/mistral-provider";
 
 const originalEnv = { ...process.env };

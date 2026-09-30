@@ -2,7 +2,7 @@ import { spawn } from "child_process";
 import { INGEST_SOURCE_KEYS, CANDIDATE_INGEST_SOURCE_KEYS } from "@/lib/services/news/source-config";
 
 /** One source row from the Python worker (post-upsert). */
-export interface WorkerSourceRow {
+interface WorkerSourceRow {
   fetched: number;
   inserted: number;
   skipped: number;

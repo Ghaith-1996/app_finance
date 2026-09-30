@@ -70,7 +70,7 @@ function normalizeRateLimitResult(
   };
 }
 
-export async function consumeRateLimit(
+async function consumeRateLimit(
   supabase: RpcCapableClient,
   input: {
     key: string;

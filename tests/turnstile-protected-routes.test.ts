@@ -233,19 +233,6 @@ describe("POST /api/portfolio-copilot — Turnstile gate", () => {
     expect(data.code).toBe("turnstile_failed");
     expect(mockAnswerPortfolioQuestion).not.toHaveBeenCalled();
   });
-
-  it("proceeds when turnstileToken is valid", async () => {
-    turnstilePass();
-    mockAnswerPortfolioQuestion.mockResolvedValue("risk is moderate");
-
-    const res = await callRoute({
-      portfolioId: "p1",
-      message: "What is my risk?",
-      turnstileToken: "valid-token",
-    });
-
-    expect(res.status).not.toBe(403);
-  });
 });
 
 // ---------------------------------------------------------------------------

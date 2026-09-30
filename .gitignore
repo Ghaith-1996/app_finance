@@ -8,6 +8,10 @@
 # testing
 /coverage
 
+# Python bytecode
+__pycache__/
+*.py[cod]
+
 # next.js
 /.next/
 /out/

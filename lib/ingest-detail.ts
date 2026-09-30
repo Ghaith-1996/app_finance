@@ -29,7 +29,7 @@ export interface IngestInput {
   error?: string;
 }
 
-export type IngestStageStatus =
+type IngestStageStatus =
   | "success"
   | "failed"
   | "skipped"

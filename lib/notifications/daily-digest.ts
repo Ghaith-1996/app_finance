@@ -128,7 +128,7 @@ type DeliveryAttemptDecision =
   | { action: "send" }
   | { action: "skip"; resultStatus: "skipped" | "uncertain" };
 
-export function shouldRunDailyDigestCronAt(now: Date): boolean {
+function shouldRunDailyDigestCronAt(now: Date): boolean {
   return isDigestHour(now, DAILY_DIGEST_TIME_ZONE);
 }
 

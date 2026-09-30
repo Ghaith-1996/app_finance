@@ -14,10 +14,7 @@ import {
   PORTFOLIO_COPILOT_MAX_TOKENS,
 } from "./constants";
 import { stubAIProvider } from "./stub-provider";
-import {
-  parseNumericRelevance,
-  parsePortfolioMatchAssessment,
-} from "./portfolio-match";
+import { parsePortfolioMatchAssessment } from "./portfolio-match";
 import {
   articleEnrichmentPrompt,
   articleChatPrompt,
@@ -25,8 +22,6 @@ import {
   portfolioMatchPrompt,
   summaryPrompt,
   sentimentPrompt,
-  relevancePrompt,
-  whyItMattersPrompt,
   insightsPrompt,
 } from "./prompts";
 
@@ -84,16 +79,6 @@ export function createAnthropicProvider(): IAIProvider {
       return stubAIProvider.scoreSentiment(article);
     },
 
-    async scoreRelevance(article, holdings) {
-      try {
-        const p = relevancePrompt(article, holdings);
-        const raw = await ask(key, `${p.system}\n\n${p.user}`, 5);
-        return parseNumericRelevance(raw);
-      } catch {
-        return stubAIProvider.scoreRelevance(article, holdings);
-      }
-    },
-
     async assessPortfolioMatch(article, holdings): Promise<PortfolioMatchAssessment> {
       try {
         const p = portfolioMatchPrompt(article, holdings);
@@ -114,16 +99,6 @@ export function createAnthropicProvider(): IAIProvider {
         }
       } catch { /* fallback */ }
       return stubAIProvider.generateInsights(holdings, newsContexts);
-    },
-
-    async explainWhyItMatters(article, holdings) {
-      try {
-        const p = whyItMattersPrompt(article, holdings);
-        const text = await ask(key, `${p.system}\n\n${p.user}`, 100);
-        return text ?? (await stubAIProvider.explainWhyItMatters(article, holdings));
-      } catch {
-        return stubAIProvider.explainWhyItMatters(article, holdings);
-      }
     },
 
     async analyzeArticle(headline, content, hintTickers): Promise<ArticleAnalysis> {

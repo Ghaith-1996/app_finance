@@ -1,8 +1,8 @@
 import type { WatchlistDetailData } from "@/lib/services/twelvedata";
 
-export type WatchlistSignalTone = "good" | "watch" | "risk" | "neutral";
+type WatchlistSignalTone = "good" | "watch" | "risk" | "neutral";
 
-export type WatchlistIntelligenceSignal = {
+type WatchlistIntelligenceSignal = {
   id: string;
   label: string;
   value: string;

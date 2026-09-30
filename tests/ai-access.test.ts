@@ -34,7 +34,6 @@ vi.mock("@/lib/billing/ai-usage", async () => {
 
 import { BillingAccessError } from "@/lib/billing/subscriptions";
 import {
-  AIUsageAccessError,
   assertUserCanUseAI,
 } from "@/lib/security/ai-access";
 

@@ -1,11 +1,8 @@
-export const INVESTMENT_THESIS_SCOPES = ["holding", "watchlist"] as const;
-export type InvestmentThesisScope = (typeof INVESTMENT_THESIS_SCOPES)[number];
+export type InvestmentThesisScope = "holding" | "watchlist";
 
-export const INVESTMENT_THESIS_HORIZONS = ["watch", "short", "medium", "long"] as const;
-export type InvestmentThesisHorizon = (typeof INVESTMENT_THESIS_HORIZONS)[number];
+export type InvestmentThesisHorizon = "watch" | "short" | "medium" | "long";
 
-export const INVESTMENT_THESIS_CONVICTIONS = ["low", "medium", "high"] as const;
-export type InvestmentThesisConviction = (typeof INVESTMENT_THESIS_CONVICTIONS)[number];
+export type InvestmentThesisConviction = "low" | "medium" | "high";
 
 export type InvestmentThesis = {
   id: string;

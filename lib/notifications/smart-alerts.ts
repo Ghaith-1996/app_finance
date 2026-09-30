@@ -5,13 +5,13 @@ import { createServiceClient } from "@/lib/supabase/service";
 
 type SupabaseLike = ReturnType<typeof createServiceClient>;
 
-export type SmartAlertType =
+type SmartAlertType =
   | "critical_news"
   | "earnings_report"
   | "price_move"
   | "concentration";
 
-export type SmartAlertSeverity = "low" | "medium" | "high";
+type SmartAlertSeverity = "low" | "medium" | "high";
 
 type PreferenceRow = {
   user_id: string;

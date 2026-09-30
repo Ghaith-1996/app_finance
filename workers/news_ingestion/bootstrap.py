@@ -18,10 +18,6 @@ _WORKSPACE_ROOT = Path(__file__).resolve().parent.parent.parent
 _DEFAULT_EDGAR_DIR = _WORKSPACE_ROOT / ".edgar_data"
 
 
-def workspace_root() -> Path:
-    return _WORKSPACE_ROOT
-
-
 def configure_worker_environment() -> str:
     """
     Ensure EDGAR local data dir exists and is set before importing edgartools.

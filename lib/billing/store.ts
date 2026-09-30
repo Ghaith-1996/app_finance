@@ -30,7 +30,7 @@ export type SubscriptionRow = {
   updated_at?: string;
 };
 
-export type StripeEventProcessingState = "processing" | "processed" | "failed";
+type StripeEventProcessingState = "processing" | "processed" | "failed";
 export type StripeEventClaimResult = "claimed" | "already_processed" | "in_progress";
 
 const STRIPE_EVENT_PROCESSING_STALE_MS = 10 * 60 * 1000;

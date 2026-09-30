@@ -169,11 +169,6 @@ export function HomeFeedClient() {
           discussions={discussions}
           onOpenComments={handleOpenComments}
         />
-
-        {/* Mobile-hidden trending fallback */}
-        <div className="lg:hidden">
-          <TrendingTickersCard tickers={trending} />
-        </div>
       </aside>
     </div>
   );

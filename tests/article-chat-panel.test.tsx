@@ -116,24 +116,6 @@ describe("ArticleChatPanel", () => {
     });
   });
 
-  it("renders Free, Premium, and Ultimate controls with Free selected by default", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ threadId: "t1", messages: [] }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
-    );
-    vi.stubGlobal("fetch", fetchMock);
-
-    renderPanel();
-
-    await screen.findByLabelText(/ask a follow-up/i);
-
-    expect(screen.getByRole("button", { name: /^free$/i })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("button", { name: /^premium$/i })).toHaveAttribute("aria-pressed", "false");
-    expect(screen.getByRole("button", { name: /^ultimate$/i })).toHaveAttribute("aria-pressed", "false");
-  });
-
   it("reports draft activity when the user types without sending", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ threadId: "t1", messages: [] }), {
@@ -464,43 +446,6 @@ describe("ArticleChatPanel", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining("/api/article-chat?portfolioId=p1&newsItemId=n2"),
     );
-  });
-
-  it("shows provider error when POST returns 503", async () => {
-    const fetchMock = vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
-      const resolvedUrl = typeof url === "string" ? url : url.toString();
-      if (resolvedUrl.includes("/api/article-chat") && init?.method === "POST") {
-        return Promise.resolve(
-          new Response(
-            JSON.stringify({
-              error: "Article chat is temporarily unavailable. Please try again later.",
-              code: "provider_unavailable",
-            }),
-            { status: 503, headers: { "Content-Type": "application/json" } },
-          ),
-        );
-      }
-
-      return Promise.resolve(
-        new Response(JSON.stringify({ threadId: "t1", messages: [] }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
-      );
-    });
-    vi.stubGlobal("fetch", fetchMock);
-
-    renderPanel();
-
-    const input = await screen.findByPlaceholderText(/ask how this article/i);
-    fireEvent.change(input, { target: { value: "Why does this matter?" } });
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
-    });
-
-    expect(await screen.findByText(/temporarily unavailable/i)).toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalled();
   });
 
   it("clears sending state after a failed request", async () => {

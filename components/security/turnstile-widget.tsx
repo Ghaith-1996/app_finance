@@ -15,19 +15,18 @@ import { cn } from "@/lib/utils";
 // ---------------------------------------------------------------------------
 
 /** Turnstile widget lifecycle state. */
-export type TurnstileStatus =
+type TurnstileStatus =
   | "loading"
   | "ready"
   | "verified"
-  | "expired"
   | "error"
   | "unavailable";
 
-export interface TurnstileWidgetHandle {
+interface TurnstileWidgetHandle {
   reset: () => void;
 }
 
-export interface TurnstileWidgetProps {
+interface TurnstileWidgetProps {
   onSuccess: (token: string) => void;
   onExpire?: () => void;
   onError?: (code: string) => void;
@@ -65,7 +64,7 @@ const SCRIPT_LOAD_TIMEOUT = 15_000;
 // Component
 // ---------------------------------------------------------------------------
 
-export function TurnstileWidget({
+function TurnstileWidget({
   onSuccess,
   onExpire,
   onError,
@@ -294,8 +293,6 @@ export function useTurnstile(): UseTurnstileReturn {
         return "Completing verification\u2026";
       case "verified":
         return null;
-      case "expired":
-        return "Verification expired. Retrying\u2026";
       case "error":
         return "Verification failed.";
       case "unavailable":

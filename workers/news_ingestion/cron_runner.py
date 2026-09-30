@@ -23,7 +23,6 @@ from .schema import NormalizedArticle
 from .upsert import upsert_articles
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
-logger = logging.getLogger(__name__)
 
 
 def _get_supabase_client():

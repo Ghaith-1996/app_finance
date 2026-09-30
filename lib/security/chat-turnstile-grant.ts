@@ -52,13 +52,6 @@ const COOKIE_VERSION = "v2";
 const SIGNATURE_SEPARATOR = ".";
 export const CHAT_GRANT_TTL_SECONDS = 15 * 60;
 
-export const CHAT_GRANT_COOKIE_OPTIONS = {
-  httpOnly: true,
-  sameSite: "lax" as const,
-  path: "/",
-  maxAge: CHAT_GRANT_TTL_SECONDS,
-} as const;
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------

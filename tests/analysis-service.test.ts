@@ -193,7 +193,6 @@ function buildAssessmentProvider() {
   return {
     generateSummary: vi.fn().mockResolvedValue("summary"),
     scoreSentiment: vi.fn().mockResolvedValue("neutral"),
-    scoreRelevance: vi.fn().mockResolvedValue(0),
     assessPortfolioMatch: vi.fn().mockResolvedValue({
       relevanceScore: 0,
       whyItMatters: "",
@@ -203,7 +202,6 @@ function buildAssessmentProvider() {
     generateInsights: vi.fn().mockResolvedValue([
       { title: "Most exposed theme", value: "Technology", detail: "AAPL drives exposure." },
     ]),
-    explainWhyItMatters: vi.fn().mockResolvedValue(""),
     analyzeArticle: vi.fn(),
     answerArticleQuestion: vi.fn(),
     answerPortfolioQuestion: vi.fn(),

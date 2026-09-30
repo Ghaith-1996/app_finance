@@ -16,31 +16,6 @@ function requireEnv(name: string): string {
   return value;
 }
 
-function warnOnce(name: string, feature: string): void {
-  if (typeof window !== "undefined") return;
-  if (!process.env[name]) {
-    console.warn(`[env] ${name} is not set. ${feature} will be unavailable.`);
-  }
-}
-
-/** Supabase URL — required at runtime. */
-export function requireSupabaseUrl(): string {
-  return requireEnv("NEXT_PUBLIC_SUPABASE_URL");
-}
-
-/** Supabase anon key — required at runtime. */
-export function requireSupabaseAnonKey(): string {
-  return requireEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY");
-}
-
-export function requireFinnhubKey(): string {
-  return requireEnv("FINNHUB_API_KEY");
-}
-
-export function requireTwelveDataKey(): string {
-  return requireEnv("TWELVE_DATA_API_KEY");
-}
-
 export function requireDigestCronSecret(): string {
   return requireEnv("DIGEST_CRON_SECRET");
 }
@@ -61,31 +36,10 @@ export function requireTwilioMessagingServiceSid(): string {
   return requireEnv("TWILIO_MESSAGING_SERVICE_SID");
 }
 
-export function hasKey(name: string): boolean {
-  return !!process.env[name];
-}
-
-/** Run once on server startup to emit warnings for optional provider keys. */
-export function checkOptionalProviders(): void {
-  warnOnce("FINNHUB_API_KEY", "Watchlist search and Finnhub news");
-  warnOnce("TWELVE_DATA_API_KEY", "Watchlist detail dashboard");
-  warnOnce("TURNSTILE_SECRET_KEY", "Turnstile bot protection on write endpoints");
-}
-
-/** True when TURNSTILE_SECRET_KEY is set (non-empty). */
-export function hasTurnstileSecret(): boolean {
-  return !!process.env.TURNSTILE_SECRET_KEY?.trim();
-}
-
-/** True when the client-side site key is set. */
-export function hasTurnstileSiteKey(): boolean {
-  return !!process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim();
-}
-
 const PLACEHOLDER_RE = /^your[- _]|^placeholder|^changeme|^sk-xxx|^xxx/i;
 const AZURE_HOST_RE = /\.openai\.azure\.com/i;
 
-export interface AzureConfigIssue {
+interface AzureConfigIssue {
   field: string;
   reason: string;
 }
@@ -98,7 +52,7 @@ export interface AzureConfigResult {
   model: string;
 }
 
-export interface MistralConfigIssue {
+interface MistralConfigIssue {
   field: string;
   reason: string;
 }

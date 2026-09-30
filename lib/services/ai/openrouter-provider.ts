@@ -14,10 +14,7 @@ import {
   PORTFOLIO_COPILOT_MAX_TOKENS,
 } from "./constants";
 import { stubAIProvider } from "./stub-provider";
-import {
-  parseNumericRelevance,
-  parsePortfolioMatchAssessment,
-} from "./portfolio-match";
+import { parsePortfolioMatchAssessment } from "./portfolio-match";
 import {
   articleEnrichmentPrompt,
   articleChatPrompt,
@@ -25,8 +22,6 @@ import {
   portfolioMatchPrompt,
   summaryPrompt,
   sentimentPrompt,
-  relevancePrompt,
-  whyItMattersPrompt,
   insightsPrompt,
 } from "./prompts";
 
@@ -138,15 +133,6 @@ export function createOpenRouterProvider(): IAIProvider {
       return stubAIProvider.scoreSentiment(article);
     },
 
-    async scoreRelevance(article, holdings) {
-      try {
-        const raw = await chatComplete(key, model, msgs(relevancePrompt(article, holdings)), 32, extraHeaders);
-        return parseNumericRelevance(raw);
-      } catch {
-        return stubAIProvider.scoreRelevance(article, holdings);
-      }
-    },
-
     async assessPortfolioMatch(article, holdings): Promise<PortfolioMatchAssessment> {
       try {
         const raw = await chatComplete(
@@ -169,15 +155,6 @@ export function createOpenRouterProvider(): IAIProvider {
         if (Array.isArray(parsed) && parsed.length >= 1) return parsed.slice(0, 3);
       } catch { /* fallback */ }
       return stubAIProvider.generateInsights(holdings, newsContexts);
-    },
-
-    async explainWhyItMatters(article, holdings) {
-      try {
-        const text = await chatComplete(key, model, msgs(whyItMattersPrompt(article, holdings)), 100, extraHeaders);
-        return text ?? (await stubAIProvider.explainWhyItMatters(article, holdings));
-      } catch {
-        return stubAIProvider.explainWhyItMatters(article, holdings);
-      }
     },
 
     async analyzeArticle(headline, content, hintTickers): Promise<ArticleAnalysis> {

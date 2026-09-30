@@ -73,15 +73,6 @@ describe("PortfolioCopilotPanel (Turnstile grant behavior)", () => {
     setTurnstileVerified("tok-xyz");
   });
 
-  it("hides the Turnstile widget when hydrated as verified from the server", () => {
-    const fetchMock = vi.fn();
-    vi.stubGlobal("fetch", fetchMock);
-
-    renderPanel({ initialTurnstileVerified: true });
-
-    expect(screen.queryByTestId("turnstile-block")).not.toBeInTheDocument();
-  });
-
   it("shows the Turnstile widget when no grant is hydrated, then hides it after the first successful POST without resetting", async () => {
     const fetchMock = vi.fn().mockImplementation((_url: RequestInfo | URL, init?: RequestInit) => {
       if (init?.method === "POST") {

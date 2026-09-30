@@ -16,18 +16,9 @@ import { getQuote, getQuotes, searchSymbol } from "@/lib/services/yahoo-finance"
 import type {
   Holding,
   HoldingDraft,
-  PortfolioFeedHighlight,
   PortfolioPricingRefreshResult,
   SaveMode,
 } from "@/lib/types";
-
-const sourceTypeMap = {
-  manual: "manual" as const,
-  csv: "csv" as const,
-  wealthsimple: "wealthsimple" as const,
-  "interactive-brokers": "interactive_brokers" as const,
-  demo: "demo" as const,
-};
 
 function normalizeSaveSourceType(
   raw: string | undefined,
@@ -43,39 +34,6 @@ function normalizeSaveSourceType(
   };
   return map[raw] ?? null;
 }
-
-export type CreatePortfolioInput = {
-  name?: string;
-  sourceType: keyof typeof sourceTypeMap;
-  holdings: Array<{
-    symbol: string;
-    company: string;
-    sector: string;
-    market: string;
-    source: string;
-    price: number;
-    dailyChange: number;
-    allocation: number;
-    thesis: string;
-    quantity?: number;
-    averageCost?: number;
-    importSource?: string;
-  }>;
-};
-
-export type HoldingInput = {
-  symbol?: string;
-  company?: string;
-  sector?: string;
-  market?: string;
-  source?: string;
-  price?: number;
-  dailyChange?: number;
-  allocation?: number;
-  thesis?: string;
-  quantity?: number;
-  averageCost?: number;
-};
 
 export type SaveHoldingsInput = {
   portfolioId: string | null;
@@ -483,112 +441,7 @@ export async function saveHoldings(input: SaveHoldingsInput) {
   return { error: null, portfolioId };
 }
 
-// ─── Legacy create (kept for backward compat) ───────────────────────────────
-
-export async function createPortfolio(data: CreatePortfolioInput) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
-  if (userError || !user) {
-    return { error: "Unauthorized", portfolioId: null as string | null };
-  }
-
-  const sourceType = sourceTypeMap[data.sourceType] ?? "manual";
-  const { data: portfolio, error: portfolioError } = await supabase
-    .from("portfolios")
-    .insert({
-      user_id: user.id,
-      name: data.name ?? "My Portfolio",
-      source_type: sourceType,
-      sync_status: "active",
-    })
-    .select("id")
-    .single();
-
-  if (portfolioError || !portfolio) {
-    return { error: portfolioError?.message ?? "Failed to create portfolio", portfolioId: null };
-  }
-
-  if (data.holdings.length > 0) {
-    const holdingsRows = data.holdings.map((h) => ({
-      portfolio_id: portfolio.id,
-      symbol: h.symbol,
-      company: h.company,
-      sector: h.sector,
-      market: h.market,
-      source: h.source,
-      price: h.price,
-      daily_change: h.dailyChange,
-      allocation: h.allocation,
-      thesis: h.thesis || null,
-      quantity: h.quantity ?? 0,
-      average_cost: h.averageCost ?? 0,
-      import_source: h.importSource ?? "manual",
-    }));
-    const { error: holdingsError } = await supabase.from("holdings").insert(holdingsRows);
-    if (holdingsError) {
-      return { error: holdingsError.message, portfolioId: null };
-    }
-  }
-
-  revalidateAll();
-  return { error: null, portfolioId: portfolio.id };
-}
-
 // ─── Reads ──────────────────────────────────────────────────────────────────
-
-export async function getPortfolio(portfolioId: string) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
-  if (userError || !user) return { data: null, error: "Unauthorized" };
-
-  const { data: portfolio, error: portfolioError } = await supabase
-    .from("portfolios")
-    .select("*")
-    .eq("id", portfolioId)
-    .eq("user_id", user.id)
-    .single();
-
-  if (portfolioError || !portfolio) {
-    return { data: null, error: portfolioError?.message ?? "Not found" };
-  }
-
-  const { data: holdingsRows, error: holdingsError } = await supabase
-    .from("holdings")
-    .select("*")
-    .eq("portfolio_id", portfolioId)
-    .order("created_at", { ascending: true });
-
-  if (holdingsError) {
-    return { data: null, error: holdingsError.message };
-  }
-
-  const holdings = attachLatestEarningsReportFields(
-    (holdingsRows ?? []).map(mapHoldingFromDb),
-    await loadActiveEarningsReportsBySymbols(
-      supabase,
-      (holdingsRows ?? []).map((row) => String(row.symbol ?? "")),
-    ),
-  );
-  return {
-    data: {
-      id: portfolio.id,
-      name: portfolio.name,
-      sourceType: portfolio.source_type,
-      syncStatus: portfolio.sync_status,
-      lastSyncedAt: portfolio.last_synced_at,
-      createdAt: portfolio.created_at,
-      updatedAt: portfolio.updated_at,
-      holdings,
-    },
-    error: null,
-  };
-}
 
 export async function getUserPortfolios() {
   const supabase = await createClient();
@@ -616,57 +469,6 @@ export async function getUserPortfolios() {
     })),
     error: null,
   };
-}
-
-// ─── Mutations ──────────────────────────────────────────────────────────────
-
-export async function updateHolding(holdingId: string, data: HoldingInput) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
-  if (userError || !user) return { error: "Unauthorized" };
-
-  const update: Record<string, unknown> = {};
-  if (data.symbol != null) update.symbol = data.symbol;
-  if (data.company != null) update.company = data.company;
-  if (data.sector != null) update.sector = data.sector;
-  if (data.market != null) update.market = data.market;
-  if (data.source != null) update.source = data.source;
-  if (data.price != null) update.price = data.price;
-  if (data.dailyChange != null) update.daily_change = data.dailyChange;
-  if (data.allocation != null) update.allocation = data.allocation;
-  if (data.thesis != null) update.thesis = data.thesis;
-  if (data.quantity != null) update.quantity = data.quantity;
-  if (data.averageCost != null) update.average_cost = data.averageCost;
-
-  if (Object.keys(update).length === 0) {
-    return { error: null };
-  }
-
-  const { error } = await supabase.from("holdings").update(update).eq("id", holdingId);
-  if (error) return { error: error.message };
-  revalidatePath("/portfolio");
-  revalidatePath("/portfolio/full");
-  revalidatePath("/onboarding");
-  return { error: null };
-}
-
-export async function deleteHolding(holdingId: string) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
-  if (userError || !user) return { error: "Unauthorized" };
-
-  const { error } = await supabase.from("holdings").delete().eq("id", holdingId);
-  if (error) return { error: error.message };
-  revalidatePath("/portfolio");
-  revalidatePath("/portfolio/full");
-  revalidatePath("/onboarding");
-  return { error: null };
 }
 
 /**
@@ -919,123 +721,6 @@ export async function getPortfolioOverview(portfolioId: string) {
   return { data: overview, error: null };
 }
 
-export async function getPortfolioInsights(portfolioId: string) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
-  if (userError || !user) return { data: [], error: "Unauthorized" };
-
-  const { data: portfolio } = await supabase
-    .from("portfolios")
-    .select("id")
-    .eq("id", portfolioId)
-    .eq("user_id", user.id)
-    .single();
-  if (!portfolio) return { data: [], error: "Portfolio not found" };
-
-  const { data: run } = await supabase
-    .from("analysis_runs")
-    .select("id")
-    .eq("portfolio_id", portfolioId)
-    .in("status", ["complete", "degraded"])
-    .order("completed_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (!run) return { data: [], error: null };
-
-  const { data: rows } = await supabase
-    .from("portfolio_insights")
-    .select("title, value, detail")
-    .eq("analysis_run_id", run.id)
-    .order("created_at", { ascending: true });
-
-  const insights = (rows ?? []).map((r) => ({
-    title: r.title,
-    value: r.value,
-    detail: r.detail,
-  }));
-  return { data: insights, error: null };
-}
-
-export async function getPortfolioFeedHighlights(portfolioId: string) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
-  if (userError || !user) return { data: [] as PortfolioFeedHighlight[], error: "Unauthorized" };
-
-  const { data: portfolio } = await supabase
-    .from("portfolios")
-    .select("id")
-    .eq("id", portfolioId)
-    .eq("user_id", user.id)
-    .single();
-  if (!portfolio) return { data: [] as PortfolioFeedHighlight[], error: "Portfolio not found" };
-
-  const { data: run } = await supabase
-    .from("analysis_runs")
-    .select("id")
-    .eq("portfolio_id", portfolioId)
-    .in("status", ["complete", "degraded"])
-    .order("completed_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (!run) return { data: [] as PortfolioFeedHighlight[], error: null };
-
-  const { data: rows, error } = await supabase
-    .from("feed_items")
-    .select(`
-      relevance_score,
-      why_it_matters,
-      holdings,
-      sectors,
-      ai_summary,
-      match_reason_codes,
-      news_items (
-        headline,
-        source,
-        published_at,
-        category
-      )
-    `)
-    .eq("analysis_run_id", run.id)
-    .eq("portfolio_id", portfolioId)
-    .order("relevance_score", { ascending: false })
-    .order("created_at", { ascending: false })
-    .limit(5);
-
-  if (error) {
-    return { data: [] as PortfolioFeedHighlight[], error: error.message };
-  }
-
-  const highlights = (rows ?? [])
-    .map<PortfolioFeedHighlight | null>((row) => {
-      const news = Array.isArray(row.news_items) ? row.news_items[0] : row.news_items;
-      if (!news) return null;
-
-      return {
-        headline: (news.headline as string) ?? "Untitled story",
-        source: (news.source as string) ?? "Unknown source",
-        publishedAt: (news.published_at as string) ?? new Date().toISOString(),
-        category: ((news.category as string) ?? "other") as PortfolioFeedHighlight["category"],
-        relevanceScore: Number(row.relevance_score ?? 0),
-        whyItMatters: (row.why_it_matters as string | null) ?? "",
-        holdings: ((row.holdings as string[] | null) ?? []).map((item) => item.toUpperCase()),
-        sectors: (row.sectors as string[] | null) ?? [],
-        aiSummary: (row.ai_summary as string | null) ?? "",
-        matchReasonCodes: (row.match_reason_codes as PortfolioFeedHighlight["matchReasonCodes"]) ?? [],
-      };
-    })
-    .filter((item): item is PortfolioFeedHighlight => item !== null);
-
-  return { data: highlights, error: null };
-}
-
 type SyncHoldingPricesResult = {
   status: "updated" | "no_quotes" | "error";
   updated: number;
@@ -1046,18 +731,6 @@ type SyncHoldingPricesResult = {
 };
 
 const DEFAULT_PRICE_SYNC_MIN_AGE_MS = 5 * 60_000;
-
-/**
- * Update holding prices in the database from live quotes. Does not call revalidatePath —
- * safe to await from Server Components (e.g. /portfolio/full on each visit).
- */
-export async function syncHoldingPrices(portfolioId: string): Promise<{
-  updated: number;
-  error: string | null;
-}> {
-  const r = await syncHoldingPricesInternal(portfolioId);
-  return { updated: r.updated, error: r.error };
-}
 
 export async function syncHoldingPricesIfStale(
   portfolioId: string,
@@ -1179,7 +852,7 @@ export async function refreshPortfolioPricingSnapshot(
 }
 
 /**
- * Same DB work as syncHoldingPrices, then invalidates cached routes. Only call from
+ * Refresh live prices, then invalidate cached routes. Only call from
  * Server Actions, route handlers, or client-triggered flows — not during RSC render.
  */
 export async function refreshHoldingPrices(portfolioId: string) {

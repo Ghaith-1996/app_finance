@@ -3,7 +3,6 @@ import { twMerge } from "tailwind-merge";
 import type {
   ImpactLevel,
   MatchReasonCode,
-  Sentiment,
   StockEffect,
 } from "@/lib/types";
 
@@ -30,19 +29,6 @@ export function formatPrice(value: number) {
 export function formatPercent(value: number) {
   const sign = value > 0 ? "+" : "";
   return `${sign}${value.toFixed(2)}%`;
-}
-
-export function sentimentTone(sentiment: Sentiment) {
-  switch (sentiment) {
-    case "positive":
-      return "success";
-    case "negative":
-      return "danger";
-    case "watch":
-      return "warning";
-    default:
-      return "neutral";
-  }
 }
 
 export function impactTone(impact: ImpactLevel) {

@@ -51,7 +51,6 @@ function applyDocumentPreferences(theme: Theme, locale: Locale) {
 
 export function PreferenceScript({
   initialTheme,
-  initialLocale: _initialLocale,
 }: {
   initialTheme: Theme;
   initialLocale: Locale;
@@ -89,7 +88,6 @@ export function PreferenceScript({
 export function PreferencesProvider({
   children,
   initialTheme,
-  initialLocale: _initialLocale,
 }: {
   children: ReactNode;
   initialTheme: Theme;
@@ -130,7 +128,7 @@ export function PreferencesProvider({
     writeCookie(THEME_COOKIE_KEY, nextTheme);
   }, []);
 
-  const setLocale = useCallback((_nextLocale: Locale) => {
+  const setLocale = useCallback(() => {
     const nextLocale: Locale = "en";
     setLocaleState(nextLocale);
     try {

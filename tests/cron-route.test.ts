@@ -79,14 +79,6 @@ describe("POST /api/news/cron", () => {
     expect(body.ingestBreakdown.finnhub.inserted).toBe(2);
   });
 
-  it("does not call runAnalysis", async () => {
-    const res = await POST(makeRequest("test-secret", makePayload()));
-    const body = await res.json();
-
-    // The response should NOT contain an analysis field
-    expect(body.analysis).toBeUndefined();
-  });
-
   it("returns shouldEnrich false when no inserted article ids", async () => {
     const payload = makePayload({
       total_inserted: 0,

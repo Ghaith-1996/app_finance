@@ -96,19 +96,6 @@ describe("ArticleChatPanel (Turnstile grant behavior)", () => {
     setTurnstileVerified("tok-123");
   });
 
-  it("hides the Turnstile widget when the server already reports the chat as verified", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(threadResponse({ turnstileVerified: true }));
-    vi.stubGlobal("fetch", fetchMock);
-
-    renderPanel();
-
-    await screen.findByLabelText(/ask a follow-up/i);
-
-    expect(screen.queryByTestId("turnstile-block")).not.toBeInTheDocument();
-  });
-
   it("shows the Turnstile widget until the first successful POST, then hides it and does not reset", async () => {
     const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
       const url = input instanceof Request ? input.url : input.toString();

@@ -10,7 +10,6 @@ import type {
 } from "@/lib/types";
 
 export type Sentiment = "positive" | "watch" | "negative" | "neutral";
-export type ImpactLevel = "High" | "Medium" | "Low";
 
 /** Minimal holding shape consumed by AI methods. */
 export interface HoldingContext {
@@ -124,13 +123,11 @@ export interface PortfolioCopilotContext {
 export interface IAIProvider {
   generateSummary(article: string, holdings: HoldingContext[]): Promise<string>;
   scoreSentiment(article: string): Promise<Sentiment>;
-  scoreRelevance(article: string, holdings: HoldingContext[]): Promise<number>;
   assessPortfolioMatch(
     article: string,
     holdings: HoldingContext[],
   ): Promise<PortfolioMatchAssessment>;
   generateInsights(holdings: HoldingContext[], newsContexts: NewsContext[]): Promise<PortfolioInsight[]>;
-  explainWhyItMatters(article: string, holdings: HoldingContext[]): Promise<string>;
   analyzeArticle(headline: string, content: string, hintTickers?: string[]): Promise<ArticleAnalysis>;
   answerArticleQuestion(context: ArticleChatContext): Promise<string>;
   answerPortfolioQuestion(context: PortfolioCopilotContext): Promise<string>;

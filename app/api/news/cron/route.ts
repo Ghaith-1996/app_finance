@@ -3,8 +3,6 @@ import { createLogger } from "@/lib/logger";
 
 const log = createLogger("cron");
 
-type CronSourceKey = "edgar" | "newsapi" | "gnews" | "finnhub";
-
 type CronSourceRow = SourceStats & {
   inserted_ids?: string[];
 };

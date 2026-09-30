@@ -3,8 +3,6 @@
  *
  * Builds keyword queries suitable for any news API that accepts
  * free-text search strings (NewsAPI.ai, NewsCatcher, etc.).
- * The existing GNews-specific builder in gnews-targeting.ts remains
- * for backward compatibility with the current provider set.
  */
 
 const MAX_PORTFOLIO_QUERIES = 8;
@@ -57,5 +55,3 @@ export function buildPortfolioQueries(holdings: HoldingLike[]): string[] {
 
   return [...uniqueQueries];
 }
-
-export { MAX_PORTFOLIO_QUERIES };

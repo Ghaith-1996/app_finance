@@ -114,7 +114,7 @@ export function validatePublisherUrl(raw: string | null | undefined): PublisherU
   }
 }
 
-export async function resolvePublicHostname(
+async function resolvePublicHostname(
   hostname: string,
   lookupImpl: PublisherHostnameLookup = defaultHostnameLookup,
 ): Promise<PublisherUrlValidationResult> {

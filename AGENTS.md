@@ -5,6 +5,13 @@ alwaysApply: true
 
 # AGENTS.md
 
+## Testing Policy (Important)
+
+Never write unit tests after you write code.
+
+- Highly prefer E2E tests as the sole testing mechanism. Use them to verify complex features work. At the end of E2E tests, produce a verifiable and repeatable artifact.
+- If you must test a system in isolation, first write down all the ways it could fail, then write the code.
+
 ## What This File Is
 
 This is the root handoff document for AI agents working in this repository.
@@ -2519,156 +2526,16 @@ Security note:
 
 ## Tests
 
-Test directory:
+Follow the **Testing Policy (Important)** at the top of this document.
 
-- `tests/`
+- `npm run test` runs the remaining Vitest regression suites in `tests/`.
+- `python -B -m unittest discover -s workers/news_ingestion/tests -v` runs the Python worker regressions without rewriting tracked bytecode.
+- There is currently no checked-in browser E2E runner, E2E suite, or E2E CI job. The AI provider smoke scripts are not E2E tests.
+- The test cleanup removed SQL/source-text assertions, constant/fixture tautologies, static UI checks, and redundant mocked happy paths. Retained isolated tests must demonstrate a concrete failure mode; their existence is not a recommendation to add more unit tests.
+- `TEST_AUDIT.md` records the cleanup decisions, coverage limitations, and repeatable verification commands.
+- Historical test filenames in the session log below/above describe earlier work; use the current tree and audit for the maintained suite.
 
-Current files:
-
-- `ai-chat-errors.test.ts`
-- `ai-prompts.test.ts`
-- `analysis-constants.test.ts`
-- `analysis-run-trigger.test.tsx`
-- `analysis-service.test.ts`
-- `article-chat-panel.test.tsx`
-- `article-chat-grant.test.ts`
-- `article-chat-route.test.ts`
-- `article-cta.test.tsx`
-- `chat-turnstile-grant.test.ts`
-- `cache.test.ts`
-- `candidate-source-registration.test.ts`
-- `cron-route.test.ts`
-- `cron-v2-route.test.ts`
-- `env-validation.test.ts`
-- `external-url.test.ts`
-- `feed-query.test.ts`
-- `feed-route.test.ts`
-- `feed-view.test.tsx`
-- `delivery-adapters.test.ts`
-- `finnhub-errors.test.ts`
-- `finnhub-refresh.test.ts`
-- `gnews-targeting.test.ts`
-- `ingest-detail.test.ts`
-- `ingest-route.test.ts`
-- `logger.test.ts`
-- `news-health-route.test.ts`
-- `portfolio-match-parser.test.ts`
-- `portfolio-queries.test.ts`
-- `publisher-extract.test.ts`
-- `publisher-url.test.ts`
-- `refresh-route.test.ts`
-- `refresh-v2-route.test.ts`
-- `profile-utils.test.ts`
-- `auth-callback-route.test.ts`
-- `user-menu.test.tsx`
-- `turnstile-verify.test.ts`
-- `turnstile-protected-routes.test.ts`
-- `article-chat-token-budget.test.ts`
-- `active-portfolio-value-card.test.tsx`
-- `analysis-cron-route.test.ts`
-- `app-shell-layout.test.tsx`
-- `billing-subscriptions.test.ts`
-- `community-actions.test.ts`
-- `community-post-card.test.tsx`
-- `community-types.test.ts`
-- `complete-profile-page.test.ts`
-- `enrich-cron-route.test.ts`
-- `extraction-uuid-validation.test.ts`
-- `handle-hardening.test.ts`
-- `middleware.test.ts`
-- `mistral-provider.test.ts`
-- `onboarding-page.test.tsx`
-- `portfolio-copilot-route.test.ts`
-- `portfolio-copilot-grant.test.ts`
-- `portfolio-csv-import-flow.test.tsx`
-- `portfolio-performance-chart.test.tsx`
-- `portfolio-pricing-section.test.tsx`
-- `portfolio-snapshot-panel.test.tsx`
-- `portfolio-sync-prices-route.test.ts`
-- `portfolio-value-card.test.tsx`
-- `portfolio-price-sync.test.ts`
-- `portfolio-refresh-loaders.test.ts`
-- `portfolio-value-snapshots-cron-route.test.ts`
-- `rate-limit.test.ts`
-- `redirect-validation.test.ts`
-- `source-config-candidate.test.ts`
-- `stripe-webhook-route.test.ts`
-- `streamed-price-refresh-pages.test.tsx` (if present)
-- `timing-safe.test.ts`
-- `twelvedata-detail.test.ts`
-- `watchlist-detail-dashboard.test.tsx`
-- `watchlist-items.test.tsx`
-- `watchlist-page.test.tsx`
-
-Coverage themes:
-
-- prompt shape
-- analysis constants and gating behavior
-- analysis trigger UI state (status-only, no refresh button)
-- feed route: personal mode with matchSources/matchReasonCodes, market mode with isWatchlistMatch, watchlist-only fallback
-- feed route/page counts, pagination, hot sort, detail-open tracking, and `/api/feed/open`
-- cron route: full pipeline with Finnhub, analysis-for-all, cooldown skipping
-- candidate cron route: separate secret, candidate source payload validation, same-table writes
-- refresh route orchestration (deprecated but tested)
-- refresh-v2 route orchestration for the candidate provider set
-- Finnhub targeted ingest
-- Finnhub provider error classification (missing key, 401/403, 429, timeout, bad payload, no match, valid search)
-- GNews query building
-- provider-agnostic candidate query building
-- article CTA behavior
-- parser behavior
-- server-side cache (TTL expiry, fetch-through, hit/miss)
-- structured logger (info/warn/error, scoped, data serialization)
-- env validation (require/missing, hasKey)
-- profile validation/completeness helpers, callback redirect gating, and avatar dropdown behavior
-- Turnstile server-side verification (success, failure, timeout/duplicate, network error, missing token/secret, action/hostname mismatch, idempotency key, client IP extraction)
-- Turnstile route/action protection gating (article-chat, portfolio-copilot, community post/comment reject without valid token)
-- chat Turnstile grant cookies and client panel grant behavior for article chat and portfolio copilot
-- article chat token budget assertion (2000 tokens across all four providers)
-- portfolio copilot token budget assertion
-- billing entitlement logic (buildBillingState, trialing/active/past_due, tier gating, admin override via `hasAdminModelAccess`)
-- billing store/webhook idempotency, stale processing recovery, canonical base URL resolution, and one-subscription-per-user migration
-- Mistral provider creation, config validation, chat/enrichment methods
-- analysis cron route (GET eligibility, POST single-portfolio run, cooldown, CRON_SECRET)
-- enrichment cron route (batch enrichment, max batch size, CRON_SECRET)
-- admin news health / refresh route gating
-- middleware redirect behavior with sanitizeRedirect
-- app shell layout collapse/expand, localStorage persistence, navigation structure
-- community actions (createPost, createComment, getHomeFeed, ticker extraction)
-- community types (extractTickers, body validation)
-- extraction UUID validation
-- handle hardening (format, uniqueness)
-- onboarding page (method selection, CSV/manual flows)
-- portfolio copilot route (auth, AI call, error handling)
-- portfolio CSV import flow (upload, mapping, review, save modes)
-- portfolio pricing section (orchestration, auto-refresh)
-- portfolio performance chart and pricing section use historical snapshots when available with live fallback behavior
-- portfolio snapshot panel (metric display)
-- portfolio sync prices route (auth, freshness, overview merge)
-- portfolio value card (display, refresh state)
-- active portfolio value card (value, change, trending)
-- portfolio price sync (stale-skip, refresh, auth, dedup)
-- portfolio refresh loaders (dedupe, cached in-flight promise)
-- portfolio value snapshot cron route and migration
-- analysis run heartbeat and stale-run migrations
-- daily digest builder, digest cron route, digest page, notification preferences/settings panel, delivery adapters, and digest migration
-- earnings report service, cron route, migration, portfolio holdings report links, and watchlist detail report links
-- root preferences provider/panel and theme persistence
-- portfolio sync prices route (auth, freshness, overview merge)
-- portfolio value card (display, refresh state)
-- active portfolio value card (value, change, trending)
-- rate limit (sliding window, cleanup, edge cases)
-- redirect validation (safe/unsafe paths, sanitization)
-- portfolio price sync (stale-skip, refresh, auth, dedup)
-- portfolio refresh loaders (dedupe, cached in-flight promise)
-
-Known testing limitation:
-
-- there is no integrated full-stack test proving:
-  - Supabase migrations applied
-  - Python worker execution
-  - live AI provider
-  - real UI workflow
+Known testing limitation: no integrated full-stack test proves applied Supabase migrations, Python ingestion, a live AI provider, and the real UI workflow together. In particular, reading SQL text cannot verify RLS, atomic quotas, or concurrent database writes.
 
 ## Current Documentation State
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowDown, ArrowUp, ArrowUpDown, ExternalLink, Minus, Newspaper, Plus } from "lucide-react";
@@ -120,6 +120,16 @@ function HoldingAdjustPanel({
   const [loadingAdd, setLoadingAdd] = useState(false);
   const [errSale, setErrSale] = useState<string | null>(null);
   const [errAdd, setErrAdd] = useState<string | null>(null);
+  // One operation id per submission; reused only when retrying the identical input so a double
+  // click or network retry is applied once (audit B4). Cleared after success.
+  const pendingOperation = useRef<{ key: string; id: string } | null>(null);
+
+  function operationIdFor(key: string): string {
+    if (pendingOperation.current?.key !== key) {
+      pendingOperation.current = { key, id: crypto.randomUUID() };
+    }
+    return pendingOperation.current.id;
+  }
 
   async function submitSale(e: React.FormEvent) {
     e.preventDefault();
@@ -131,12 +141,13 @@ function HoldingAdjustPanel({
       return;
     }
     setLoadingSale(true);
-    const res = await recordHoldingSale(portfolioId, holding.id, n);
+    const res = await recordHoldingSale(portfolioId, holding.id, n, operationIdFor(`sell:${holding.id}:${n}`));
     setLoadingSale(false);
     if (res.error) {
       setErrSale(res.error);
       return;
     }
+    pendingOperation.current = null;
     setSoldShares("");
     onDone();
     router.refresh();
@@ -157,12 +168,13 @@ function HoldingAdjustPanel({
       return;
     }
     setLoadingAdd(true);
-    const res = await recordHoldingAdd(portfolioId, holding.id, q, p);
+    const res = await recordHoldingAdd(portfolioId, holding.id, q, p, operationIdFor(`add:${holding.id}:${q}:${p}`));
     setLoadingAdd(false);
     if (res.error) {
       setErrAdd(res.error);
       return;
     }
+    pendingOperation.current = null;
     setAddShares("");
     setAddPrice("");
     onDone();

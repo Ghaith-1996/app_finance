@@ -13,7 +13,7 @@ CONTAINER="${PG_CONTAINER:-pf-migration-check}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 psql_exec() {
-  docker exec -i "$CONTAINER" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -q "$@"
+  docker exec -i "$CONTAINER" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -q     -v DBLINK_HOST="${DBLINK_HOST:-localhost}" "$@"
 }
 
 docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
@@ -27,6 +27,9 @@ for _ in $(seq 1 90); do
   sleep 2
 done
 sleep 3
+# Concurrency tests open extra sessions with dblink; loopback is "trust" in this image and dblink
+# refuses password-less connections for non-superusers, so they connect via the container address.
+DBLINK_HOST="$(docker exec "$CONTAINER" hostname -i | awk '{print $1}')"
 
 failed=0
 echo "== migrations"

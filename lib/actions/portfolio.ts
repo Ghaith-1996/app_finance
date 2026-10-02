@@ -480,14 +480,22 @@ export async function addPortfolioPosition(
   return { error: null };
 }
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /**
- * Record a sale: reduce share count. If all shares are sold, the holding is removed.
+ * Applies one share addition or sale atomically and exactly once (audit B4). The database locks
+ * the holding for the read-modify-write, rejects overselling, and records an immutable ledger row
+ * keyed by `operationId`. Callers pass the same `operationId` when retrying the same submission
+ * (double click, network retry); the change is then reported as already applied, not repeated.
  */
-export async function recordHoldingSale(
-  portfolioId: string,
-  holdingId: string,
-  sharesSold: number,
-) {
+async function applyHoldingTransaction(input: {
+  portfolioId: string;
+  holdingId: string;
+  kind: "add" | "sell";
+  quantity: number;
+  price: number | null;
+  operationId?: string;
+}): Promise<{ error: string | null; duplicate?: boolean }> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -495,51 +503,53 @@ export async function recordHoldingSale(
   } = await supabase.auth.getUser();
   if (userError || !user) return { error: "Unauthorized" };
 
-  const { data: portfolio } = await supabase
-    .from("portfolios")
-    .select("id")
-    .eq("id", portfolioId)
-    .eq("user_id", user.id)
-    .single();
-  if (!portfolio) return { error: "Portfolio not found or unauthorized." };
-
-  const { data: row, error: rowError } = await supabase
-    .from("holdings")
-    .select("id, quantity, average_cost")
-    .eq("id", holdingId)
-    .eq("portfolio_id", portfolioId)
-    .single();
-
-  if (rowError || !row) return { error: "Holding not found." };
-
-  const qty = Number(row.quantity);
-  const sold = Number(sharesSold);
-  if (!Number.isFinite(sold) || sold <= 0) {
-    return { error: "Enter a positive number of shares sold." };
+  const quantity = Number(input.quantity);
+  if (!Number.isFinite(quantity) || quantity <= 0) {
+    return {
+      error: input.kind === "sell" ? "Enter a positive number of shares sold." : "Added shares must be greater than zero.",
+    };
   }
-  if (sold > qty + 1e-9) {
-    return { error: "You can't sell more shares than you currently hold." };
+  if (input.kind === "add" && (!Number.isFinite(Number(input.price)) || Number(input.price) < 0)) {
+    return { error: "Price per share must be zero or positive." };
   }
+  const operationId = input.operationId && UUID_PATTERN.test(input.operationId) ? input.operationId : crypto.randomUUID();
 
-  const newQty = qty - sold;
-  const EPS = 1e-8;
+  const { data, error } = await supabase.rpc("apply_holding_transaction", {
+    p_operation_id: operationId,
+    p_portfolio_id: input.portfolioId,
+    p_holding_id: input.holdingId,
+    p_kind: input.kind,
+    p_quantity: quantity,
+    p_price: input.kind === "add" ? Number(input.price) : null,
+  });
 
-  if (newQty <= EPS) {
-    const { error: delErr } = await supabase
-      .from("holdings")
-      .delete()
-      .eq("id", holdingId);
-    if (delErr) return { error: delErr.message };
-  } else {
-    const { error: upErr } = await supabase
-      .from("holdings")
-      .update({ quantity: newQty })
-      .eq("id", holdingId);
-    if (upErr) return { error: upErr.message };
+  if (error) {
+    if (error.code === "P0002") return { error: "Holding not found." };
+    if (error.code === "42501") return { error: "Portfolio not found or unauthorized." };
+    if (error.code === "22023" && error.message?.startsWith("invalid_transaction: ")) {
+      const reason = error.message.slice("invalid_transaction: ".length);
+      return { error: `${reason.charAt(0).toUpperCase()}${reason.slice(1)}.` };
+    }
+    return { error: "The change could not be saved. Your position was not changed — please try again." };
   }
 
-  await refreshHoldingPrices(portfolioId);
-  return { error: null };
+  const duplicate = (data as { status?: string } | null)?.status === "duplicate";
+  if (!duplicate) {
+    await refreshHoldingPrices(input.portfolioId);
+  }
+  return { error: null, duplicate };
+}
+
+/**
+ * Record a sale: reduce share count. If all shares are sold, the holding is removed.
+ */
+export async function recordHoldingSale(
+  portfolioId: string,
+  holdingId: string,
+  sharesSold: number,
+  operationId?: string,
+) {
+  return applyHoldingTransaction({ portfolioId, holdingId, kind: "sell", quantity: sharesSold, price: null, operationId });
 }
 
 /**
@@ -550,59 +560,16 @@ export async function recordHoldingAdd(
   holdingId: string,
   sharesAdded: number,
   pricePerShare: number,
+  operationId?: string,
 ) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
-  if (userError || !user) return { error: "Unauthorized" };
-
-  const { data: portfolio } = await supabase
-    .from("portfolios")
-    .select("id")
-    .eq("id", portfolioId)
-    .eq("user_id", user.id)
-    .single();
-  if (!portfolio) return { error: "Portfolio not found or unauthorized." };
-
-  const { data: row, error: rowError } = await supabase
-    .from("holdings")
-    .select("id, quantity, average_cost")
-    .eq("id", holdingId)
-    .eq("portfolio_id", portfolioId)
-    .single();
-
-  if (rowError || !row) return { error: "Holding not found." };
-
-  const qty = Number(row.quantity);
-  const avg = Number(row.average_cost);
-  const addQty = Number(sharesAdded);
-  const price = Number(pricePerShare);
-
-  if (!Number.isFinite(addQty) || addQty <= 0) {
-    return { error: "Added shares must be greater than zero." };
-  }
-  if (!Number.isFinite(price) || price < 0) {
-    return { error: "Price per share must be zero or positive." };
-  }
-
-  const newQty = qty + addQty;
-  const newAvg = (qty * avg + addQty * price) / newQty;
-  const roundedAvg = Math.round(newAvg * 10000) / 10000;
-
-  const { error: upErr } = await supabase
-    .from("holdings")
-    .update({
-      quantity: newQty,
-      average_cost: roundedAvg,
-    })
-    .eq("id", holdingId);
-
-  if (upErr) return { error: upErr.message };
-
-  await refreshHoldingPrices(portfolioId);
-  return { error: null };
+  return applyHoldingTransaction({
+    portfolioId,
+    holdingId,
+    kind: "add",
+    quantity: sharesAdded,
+    price: pricePerShare,
+    operationId,
+  });
 }
 
 export async function getPortfolioOverview(portfolioId: string) {

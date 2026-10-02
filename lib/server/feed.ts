@@ -12,6 +12,7 @@ import type {
 } from "@/lib/types";
 import { resolveDirectStockMatch } from "@/lib/services/news/direct-match";
 import { isMarketHeadlineSource } from "@/lib/services/news/source-config";
+import { formatRelativeTime } from "@/lib/time/format";
 
 /** Hard cap: only articles from the last 24 hours appear in either feed mode. */
 const FEED_MAX_AGE_MINUTES = 24 * 60;
@@ -108,12 +109,7 @@ function minutesAgo(iso: string): number {
 }
 
 function formatPublishedAt(iso: string): string {
-  const min = minutesAgo(iso);
-  if (min < 60) return `${min} minutes ago`;
-  if (min < 120) return "1 hour ago";
-  if (min < 180) return "2 hours ago";
-  if (min < 1440) return `${Math.floor(min / 60)} hours ago`;
-  return `${Math.floor(min / 1440)} days ago`;
+  return formatRelativeTime(iso);
 }
 
 function comparePublishedAt(

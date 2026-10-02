@@ -13,6 +13,7 @@ import {
 } from "@/lib/server/feed";
 import { newsWindowCutoffIso } from "@/lib/services/news/pool-snapshot";
 import { loadPortfolioValueSnapshots } from "@/lib/services/portfolio-value-snapshots";
+import { formatRelativeTime } from "@/lib/time/format";
 import {
   summarizeValuation,
   valuationInputFromHolding,
@@ -241,14 +242,7 @@ function createTimingLogger(label: string) {
 }
 
 function formatTimeAgo(iso: string | null | undefined): string {
-  if (!iso) return "-";
-  const timestamp = new Date(iso).getTime();
-  if (Number.isNaN(timestamp)) return "-";
-  const minutes = Math.floor((Date.now() - timestamp) / 60_000);
-  if (minutes < 1) return "Just now";
-  if (minutes < 60) return `${minutes} minutes ago`;
-  if (minutes < 1440) return `${Math.floor(minutes / 60)} hours ago`;
-  return `${Math.floor(minutes / 1440)} days ago`;
+  return formatRelativeTime(iso, new Date(), "-");
 }
 
 function mapHoldingFromRow(row: HoldingRow): Holding {

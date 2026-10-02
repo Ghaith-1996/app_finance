@@ -17,6 +17,7 @@ import {
   WalletCards,
 } from "lucide-react";
 
+import { formatAppDateTime } from "@/lib/time/format";
 import type { HomeDashboardData } from "@/lib/server/page-loaders";
 import type { PortfolioHealthTone } from "@/lib/services/portfolio-health";
 import { storyHref } from "@/lib/feed/constants";
@@ -67,14 +68,8 @@ function formatReportDate(value: string | null) {
 }
 
 function formatActivityTime(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Recent";
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(date);
+  // Same zone and label as every other surface (F15); this component renders on the server.
+  return formatAppDateTime(value, "Recent");
 }
 
 export function TodayDashboard({ data }: { data: HomeDashboardData }) {

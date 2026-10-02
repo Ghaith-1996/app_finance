@@ -7,6 +7,7 @@ import {
   valuePortfolio,
   type PortfolioValuationSummary,
 } from "@/lib/services/valuation";
+import { formatRelativeTime } from "@/lib/time/format";
 
 export interface PortfolioOverviewResult {
   totalValue: number;
@@ -70,9 +71,5 @@ export async function computePortfolioOverview(
 }
 
 function formatTimeAgo(iso: string): string {
-  const min = Math.floor((Date.now() - new Date(iso).getTime()) / 60_000);
-  if (min < 1) return "Just now";
-  if (min < 60) return `${min} minutes ago`;
-  if (min < 1440) return `${Math.floor(min / 60)} hours ago`;
-  return `${Math.floor(min / 1440)} days ago`;
+  return formatRelativeTime(iso);
 }

@@ -3,19 +3,14 @@ import { ArrowRight, Bookmark } from "lucide-react";
 
 import { AppShell } from "@/components/app/app-shell";
 import { PortfolioValueCard } from "@/components/app/portfolio-value-card";
+import { formatRelativeTime } from "@/lib/time/format";
 import { loadPortfolioPageData } from "@/lib/server/page-loaders";
 import type { Holding, PortfolioFeedHighlight } from "@/lib/types";
 import { storyHref } from "@/lib/feed/constants";
 import { categoryLabel } from "@/lib/utils";
 
 function formatStoryTime(iso: string): string {
-  const t = new Date(iso).getTime();
-  if (Number.isNaN(t)) return "";
-  const min = Math.floor((Date.now() - t) / 60_000);
-  if (min < 1) return "Just now";
-  if (min < 60) return `${min} min ago`;
-  if (min < 1440) return `${Math.floor(min / 60)} hours ago`;
-  return `${Math.floor(min / 1440)} days ago`;
+  return formatRelativeTime(iso, new Date(), "");
 }
 
 function storyTickerTag(h: PortfolioFeedHighlight): string {

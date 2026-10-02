@@ -1,4 +1,5 @@
 import { storyHref } from "@/lib/feed/constants";
+import { formatRelativeTime } from "@/lib/time/format";
 import type { Holding, PortfolioFeedHighlight } from "@/lib/types";
 
 export type PortfolioHealthTone = "good" | "watch" | "risk" | "neutral";
@@ -257,7 +258,8 @@ export function calculatePortfolioHealth(input: {
     {
       id: "quote_freshness",
       label: "Quote freshness",
-      value: staleQuotes.length === 0 ? "Fresh" : `${staleQuotes.length} stale`,
+      // "Within 24h" (not "Fresh"): this threshold is looser than a live quote (F15).
+      value: staleQuotes.length === 0 ? "Within 24h" : `${staleQuotes.length} stale`,
       detail:
         staleQuotes.length === 0
           ? "All tracked holdings have quotes from the last 24 hours."
@@ -269,11 +271,7 @@ export function calculatePortfolioHealth(input: {
       id: "analysis_freshness",
       label: "AI analysis",
       value:
-        analysisAge === null
-          ? "Not run"
-          : analysisAge < 1
-            ? "Just now"
-            : `${Math.round(analysisAge)}h old`,
+        analysisAge === null ? "Not run" : formatRelativeTime(input.latestAnalysisAt, now),
       detail:
         analysisAge === null
           ? "Run analysis to generate current matches and insights."

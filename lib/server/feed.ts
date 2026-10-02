@@ -1,3 +1,4 @@
+import { FEED_PAGE_SIZE } from "@/lib/feed/constants";
 import { createClient } from "@/lib/supabase/server";
 import { buildInvestmentThesisMatches } from "@/lib/investment-theses/matching";
 import { loadInvestmentThesesForSymbols } from "@/lib/server/investment-theses";
@@ -14,7 +15,7 @@ import { isMarketHeadlineSource } from "@/lib/services/news/source-config";
 
 /** Hard cap: only articles from the last 24 hours appear in either feed mode. */
 const FEED_MAX_AGE_MINUTES = 24 * 60;
-export const DEFAULT_FEED_PAGE_SIZE = 100;
+export const DEFAULT_FEED_PAGE_SIZE = FEED_PAGE_SIZE;
 const MIN_PAGE_SIZE = 10;
 const MAX_PAGE_SIZE = 500;
 const NO_HOT_NEWS_SORT_NOTICE = "No hot news yet. Showing most recent instead.";

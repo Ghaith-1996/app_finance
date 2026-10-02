@@ -167,6 +167,8 @@ export interface PortfolioInsight {
 }
 
 export interface PortfolioFeedHighlight {
+  /** Article id, so shortcuts open this exact story (/feed?story=<id>). */
+  newsItemId?: string;
   headline: string;
   source: string;
   publishedAt: string;

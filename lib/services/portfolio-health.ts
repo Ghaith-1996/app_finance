@@ -1,3 +1,4 @@
+import { storyHref } from "@/lib/feed/constants";
 import type { Holding, PortfolioFeedHighlight } from "@/lib/types";
 
 export type PortfolioHealthTone = "good" | "watch" | "risk" | "neutral";
@@ -333,7 +334,7 @@ export function calculatePortfolioHealth(input: {
       title: story.holdings[0] ? `${story.holdings[0]} catalyst` : story.category,
       detail: story.whyItMatters || story.aiSummary || story.headline,
       tone: "good" as const,
-      href: "/feed",
+      href: storyHref(story.newsItemId),
     }));
 
   const opportunities =

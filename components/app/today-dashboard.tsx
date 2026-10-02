@@ -19,6 +19,7 @@ import {
 
 import type { HomeDashboardData } from "@/lib/server/page-loaders";
 import type { PortfolioHealthTone } from "@/lib/services/portfolio-health";
+import { storyHref } from "@/lib/feed/constants";
 import { categoryLabel, cn, formatCurrency, formatPercent } from "@/lib/utils";
 
 function toneClasses(tone: PortfolioHealthTone) {
@@ -617,7 +618,7 @@ export function TodayDashboard({ data }: { data: HomeDashboardData }) {
           </div>
 
           {primaryStory ? (
-            <Link href="/feed" className="mt-5 block">
+            <Link href={storyHref(primaryStory.newsItemId)} className="mt-5 block">
               <div className="flex flex-wrap gap-2">
                 <span className="rounded-md bg-white/5 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-slate-500">
                   {categoryLabel(primaryStory.category)}

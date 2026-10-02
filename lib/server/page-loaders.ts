@@ -439,6 +439,7 @@ async function loadPortfolioFeedHighlightsForRun(
       ai_summary,
       match_reason_codes,
       news_items (
+        id,
         headline,
         source,
         published_at,
@@ -459,6 +460,7 @@ async function loadPortfolioFeedHighlightsForRun(
       if (!news) return null;
 
       return {
+        newsItemId: (news.id as string | undefined) ?? undefined,
         headline: (news.headline as string) ?? "Untitled story",
         source: (news.source as string) ?? "Unknown source",
         publishedAt: (news.published_at as string) ?? new Date().toISOString(),

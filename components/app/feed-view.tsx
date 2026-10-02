@@ -23,6 +23,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button, buttonStyles } from "@/components/ui/button";
 import { ModalDialog } from "@/components/ui/modal-dialog";
 import { Panel } from "@/components/ui/panel";
+import { FEED_PAGE_SIZE } from "@/lib/feed/constants";
 import { buildScoreExplanation } from "@/lib/feed/score-explanation";
 import {
   NEWS_CATEGORIES,
@@ -82,7 +83,6 @@ const selectTriggerClass =
   "themed-select w-full min-w-0 appearance-none rounded-xl border border-subtle bg-surface-raised py-2.5 pl-3 pr-9 text-sm font-medium text-primary shadow-[var(--surface-shadow)] focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20";
 
 const DESKTOP_CHAT_BREAKPOINT = 1280;
-const FEED_PAGE_SIZE = 50;
 const DEFAULT_CHAT_ACTIVITY: ArticleChatActivityState = {
   hasMessages: false,
   hasDraft: false,
@@ -177,6 +177,10 @@ export function FeedView({
   const [totalCount, setTotalCount] = useState(
     () => initialFeedPayload?.totalCount ?? 0,
   );
+  // The page size the server actually used. Requests and page counts follow it, so the first page
+  // (server-rendered) and later pages can never disagree (audit F07).
+  const [pageSize, setPageSize] = useState(() => initialFeedPayload?.pageSize ?? FEED_PAGE_SIZE);
+  const pageSizeRef = useRef(pageSize);
   const [selectedStoryId, setSelectedStoryId] = useState<string | null>(null);
   const [lastIngestHint, setLastIngestHint] = useState<LastIngestSnapshot | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
@@ -284,7 +288,7 @@ export function FeedView({
         params.set("maxMinutes", String(recencyMax));
         params.set("sort", selectedSort);
         params.set("page", String(page));
-        params.set("pageSize", String(FEED_PAGE_SIZE));
+        params.set("pageSize", String(pageSizeRef.current));
         if (mode === "personal") {
           if (selectedHolding !== "All holdings") {
             params.set("holding", selectedHolding);
@@ -335,6 +339,10 @@ export function FeedView({
         }
         if (typeof data.page === "number") {
           setPage(data.page);
+        }
+        if (typeof data.pageSize === "number" && data.pageSize > 0) {
+          pageSizeRef.current = data.pageSize;
+          setPageSize(data.pageSize);
         }
         setPortfolioSymbols(
           Array.isArray(data.portfolioSymbols)
@@ -595,14 +603,16 @@ export function FeedView({
     return `All portfolio (${portfolioSymbols.length} holding${portfolioSymbols.length === 1 ? "" : "s"})`;
   }, [portfolioSymbols]);
   const sortOptions = mode === "market" ? marketSortOptions : personalSortOptions;
-  const totalPages = Math.max(1, Math.ceil(totalCount / FEED_PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
   const visibleStories = filteredStories;
-  const hasActiveMarketFilters =
-    mode === "market" &&
-    (selectedSourceType !== sourceTypeOptions[0].label ||
-      selectedCategory !== "All categories" ||
-      selectedRecency !== recencyOptions[0].label ||
-      appliedTickerQuery.trim().length > 0);
+  // Audit F08: a filter that matches nothing must not look like an empty portfolio feed.
+  const hasActiveFilters =
+    selectedSourceType !== sourceTypeOptions[0].label ||
+    selectedCategory !== "All categories" ||
+    selectedRecency !== recencyOptions[0].label ||
+    appliedTickerQuery.trim().length > 0 ||
+    (mode === "personal" &&
+      (selectedHolding !== "All holdings" || selectedSector !== "All sectors"));
   const feedStatusMessage = isRefreshing
     ? "Updating..."
     : backgroundError
@@ -1049,7 +1059,7 @@ export function FeedView({
         {visibleStories.length === 0 ? (
           <FeedEmptyState
             mode={mode}
-            hasAnyData={mode === "market" ? hasActiveMarketFilters : feed.length > 0}
+            hasAnyData={hasActiveFilters || (mode === "personal" && feed.length > 0)}
             onResetFilters={resetFilters}
             lastIngestHint={lastIngestHint}
           />

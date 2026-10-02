@@ -5,6 +5,7 @@ import { AppShell } from "@/components/app/app-shell";
 import { PortfolioValueCard } from "@/components/app/portfolio-value-card";
 import { loadPortfolioPageData } from "@/lib/server/page-loaders";
 import type { Holding, PortfolioFeedHighlight } from "@/lib/types";
+import { storyHref } from "@/lib/feed/constants";
 import { categoryLabel } from "@/lib/utils";
 
 function formatStoryTime(iso: string): string {
@@ -188,7 +189,7 @@ export default async function PortfolioPage() {
                 return (
                   <Link
                     key={`${story.headline}-${i}`}
-                    href="/feed"
+                    href={storyHref(story.newsItemId)}
                     className="group flex flex-col overflow-hidden rounded-2xl border border-white/[0.06] bg-surface-raised transition-transform duration-200 hover:-translate-y-0.5 hover:border-white/10"
                   >
                     <div

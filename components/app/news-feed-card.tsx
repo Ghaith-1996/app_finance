@@ -180,20 +180,20 @@ export function NewsFeedCard({
 
       {chips.length > 0 ? (
         <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-white/[0.06] pt-4">
-          <div className="flex -space-x-2">
-            {chips.map((sym) => (
-              <span
-                key={sym}
-                title={sym}
-                className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-surface-raised bg-white/5 text-[10px] font-bold uppercase text-slate-400"
-              >
-                {sym.slice(0, 3)}
-              </span>
-            ))}
-          </div>
           <span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-600">
             Affected holdings
           </span>
+          {/* Full symbols in wrapping pills: a truncated ticker is a different (or no) security (F09). */}
+          <ul className="flex flex-wrap gap-1.5" aria-label="Affected holdings">
+            {chips.map((sym) => (
+              <li
+                key={sym}
+                className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 font-mono text-[11px] font-bold uppercase text-slate-300"
+              >
+                {sym}
+              </li>
+            ))}
+          </ul>
         </div>
       ) : null}
 

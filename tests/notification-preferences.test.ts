@@ -118,6 +118,8 @@ describe("notification preferences actions", () => {
   });
 
   it("saves both channels together", async () => {
+    // Audit H2: the number has been verified.
+    maybeSingle.mockResolvedValueOnce({ data: { phone_number: "+14165551234" } });
     const result = await saveCurrentUserNotificationPreferences({
       emailDigestEnabled: true,
       smsDigestEnabled: true,

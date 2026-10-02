@@ -92,3 +92,9 @@ export interface DailyDigestCronRunResult {
   failedDeliveries: number;
   uncertainDeliveries: number;
 }
+
+export type SendPhoneCodeResult =
+  | { ok: true }
+  | { ok: false; error: string; retryAfterSeconds?: number };
+
+export type ConfirmPhoneCodeResult = { ok: true } | { ok: false; error: string };

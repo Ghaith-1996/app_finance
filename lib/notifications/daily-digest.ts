@@ -334,13 +334,35 @@ async function loadDigestRecipients(supabase: ServiceClient): Promise<DigestReci
     throw new Error(error.message);
   }
 
+  // Audit H2: SMS goes only to a number the user proved they control. The preferences row is
+  // owner-writable, so the proof is the server-written verified_phone_numbers row, and it must
+  // match the saved number exactly (changing the number requires verifying again).
+  const verifiedPhones = new Map<string, string>();
+  if (data.some((row) => row.sms_digest_enabled)) {
+    const verified = await fetchAllRows<{ user_id: string; phone_number: string }>((from, to) =>
+      supabase
+        .from("verified_phone_numbers")
+        .select("user_id, phone_number")
+        .order("user_id", { ascending: true })
+        .range(from, to),
+    );
+    if (verified.error) {
+      throw new Error(verified.error.message);
+    }
+    for (const row of verified.data) verifiedPhones.set(row.user_id, row.phone_number);
+  }
+
   return data
-    .map((row) => ({
-      userId: row.user_id,
-      emailDigestEnabled: Boolean(row.email_digest_enabled),
-      smsDigestEnabled: Boolean(row.sms_digest_enabled),
-      phoneNumber: row.phone_number?.trim() ?? "",
-    }))
+    .map((row) => {
+      const phoneNumber = row.phone_number?.trim() ?? "";
+      return {
+        userId: row.user_id,
+        emailDigestEnabled: Boolean(row.email_digest_enabled),
+        smsDigestEnabled:
+          Boolean(row.sms_digest_enabled) && phoneNumber !== "" && verifiedPhones.get(row.user_id) === phoneNumber,
+        phoneNumber,
+      };
+    })
     .filter((row) => row.emailDigestEnabled || row.smsDigestEnabled);
 }
 

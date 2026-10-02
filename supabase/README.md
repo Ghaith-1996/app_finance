@@ -37,6 +37,7 @@ two-session concurrency races. It never connects to a real project. CI runs the 
 | `035_ai_quota_release.sql` | `release_ai_quota`; quota functions limited to `service_role` | article chat, portfolio copilot |
 | `036_atomic_position_changes.sql` | `holding_transactions` ledger; `apply_holding_transaction` | add/sell shares |
 | `037_notification_delivery_claims.sql` | delivery claim columns; claim/complete RPCs | daily digest delivery |
+| `038_sms_phone_verification.sql` | `phone_verification_challenges`, `verified_phone_numbers`; issue/confirm RPCs (service role only) | settings SMS verification; daily digest SMS (unverified numbers stop receiving SMS until verified) |
 
 Deploying the app before these migrations breaks the listed features (missing RPCs/columns).
 

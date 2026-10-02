@@ -21,6 +21,7 @@ const NOW = new Date("2026-01-15T14:00:00.000Z");
 function setup() {
   const supabase = createMockServiceSupabase({
     db: {
+      verified_phone_numbers: [{ user_id: "user-1", phone_number: "+14165551234" }],
       user_notification_preferences: [
         { user_id: "user-1", email_digest_enabled: false, sms_digest_enabled: true, phone_number: "+14165551234" },
       ],

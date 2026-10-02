@@ -13,18 +13,26 @@ import {
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
 import type {
+  ConfirmPhoneCodeResult,
   NotificationPreferenceInput,
   NotificationPreferences,
+  SendPhoneCodeResult,
 } from "@/lib/notifications/types";
 
 export function NotificationSettingsPanel({
   initialPreferences,
+  initialVerifiedPhoneNumber = null,
   onSubmit,
+  onSendCode,
+  onConfirmCode,
 }: {
   initialPreferences: NotificationPreferences;
+  initialVerifiedPhoneNumber?: string | null;
   onSubmit: (
     input: NotificationPreferenceInput,
   ) => Promise<{ ok: true } | { ok: false; error: string }>;
+  onSendCode?: (phoneNumber: string) => Promise<SendPhoneCodeResult>;
+  onConfirmCode?: (phoneNumber: string, code: string) => Promise<ConfirmPhoneCodeResult>;
 }) {
   const [emailDigestEnabled, setEmailDigestEnabled] = useState(
     initialPreferences.emailDigestEnabled,
@@ -54,6 +62,49 @@ export function NotificationSettingsPanel({
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  // Audit H2: SMS needs a number the user proved they control.
+  const [verifiedPhoneNumber, setVerifiedPhoneNumber] = useState(initialVerifiedPhoneNumber);
+  const [codeSentFor, setCodeSentFor] = useState<string | null>(null);
+  const [verificationCode, setVerificationCode] = useState("");
+  const [verificationError, setVerificationError] = useState<string | null>(null);
+  const [verificationNotice, setVerificationNotice] = useState<string | null>(null);
+  const [verificationPending, startVerification] = useTransition();
+  const trimmedPhone = phoneNumber.trim();
+  const phoneVerified = trimmedPhone !== "" && verifiedPhoneNumber === trimmedPhone;
+  const codeSent = codeSentFor !== null && codeSentFor === trimmedPhone;
+
+  function sendCode() {
+    if (!onSendCode) return;
+    setVerificationError(null);
+    setVerificationNotice(null);
+    startVerification(async () => {
+      const result = await onSendCode(trimmedPhone);
+      if (!result.ok) {
+        setVerificationError(result.error);
+        return;
+      }
+      setCodeSentFor(trimmedPhone);
+      setVerificationCode("");
+      setVerificationNotice(`Code sent to ${trimmedPhone}. It expires in 10 minutes.`);
+    });
+  }
+
+  function confirmCode() {
+    if (!onConfirmCode) return;
+    setVerificationError(null);
+    setVerificationNotice(null);
+    startVerification(async () => {
+      const result = await onConfirmCode(trimmedPhone, verificationCode);
+      if (!result.ok) {
+        setVerificationError(result.error);
+        return;
+      }
+      setVerifiedPhoneNumber(trimmedPhone);
+      setCodeSentFor(null);
+      setVerificationCode("");
+      setVerificationNotice("Phone number verified. You can now enable SMS digests.");
+    });
+  }
 
   return (
     <Panel className="space-y-6 rounded-[2rem] p-6">
@@ -204,6 +255,57 @@ export function NotificationSettingsPanel({
             Required for SMS. Use E.164 format, for example +14165551234.
           </p>
         </label>
+
+        <div className="space-y-3">
+          {phoneVerified ? (
+            <p className="text-xs font-medium text-brand">Verified for SMS digests.</p>
+          ) : trimmedPhone && onSendCode ? (
+            <>
+              <p className="text-xs text-slate-400">
+                Not verified. SMS digests are only sent to a number you confirm with a text-message code.
+              </p>
+              <div className="flex flex-wrap items-end gap-3">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={sendCode}
+                  disabled={verificationPending}
+                >
+                  {codeSent ? "Resend code" : "Send code"}
+                </Button>
+                {codeSent && onConfirmCode ? (
+                  <>
+                    <span className="space-y-1">
+                      <label htmlFor="sms-verification-code" className="block text-xs font-medium text-white">
+                        Verification code
+                      </label>
+                      <input
+                        id="sms-verification-code"
+                        value={verificationCode}
+                        onChange={(event) => setVerificationCode(event.target.value)}
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
+                        maxLength={6}
+                        className="w-32 rounded-xl border border-subtle bg-surface-soft px-3 py-2 text-sm text-primary outline-none transition focus:border-brand/40"
+                      />
+                    </span>
+                    <Button
+                      type="button"
+                      onClick={confirmCode}
+                      disabled={verificationPending || verificationCode.trim().length !== 6}
+                    >
+                      Verify
+                    </Button>
+                  </>
+                ) : null}
+              </div>
+            </>
+          ) : null}
+          <div aria-live="polite">
+            {verificationError ? <p className="text-sm text-rose-300">{verificationError}</p> : null}
+            {verificationNotice ? <p className="text-sm text-brand">{verificationNotice}</p> : null}
+          </div>
+        </div>
 
         {error ? <p className="text-sm text-rose-300">{error}</p> : null}
         {saved ? <p className="text-sm text-brand">{saved}</p> : null}

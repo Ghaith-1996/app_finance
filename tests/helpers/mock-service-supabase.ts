@@ -2,6 +2,7 @@ type Row = Record<string, unknown>;
 
 export type MockDatabase = {
   user_notification_preferences?: Row[];
+  verified_phone_numbers?: Row[];
   notification_digests?: Row[];
   notification_deliveries?: Row[];
   portfolios?: Row[];

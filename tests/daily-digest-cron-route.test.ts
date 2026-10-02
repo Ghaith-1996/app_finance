@@ -102,6 +102,7 @@ describe("POST /api/notifications/daily-digest/cron", () => {
   it("is idempotent across duplicate runs for the same ET morning", async () => {
     currentSupabase.value = createMockServiceSupabase({
       db: {
+        verified_phone_numbers: [{ user_id: "user-1", phone_number: "+14165551234" }],
         user_notification_preferences: [
           {
             user_id: "user-1",
@@ -142,6 +143,7 @@ describe("POST /api/notifications/daily-digest/cron", () => {
   it("skips 13 UTC during standard time and runs once at 14 UTC", async () => {
     currentSupabase.value = createMockServiceSupabase({
       db: {
+        verified_phone_numbers: [{ user_id: "user-1", phone_number: "+14165551234" }],
         user_notification_preferences: [
           {
             user_id: "user-1",
@@ -177,6 +179,7 @@ describe("POST /api/notifications/daily-digest/cron", () => {
   it("runs at 13 UTC during daylight time and skips 14 UTC", async () => {
     currentSupabase.value = createMockServiceSupabase({
       db: {
+        verified_phone_numbers: [{ user_id: "user-1", phone_number: "+14165551234" }],
         user_notification_preferences: [
           {
             user_id: "user-1",
@@ -210,6 +213,7 @@ describe("POST /api/notifications/daily-digest/cron", () => {
     process.env.APP_BASE_URL = "https://app.example.com/";
     currentSupabase.value = createMockServiceSupabase({
       db: {
+        verified_phone_numbers: [{ user_id: "user-1", phone_number: "+14165551234" }],
         user_notification_preferences: [
           {
             user_id: "user-1",
@@ -248,6 +252,7 @@ describe("POST /api/notifications/daily-digest/cron", () => {
     process.env.APP_TRUSTED_ORIGINS = "https://trusted.example.com";
     currentSupabase.value = createMockServiceSupabase({
       db: {
+        verified_phone_numbers: [{ user_id: "user-1", phone_number: "+14165551234" }],
         user_notification_preferences: [
           {
             user_id: "user-1",
@@ -285,6 +290,7 @@ describe("POST /api/notifications/daily-digest/cron", () => {
   it("marks stale pending SMS deliveries as uncertain instead of resending them", async () => {
     currentSupabase.value = createMockServiceSupabase({
       db: {
+        verified_phone_numbers: [{ user_id: "user-1", phone_number: "+14165551234" }],
         user_notification_preferences: [
           {
             user_id: "user-1",

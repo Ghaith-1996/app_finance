@@ -9,8 +9,11 @@ import { getTranslations } from "@/lib/i18n/server";
 import { getBillingSummaryForUser } from "@/lib/billing/subscriptions";
 import { getCurrentUserProfile, saveCurrentUserProfile } from "@/lib/actions/profile";
 import {
+  confirmPhoneVerificationCode,
   getCurrentUserNotificationPreferences,
+  getCurrentUserVerifiedPhoneNumber,
   saveCurrentUserNotificationPreferences,
+  sendPhoneVerificationCode,
 } from "@/lib/actions/notifications";
 import { isAdminUser } from "@/lib/security/admin";
 import { loadOnboardingNavState } from "@/lib/server/page-loaders";
@@ -31,7 +34,10 @@ export default async function SettingsPage({
   }
 
   const profile = await getCurrentUserProfile();
-  const notificationPreferences = await getCurrentUserNotificationPreferences();
+  const [notificationPreferences, verifiedPhoneNumber] = await Promise.all([
+    getCurrentUserNotificationPreferences(),
+    getCurrentUserVerifiedPhoneNumber(),
+  ]);
   const { t } = await getTranslations();
   const showOnboardingNav = await loadOnboardingNavState();
   const showAdminLink = isAdminUser(user);
@@ -61,7 +67,10 @@ export default async function SettingsPage({
         <BillingSettingsPanel billingSummary={billingSummary} />
         <NotificationSettingsPanel
           initialPreferences={notificationPreferences}
+          initialVerifiedPhoneNumber={verifiedPhoneNumber}
           onSubmit={saveCurrentUserNotificationPreferences}
+          onSendCode={sendPhoneVerificationCode}
+          onConfirmCode={confirmPhoneVerificationCode}
         />
         <PreferencesPanel />
 

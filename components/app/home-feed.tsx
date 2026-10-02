@@ -75,10 +75,17 @@ export function HomeFeedClient() {
   }
 
   if (openPostId) {
+    const openPost = posts.find((post) => post.id === openPostId);
+    const openDiscussion = discussions.find((discussion) => discussion.postId === openPostId);
+    const source = openPost
+      ? { authorName: openPost.author.displayName, body: openPost.body }
+      : openDiscussion
+        ? { authorName: openDiscussion.authorName, body: openDiscussion.bodyPreview }
+        : undefined;
     return (
       <div className="mx-auto max-w-2xl">
         <div className="min-h-[400px] rounded-2xl border border-white/[0.06] bg-surface-raised">
-          <PostCommentsPanel postId={openPostId} onClose={handleCloseComments} />
+          <PostCommentsPanel postId={openPostId} source={source} onClose={handleCloseComments} />
         </div>
       </div>
     );

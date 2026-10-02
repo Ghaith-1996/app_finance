@@ -7,7 +7,7 @@ import { DemoWorkspace } from "@/components/marketing/demo-workspace";
 import { buttonStyles } from "@/components/ui/button";
 
 export const metadata = {
-  title: "Pulsefolio Demo",
+  title: "Demo",
   description:
     "Explore a sample portfolio, personalized news brief, article impact view, AI advisor, and portfolio guardrails.",
 };

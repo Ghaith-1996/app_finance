@@ -12,6 +12,8 @@ import type {
 import { loadShellChromeState } from "@/lib/server/page-loaders";
 import { createClient } from "@/lib/supabase/server";
 
+export const metadata = { title: "Daily digest" };
+
 type DigestRow = {
   id: string;
   user_id: string;

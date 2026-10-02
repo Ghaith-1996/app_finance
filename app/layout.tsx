@@ -10,9 +10,10 @@ import { isTheme, THEME_COOKIE_KEY } from "@/lib/preferences";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Pulsefolio",
+  // Audit D14: route pages set a short title; the template adds the product name.
+  title: { default: "Pulsefolio", template: "%s - Pulsefolio" },
   description:
-    "Portfolio-aware finance frontend MVP for AI analysis and personalized market news.",
+    "Portfolio-aware market news, AI analysis, and a daily brief built around the holdings you own.",
   icons: {
     icon: [
       { url: "/icon-192.png", sizes: "192x192", type: "image/png" },

@@ -11,6 +11,8 @@ import { Panel } from "@/components/ui/panel";
 import { getTranslations } from "@/lib/i18n/server";
 import { loadAnalysisPageData } from "@/lib/server/page-loaders";
 
+export const metadata = { title: "Analysis" };
+
 export default async function AnalysisPage({
   searchParams,
 }: {

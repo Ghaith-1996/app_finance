@@ -1,5 +1,7 @@
 export const dynamic = "force-dynamic";
 
+export const metadata = { title: "Sign in" };
+
 export default function LoginLayout({
   children,
 }: {

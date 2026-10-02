@@ -10,6 +10,8 @@ import { isAdminUser } from "@/lib/security/admin";
 import { loadOnboardingNavState } from "@/lib/server/page-loaders";
 import { createClient } from "@/lib/supabase/server";
 
+export const metadata = { title: "Admin" };
+
 export default async function AdminPage() {
   const supabase = await createClient();
   const {

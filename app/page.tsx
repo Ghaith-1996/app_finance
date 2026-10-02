@@ -18,6 +18,7 @@ import { buttonStyles } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { getTranslations } from "@/lib/i18n/server";
+import { LEGAL_CONTACT_EMAIL } from "@/lib/legal/constants";
 import {
   faqs,
   painPoints,
@@ -78,6 +79,22 @@ export default async function Home() {
             <Link href="/portfolio" className="transition hover:text-primary">
               {t("landing.footerPortfolio")}
             </Link>
+            {/* Audit D11: cost, sign-in, legal and support are reachable without signing in. */}
+            <Link href="/pricing" className="transition hover:text-primary">
+              {t("landing.footerPricing")}
+            </Link>
+            <Link href="/login" className="transition hover:text-primary">
+              {t("landing.footerSignIn")}
+            </Link>
+            <Link href="/terms" className="transition hover:text-primary">
+              {t("landing.footerTerms")}
+            </Link>
+            <Link href="/privacy" className="transition hover:text-primary">
+              {t("landing.footerPrivacy")}
+            </Link>
+            <a href={`mailto:${LEGAL_CONTACT_EMAIL}`} className="transition hover:text-primary">
+              {t("landing.footerContact")}
+            </a>
           </div>
         </div>
       </footer>

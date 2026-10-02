@@ -9,6 +9,8 @@ import type { Holding, PortfolioFeedHighlight } from "@/lib/types";
 import { storyHref } from "@/lib/feed/constants";
 import { categoryLabel } from "@/lib/utils";
 
+export const metadata = { title: "Portfolio" };
+
 function formatStoryTime(iso: string): string {
   return formatRelativeTime(iso, new Date(), "");
 }

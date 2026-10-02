@@ -29,6 +29,8 @@ import type {
 import { valueHoldings } from "@/lib/services/valuation";
 import { categoryLabel, formatCurrency } from "@/lib/utils";
 
+export const metadata = { title: "Full portfolio" };
+
 interface SectorCard {
   label: string;
   percent: number;

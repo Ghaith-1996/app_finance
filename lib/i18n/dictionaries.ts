@@ -103,6 +103,11 @@ export const dictionaries: Record<Locale, Dictionary> = {
       footerOnboarding: "Onboarding",
       footerFeed: "Feed demo",
       footerPortfolio: "Portfolio",
+      footerPricing: "Pricing",
+      footerSignIn: "Sign in",
+      footerTerms: "Terms",
+      footerPrivacy: "Privacy",
+      footerContact: "Contact",
     },
     pages: {
       homeTitle: "Today Dashboard",
@@ -228,6 +233,11 @@ export const dictionaries: Record<Locale, Dictionary> = {
       footerOnboarding: "Configuration",
       footerFeed: "Démo du flux",
       footerPortfolio: "Portefeuille",
+      footerPricing: "Tarifs",
+      footerSignIn: "Connexion",
+      footerTerms: "Conditions",
+      footerPrivacy: "Confidentialité",
+      footerContact: "Contact",
     },
     pages: {
       homeTitle: "Tableau du jour",

@@ -19,6 +19,8 @@ import {
 } from "@/lib/security/chat-turnstile-grant";
 import { createClient } from "@/lib/supabase/server";
 
+export const metadata = { title: "Feed" };
+
 export default async function FeedPage({
   searchParams,
 }: {

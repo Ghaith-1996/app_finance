@@ -12,7 +12,7 @@ import {
 } from "@/lib/legal/constants";
 
 export const metadata = {
-  title: "Terms of Service - Pulsefolio",
+  title: "Terms of Service",
   description: "Terms of Service for Pulsefolio.",
 };
 

@@ -11,6 +11,8 @@ import { isAdminUser } from "@/lib/security/admin";
 import { loadOnboardingNavState } from "@/lib/server/page-loaders";
 import { createClient } from "@/lib/supabase/server";
 
+export const metadata = { title: "Pricing" };
+
 type PaidPlanCard = {
   key: "premium" | "ultimate";
   headline: string;

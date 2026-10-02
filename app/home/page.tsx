@@ -6,6 +6,8 @@ import { TodayDashboard } from "@/components/app/today-dashboard";
 import { getTranslations } from "@/lib/i18n/server";
 import { loadHomeDashboardData } from "@/lib/server/page-loaders";
 
+export const metadata = { title: "Community" };
+
 export default async function HomePage() {
   const { showOnboardingNav, showAdminLink, dashboard } =
     await loadHomeDashboardData();

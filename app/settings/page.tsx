@@ -19,6 +19,8 @@ import { isAdminUser } from "@/lib/security/admin";
 import { loadOnboardingNavState } from "@/lib/server/page-loaders";
 import { createClient } from "@/lib/supabase/server";
 
+export const metadata = { title: "Settings" };
+
 export default async function SettingsPage({
   searchParams,
 }: {

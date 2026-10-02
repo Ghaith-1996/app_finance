@@ -5,6 +5,8 @@ import { WatchlistPageClient } from "@/components/app/watchlist-page-client";
 import { loadWatchlistItems } from "@/lib/actions/watchlist";
 import { loadShellChromeState } from "@/lib/server/page-loaders";
 
+export const metadata = { title: "Watchlist" };
+
 export default async function WatchlistPage() {
   const items = await loadWatchlistItems();
   const { showAdminLink } = await loadShellChromeState();

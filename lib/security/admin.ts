@@ -25,13 +25,10 @@ function getAdminEmails(): Set<string> {
 type AdminCandidate = Pick<User, "id" | "email"> &
   Partial<Pick<User, "email_confirmed_at" | "user_metadata">>;
 
+// Audit S2: only the server-owned confirmation timestamp counts. user_metadata is editable by the
+// user (supabase.auth.updateUser) and must never feed an authorization decision.
 function hasVerifiedEmail(user: AdminCandidate): boolean {
-  if (typeof user.email_confirmed_at === "string" && user.email_confirmed_at.trim()) {
-    return true;
-  }
-
-  const metadata = user.user_metadata as Record<string, unknown> | undefined;
-  return metadata?.email_verified === true || metadata?.email_verified === "true";
+  return typeof user.email_confirmed_at === "string" && user.email_confirmed_at.trim().length > 0;
 }
 
 export function isAdminUser(user: AdminCandidate | null | undefined): boolean {

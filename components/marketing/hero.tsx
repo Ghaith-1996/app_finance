@@ -34,8 +34,8 @@ export function Hero() {
               <span className="italic">{t("landing.heroLead")}</span> your portfolio context.
             </h1>
             <p className="max-w-2xl text-lg leading-8 text-secondary sm:text-xl">
-              Link a brokerage account or create a portfolio manually, then open
-              a daily brief built around the holdings you actually own.
+              Import a CSV from your broker or create a portfolio manually, then
+              open a daily brief built around the holdings you actually own.
             </p>
           </div>
           <div className="flex flex-col gap-4 sm:flex-row">

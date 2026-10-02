@@ -15,8 +15,8 @@ import type {
 export const siteStats: SiteStat[] = [
   {
     label: "Portfolio paths",
-    value: "3+",
-    hint: "Link a broker, build manually, or open a guided demo portfolio.",
+    value: "3",
+    hint: "Import a broker CSV, build manually, or explore the public demo.",
   },
   {
     label: "AI recap layers",
@@ -59,12 +59,12 @@ export const painPoints: PainPoint[] = [
 export const productFeatures: ProductFeature[] = [
   {
     eyebrow: "Track everything",
-    title: "Bring linked and manual portfolios into one intelligent home",
+    title: "Bring your holdings into one intelligent home",
     description:
-      "Users can start with a broker connection or manual entry and still land in the same clean portfolio experience.",
+      "Start from a broker CSV export or manual entry and land in the same portfolio experience. Live broker linking is not available yet.",
     bullets: [
-      "Broker connection path with guided states",
-      "Manual fallback portfolio creation",
+      "CSV import with column mapping and review",
+      "Manual portfolio creation",
       "Unified holdings snapshot",
     ],
   },
@@ -95,9 +95,9 @@ export const productFeatures: ProductFeature[] = [
 export const workflowSteps: WorkflowStep[] = [
   {
     step: "01",
-    title: "Connect your portfolio",
+    title: "Add your portfolio",
     description:
-      "Start with Wealthsimple, Interactive Brokers, or a manual portfolio that takes only a minute to build.",
+      "Import a CSV export from your broker or build a manual portfolio in a minute.",
   },
   {
     step: "02",
@@ -113,24 +113,6 @@ export const workflowSteps: WorkflowStep[] = [
   },
 ];
 
-export const portfolioInsights: PortfolioInsight[] = [
-  {
-    title: "Most exposed theme",
-    value: "AI infrastructure",
-    detail: "NVIDIA and Microsoft now drive 56% of portfolio weight.",
-  },
-  {
-    title: "Macro watch",
-    value: "Rates + energy",
-    detail: "Energy and payments names are the fastest movers after inflation surprises.",
-  },
-  {
-    title: "Fresh catalyst",
-    value: "Healthcare policy",
-    detail: "Drug pricing and obesity treatment demand are rising as a feed priority.",
-  },
-];
-
 export const holdings: Holding[] = [
   {
     id: "nvda-live",
@@ -138,7 +120,7 @@ export const holdings: Holding[] = [
     company: "NVIDIA",
     sector: "AI Infrastructure",
     market: "NASDAQ",
-    source: "Wealthsimple",
+    source: "CSV import",
     price: 938.22,
     dailyChange: 1.8,
     allocation: 28,
@@ -152,7 +134,7 @@ export const holdings: Holding[] = [
     unrealizedGainPercent: 30.31,
     quoteCurrency: "USD",
     quoteAsOf: null,
-    importSource: "wealthsimple",
+    importSource: "csv",
     latestEarningsReportUrl: null,
     latestEarningsReportSource: null,
     latestEarningsReportDate: null,
@@ -163,7 +145,7 @@ export const holdings: Holding[] = [
     company: "Microsoft",
     sector: "Cloud",
     market: "NASDAQ",
-    source: "Wealthsimple",
+    source: "CSV import",
     price: 418.14,
     dailyChange: 0.7,
     allocation: 21,
@@ -177,7 +159,7 @@ export const holdings: Holding[] = [
     unrealizedGainPercent: 19.47,
     quoteCurrency: "USD",
     quoteAsOf: null,
-    importSource: "wealthsimple",
+    importSource: "csv",
     latestEarningsReportUrl: null,
     latestEarningsReportSource: null,
     latestEarningsReportDate: null,
@@ -188,7 +170,7 @@ export const holdings: Holding[] = [
     company: "Eli Lilly",
     sector: "Healthcare",
     market: "NYSE",
-    source: "Interactive Brokers",
+    source: "CSV import",
     price: 781.64,
     dailyChange: -0.5,
     allocation: 16,
@@ -202,7 +184,7 @@ export const holdings: Holding[] = [
     unrealizedGainPercent: 30.27,
     quoteCurrency: "USD",
     quoteAsOf: null,
-    importSource: "interactive_brokers",
+    importSource: "csv",
     latestEarningsReportUrl: null,
     latestEarningsReportSource: null,
     latestEarningsReportDate: null,
@@ -213,7 +195,7 @@ export const holdings: Holding[] = [
     company: "Visa",
     sector: "Payments",
     market: "NYSE",
-    source: "Wealthsimple",
+    source: "CSV import",
     price: 293.54,
     dailyChange: 0.3,
     allocation: 18,
@@ -227,7 +209,7 @@ export const holdings: Holding[] = [
     unrealizedGainPercent: 17.42,
     quoteCurrency: "USD",
     quoteAsOf: null,
-    importSource: "wealthsimple",
+    importSource: "csv",
     latestEarningsReportUrl: null,
     latestEarningsReportSource: null,
     latestEarningsReportDate: null,
@@ -256,6 +238,29 @@ export const holdings: Holding[] = [
     latestEarningsReportUrl: null,
     latestEarningsReportSource: null,
     latestEarningsReportDate: null,
+  },
+];
+
+function allocationOf(symbol: string): number {
+  return holdings.find((holding) => holding.symbol === symbol)?.allocation ?? 0;
+}
+
+// Audit F23: demo claims are derived from the same sample allocations they sit next to.
+export const portfolioInsights: PortfolioInsight[] = [
+  {
+    title: "Most exposed theme",
+    value: "AI infrastructure",
+    detail: `NVIDIA and Microsoft make up ${allocationOf("NVDA") + allocationOf("MSFT")}% of portfolio weight.`,
+  },
+  {
+    title: "Macro watch",
+    value: "Rates + energy",
+    detail: "Energy and payments names are the fastest movers after inflation surprises.",
+  },
+  {
+    title: "Fresh catalyst",
+    value: "Healthcare policy",
+    detail: "Drug pricing and obesity treatment demand are rising as a feed priority.",
   },
 ];
 
@@ -560,7 +565,7 @@ export const useCases: UseCase[] = [
         },
         {
           role: "assistant",
-          text: "Microsoft benefits directly through Azure demand. With 21% of your portfolio in MSFT, this spending signal supports your second-largest holding.",
+          text: `Microsoft benefits directly through Azure demand. With ${allocationOf("MSFT")}% of your portfolio in MSFT, this spending signal supports your second-largest holding.`,
         },
       ],
     },

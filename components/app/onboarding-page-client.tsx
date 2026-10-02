@@ -357,8 +357,9 @@ export function OnboardingPageClient({ showAdminLink = false }: { showAdminLink?
                 </p>
               </div>
               <p className="mt-3 text-sm leading-7 text-slate-300">
-                Broker connections are informational only. CSV import reads your
-                file locally and sends data to your own Supabase project.
+                Pulsefolio only reads your holdings and cannot place trades or
+                move money. Your CSV is parsed on our server, and only the
+                holdings you confirm are saved.
               </p>
             </div>
           </Panel>

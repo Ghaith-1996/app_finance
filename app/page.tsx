@@ -200,12 +200,13 @@ function PlatformSection() {
                 <div className="flex items-center gap-3 text-brand">
                   <ShieldCheck className="h-5 w-5" />
                   <p className="text-sm font-semibold uppercase tracking-[0.2em]">
-                    Trust story
+                    Read-only
                   </p>
                 </div>
                 <p className="mt-4 text-sm leading-7 text-slate-300">
-                  Pulsefolio frames broker connections as read-only and
-                  sets up a clean path for secure syncing later.
+                  Pulsefolio never places trades or moves money. Holdings come
+                  from your CSV import or manual entry; live broker syncing is
+                  not available yet.
                 </p>
               </div>
             </Panel>
@@ -290,7 +291,7 @@ function FaqSection() {
         <SectionHeading
           eyebrow="FAQ"
           title="Questions Pulsefolio helps answer"
-          description="The experience is shaped around broker sync, AI analysis, and a personalized feed — so the answers start from what you own."
+          description="The experience is shaped around your imported holdings, AI analysis, and a personalized feed — so the answers start from what you own."
         />
         <div className="grid gap-4 lg:grid-cols-2">
           {faqs.map((faq) => (

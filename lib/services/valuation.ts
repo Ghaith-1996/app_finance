@@ -297,3 +297,21 @@ export function valuationInputFromHolding(holding: HoldingLike): ValuationHoldin
     quoteAsOf: holding.quoteAsOf,
   };
 }
+
+/**
+ * Values app-level holdings with the canonical contract (audit H9). `positions[i]` corresponds to
+ * `holdings[i]`, so per-row surfaces read the same USD figures the portfolio totals are built from.
+ */
+export function valueHoldings(holdings: HoldingLike[], options: { now?: Date } = {}): PortfolioValuation {
+  return valuePortfolio(holdings.map(valuationInputFromHolding), options);
+}
+
+/** Formats an amount in its own quote currency (e.g. "CA$45.00"); USD amounts keep "$". */
+export function formatQuoteAmount(amount: number, currency: string | null | undefined): string {
+  const code = normalizeCurrencyCode(currency);
+  try {
+    return new Intl.NumberFormat("en-US", { style: "currency", currency: code, maximumFractionDigits: 2 }).format(amount);
+  } catch {
+    return `${amount.toFixed(2)} ${code}`;
+  }
+}

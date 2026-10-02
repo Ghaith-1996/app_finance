@@ -10,6 +10,7 @@ import { InvestmentThesisPanel } from "@/components/app/investment-thesis-panel"
 import { recordHoldingAdd, recordHoldingSale } from "@/lib/actions/portfolio";
 import { buttonStyles } from "@/components/ui/button";
 import { sanitizeExternalUrl } from "@/lib/security/external-url";
+import { formatQuoteAmount, valueHoldings, type PositionValuation } from "@/lib/services/valuation";
 import { cn, formatPrice } from "@/lib/utils";
 
 type SortKey =
@@ -49,34 +50,31 @@ function getHoldingPrice(holding: Holding) {
   return holding.currentPrice || holding.price || 0;
 }
 
-function getHoldingValue(holding: Holding) {
-  if (holding.currentValue > 0) return holding.currentValue;
-  const price = getHoldingPrice(holding);
-  if (holding.quantity > 0) return holding.quantity * price;
-  if (holding.allocation > 0) return holding.allocation;
-  return 0;
+/**
+ * Value, cost basis and gain come from the canonical valuation (audit H9): USD, converted with the
+ * FX rate stored with the quote. A position without a usable price/FX rate shows "—" instead of a
+ * local-currency or percentage figure posing as dollars.
+ */
+type RowFigures = {
+  value: number | null;
+  costBasis: number | null;
+  gainLoss: number | null;
+  gainLossPercent: number | null;
+};
+
+function rowFigures(position: PositionValuation | undefined): RowFigures {
+  const value = position?.valueBase ?? null;
+  const costBasis = position?.costBasisBase ?? null;
+  const gainLoss = value !== null && costBasis !== null ? value - costBasis : null;
+  const gainLossPercent = gainLoss !== null && costBasis !== null && costBasis > 0 ? (gainLoss / costBasis) * 100 : null;
+  return { value, costBasis, gainLoss, gainLossPercent };
 }
 
-function getHoldingGainLoss(holding: Holding) {
-  const value = getHoldingValue(holding);
-  const costBasis =
-    holding.costBasis > 0 ? holding.costBasis : holding.averageCost * holding.quantity;
-  return value - costBasis;
+function formatUsd(value: number | null) {
+  return value === null ? "—" : formatPrice(value);
 }
 
-function getHoldingCostBasis(holding: Holding) {
-  return holding.costBasis > 0 ? holding.costBasis : holding.averageCost * holding.quantity;
-}
-
-function getHoldingGainLossPercent(holding: Holding) {
-  const value = getHoldingValue(holding);
-  const costBasis =
-    holding.costBasis > 0 ? holding.costBasis : holding.averageCost * holding.quantity;
-  if (costBasis <= 0) return 0;
-  return ((value - costBasis) / costBasis) * 100;
-}
-
-function getSortValue(holding: Holding, key: SortKey): number | string {
+function getSortValue(holding: Holding, key: SortKey, figures: RowFigures): number | string {
   switch (key) {
     case "symbol":
       return holding.symbol;
@@ -85,32 +83,33 @@ function getSortValue(holding: Holding, key: SortKey): number | string {
     case "averageCost":
       return holding.averageCost;
     case "costBasis":
-      return getHoldingCostBasis(holding);
+      return figures.costBasis ?? Number.NEGATIVE_INFINITY;
     case "price":
       return getHoldingPrice(holding);
     case "dailyChange":
       return holding.dailyChange ?? 0;
     case "value":
-      return getHoldingValue(holding);
+      return figures.value ?? Number.NEGATIVE_INFINITY;
     case "gainLoss":
-      return getHoldingGainLoss(holding);
+      return figures.gainLoss ?? Number.NEGATIVE_INFINITY;
     case "gainLossPercent":
-      return getHoldingGainLossPercent(holding);
+      return figures.gainLossPercent ?? Number.NEGATIVE_INFINITY;
   }
 }
 
 function HoldingAdjustPanel({
   holding,
+  value,
   portfolioId,
   onDone,
 }: {
   holding: Holding;
+  value: number | null;
   portfolioId: string;
   onDone: () => void;
 }) {
   const router = useRouter();
   const price = getHoldingPrice(holding);
-  const value = getHoldingValue(holding);
   const dayChange = holding.dailyChange ?? 0;
   const isPositiveDay = dayChange >= 0;
   const [soldShares, setSoldShares] = useState("");
@@ -212,7 +211,7 @@ function HoldingAdjustPanel({
             <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
               Current price
             </p>
-            <p className="mt-1 text-sm font-semibold text-white">{formatPrice(price)}</p>
+            <p className="mt-1 text-sm font-semibold text-white">{formatQuoteAmount(price, holding.quoteCurrency)}</p>
           </div>
           <div className="rounded-xl border border-white/[0.06] bg-surface-input/70 px-3 py-3">
             <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
@@ -232,7 +231,7 @@ function HoldingAdjustPanel({
             <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
               Current value
             </p>
-            <p className="mt-1 text-sm font-semibold text-white">{formatPrice(value)}</p>
+            <p className="mt-1 text-sm font-semibold text-white">{formatUsd(value)}</p>
           </div>
         </div>
       </div>
@@ -362,10 +361,15 @@ export function PortfolioHoldingsTable({
     setSortDir("desc");
   }
 
+  const figuresById = useMemo(() => {
+    const valuation = valueHoldings(holdings);
+    return new Map(holdings.map((holding, index) => [holding.id, rowFigures(valuation.positions[index])]));
+  }, [holdings]);
+
   const sortedHoldings = useMemo(() => {
     return [...holdings].sort((a, b) => {
-      const left = getSortValue(a, sortKey);
-      const right = getSortValue(b, sortKey);
+      const left = getSortValue(a, sortKey, figuresById.get(a.id) ?? rowFigures(undefined));
+      const right = getSortValue(b, sortKey, figuresById.get(b.id) ?? rowFigures(undefined));
 
       if (typeof left === "string" && typeof right === "string") {
         return sortDir === "asc"
@@ -379,7 +383,7 @@ export function PortfolioHoldingsTable({
         ? leftNumber - rightNumber
         : rightNumber - leftNumber;
     });
-  }, [holdings, sortDir, sortKey]);
+  }, [holdings, figuresById, sortDir, sortKey]);
 
   return (
     <div className="space-y-4">
@@ -426,13 +430,11 @@ export function PortfolioHoldingsTable({
       <div className="space-y-3">
         {sortedHoldings.map((holding) => {
           const price = getHoldingPrice(holding);
-          const value = getHoldingValue(holding);
-          const costBasis = getHoldingCostBasis(holding);
-          const gainLoss = getHoldingGainLoss(holding);
-          const gainLossPercent = getHoldingGainLossPercent(holding);
+          const { value, costBasis, gainLoss, gainLossPercent } =
+            figuresById.get(holding.id) ?? rowFigures(undefined);
           const dayChange = holding.dailyChange ?? 0;
           const isPositiveDay = dayChange >= 0;
-          const isPositiveTotal = gainLoss >= 0;
+          const isPositiveTotal = (gainLoss ?? 0) >= 0;
           const isOpen = openId === holding.id;
           const earningsReportUrl = sanitizeExternalUrl(holding.latestEarningsReportUrl);
 
@@ -499,13 +501,13 @@ export function PortfolioHoldingsTable({
                   {holding.quantity.toFixed(2)}
                 </div>
                 <div className="hidden whitespace-nowrap text-[14px] font-medium text-slate-400 md:block">
-                  {formatPrice(holding.averageCost)}
+                  {formatQuoteAmount(holding.averageCost, holding.quoteCurrency)}
                 </div>
                 <div className="hidden whitespace-nowrap text-right text-[14px] font-bold text-slate-300 md:block">
-                  {formatPrice(costBasis)}
+                  {formatUsd(costBasis)}
                 </div>
                 <div className="whitespace-nowrap text-[14px] font-bold text-white">
-                  {formatPrice(price)}
+                  {formatQuoteAmount(price, holding.quoteCurrency)}
                 </div>
                 <div
                   className={`hidden whitespace-nowrap text-[14px] font-bold md:block ${
@@ -516,23 +518,22 @@ export function PortfolioHoldingsTable({
                   {dayChange.toFixed(2)}%
                 </div>
                 <div className="whitespace-nowrap text-right text-[15px] font-bold text-white">
-                  {formatPrice(value)}
+                  {formatUsd(value)}
                 </div>
                 <div
                   className={`whitespace-nowrap text-right text-[15px] font-bold ${
                     isPositiveTotal ? "text-emerald-400" : "text-red-400"
                   }`}
                 >
-                  {isPositiveTotal ? "+" : ""}
-                  {formatPrice(gainLoss)}
+                  {gainLoss !== null && isPositiveTotal ? "+" : ""}
+                  {formatUsd(gainLoss)}
                 </div>
                 <div
                   className={`hidden whitespace-nowrap text-right text-[15px] font-bold md:block ${
                     isPositiveTotal ? "text-emerald-400" : "text-red-400"
                   }`}
                 >
-                  {isPositiveTotal ? "+" : ""}
-                  {gainLossPercent.toFixed(2)}%
+                  {gainLossPercent === null ? "—" : `${isPositiveTotal ? "+" : ""}${gainLossPercent.toFixed(2)}%`}
                 </div>
               </button>
 
@@ -540,6 +541,7 @@ export function PortfolioHoldingsTable({
                 <div className="mt-3 space-y-3 px-1">
                   <HoldingAdjustPanel
                     holding={holding}
+                    value={value}
                     portfolioId={portfolioId}
                     onDone={() => setOpenId(null)}
                   />

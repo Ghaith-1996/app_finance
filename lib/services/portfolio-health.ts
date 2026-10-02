@@ -1,4 +1,5 @@
 import { storyHref } from "@/lib/feed/constants";
+import { valueHoldings } from "@/lib/services/valuation";
 import { formatRelativeTime } from "@/lib/time/format";
 import type { Holding, PortfolioFeedHighlight } from "@/lib/types";
 
@@ -50,26 +51,6 @@ function formatPercentValue(value: number) {
   return `${Math.round(value)}%`;
 }
 
-export function getHoldingMarketValue(holding: Holding): number {
-  if (Number.isFinite(holding.currentValue) && holding.currentValue > 0) {
-    return holding.currentValue;
-  }
-
-  const price = holding.currentPrice || holding.price || 0;
-  if (Number.isFinite(price) && price > 0 && holding.quantity > 0) {
-    return price * holding.quantity;
-  }
-
-  if (Number.isFinite(holding.costBasis) && holding.costBasis > 0) {
-    return holding.costBasis;
-  }
-
-  if (Number.isFinite(holding.allocation) && holding.allocation > 0) {
-    return holding.allocation;
-  }
-
-  return 0;
-}
 
 function quoteIsStale(holding: Holding, now: Date) {
   if (!holding.quoteAsOf) return true;
@@ -188,11 +169,15 @@ export function calculatePortfolioHealth(input: {
     };
   }
 
+  // Audit H9: concentration uses the canonical USD valuation. Positions without a usable price or
+  // FX rate are left out rather than counted at cost basis or as their allocation percentage.
+  const valuation = valueHoldings(holdings, { now });
   const valuedHoldings = holdings
-    .map((holding) => ({
+    .map((holding, index) => ({
       holding,
-      value: getHoldingMarketValue(holding),
+      value: valuation.positions[index]?.valueBase ?? 0,
     }))
+    .filter((item) => item.value > 0)
     .sort((left, right) => right.value - left.value);
   const totalValue = valuedHoldings.reduce((sum, item) => sum + item.value, 0);
   const topHolding = valuedHoldings[0] ?? null;

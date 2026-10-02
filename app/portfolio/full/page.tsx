@@ -26,6 +26,7 @@ import type {
   PortfolioFeedHighlight,
   PortfolioInsight,
 } from "@/lib/types";
+import { valueHoldings } from "@/lib/services/valuation";
 import { categoryLabel, formatCurrency } from "@/lib/utils";
 
 interface SectorCard {
@@ -37,17 +38,6 @@ interface SectorCard {
   barClassName: string;
 }
 
-function getHoldingPrice(holding: Holding) {
-  return holding.currentPrice || holding.price || 0;
-}
-
-function getHoldingValue(holding: Holding) {
-  if (holding.currentValue > 0) return holding.currentValue;
-  const price = getHoldingPrice(holding);
-  if (holding.quantity > 0) return holding.quantity * price;
-  if (holding.allocation > 0) return holding.allocation;
-  return 0;
-}
 
 function getSectorVisuals(sector: string) {
   const normalized = sector.toLowerCase();
@@ -164,8 +154,10 @@ function buildSectorCards(holdings: Holding[]): SectorCard[] {
   let energyValue = 0;
   let othersValue = 0;
 
-  for (const holding of holdings) {
-    const value = getHoldingValue(holding);
+  // Audit H9: bucket the same USD values the portfolio total uses; unvalued positions are left out.
+  const valuation = valueHoldings(holdings);
+  for (const [index, holding] of holdings.entries()) {
+    const value = valuation.positions[index]?.valueBase ?? 0;
     const bucket = classifyHoldingBucket(holding);
 
     if (bucket === "technology") {

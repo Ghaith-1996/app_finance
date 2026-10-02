@@ -18,7 +18,8 @@ import {
   type OverviewDisplay,
 } from "@/lib/portfolio/value-display";
 import { cn, formatCurrency } from "@/lib/utils";
-import type { PortfolioValuationSummary } from "@/lib/services/valuation";
+import { valueHoldings, type PortfolioValuationSummary } from "@/lib/services/valuation";
+import { formatAppDateTime } from "@/lib/time/format";
 import type { Holding, PortfolioValueSnapshot } from "@/lib/types";
 
 interface PortfolioPerformanceChartProps {
@@ -33,13 +34,8 @@ interface PortfolioPerformanceChartProps {
 
 function formatAsOf(timestamp: number | null): string | null {
   if (timestamp === null || !Number.isFinite(timestamp)) return null;
-  return new Date(timestamp).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    timeZoneName: "short",
-  });
+  // Product time zone, so server and browser renders agree (F15).
+  return formatAppDateTime(new Date(timestamp).toISOString(), "") || null;
 }
 
 interface ChartPoint {
@@ -58,35 +54,6 @@ interface ActualPerformanceSnapshot {
   quotedHoldings: number;
   latestQuoteAt: number | null;
   source: "snapshots" | "holdings";
-}
-
-function getHoldingPrice(holding: Holding): number {
-  return Number(holding.currentPrice || holding.price || 0);
-}
-
-function getHoldingCurrentValue(holding: Holding): number {
-  if (holding.currentValue > 0) return Number(holding.currentValue);
-  const price = getHoldingPrice(holding);
-  return holding.quantity > 0 ? Number(holding.quantity) * price : 0;
-}
-
-function getHoldingCostBasis(holding: Holding): number {
-  if (holding.costBasis > 0) return Number(holding.costBasis);
-  return holding.quantity > 0 && holding.averageCost > 0
-    ? Number(holding.quantity) * Number(holding.averageCost)
-    : 0;
-}
-
-function getHoldingPreviousCloseValue(holding: Holding): number {
-  const currentValue = getHoldingCurrentValue(holding);
-  if (currentValue <= 0) return 0;
-
-  const dailyChange = Number(holding.dailyChange ?? 0);
-  if (!Number.isFinite(dailyChange) || dailyChange <= -99.9) {
-    return currentValue;
-  }
-
-  return currentValue / (1 + dailyChange / 100);
 }
 
 function latestQuoteTimestamp(holdings: Holding[]): number | null {
@@ -108,21 +75,16 @@ function buildActualPerformanceSnapshot(
   portfolioCreatedAt: Date,
   fallbackDayChange: number,
 ): ActualPerformanceSnapshot {
-  const currentFromHoldings = holdings.reduce(
-    (sum, holding) => sum + getHoldingCurrentValue(holding),
-    0,
-  );
-  const currentValue = totalValue > 0 ? totalValue : currentFromHoldings;
-  const costBasis = holdings.reduce(
-    (sum, holding) => sum + getHoldingCostBasis(holding),
-    0,
-  );
-  const previousCloseValue = holdings.reduce(
-    (sum, holding) => sum + getHoldingPreviousCloseValue(holding),
-    0,
-  );
+  // Audit H9: the live fallback uses the canonical USD valuation, so latest value, cost basis and
+  // previous close share one currency conversion and the same unvalued-position exclusions.
+  const valuation = valueHoldings(holdings);
+  const currentValue = totalValue > 0 ? totalValue : valuation.totalValue;
+  const costBasis = valuation.costBasis;
+  // Positions without a previous close are treated as unchanged today.
+  const previousCloseValue =
+    valuation.dayChangeAmount !== null ? currentValue - valuation.dayChangeAmount : 0;
   const latestQuoteAt = latestQuoteTimestamp(holdings);
-  const quotedHoldings = holdings.filter((holding) => getHoldingPrice(holding) > 0).length;
+  const quotedHoldings = valuation.freshCount + valuation.staleCount;
   const createdAtMs = Number.isFinite(portfolioCreatedAt.getTime())
     ? portfolioCreatedAt.getTime()
     : Date.now();

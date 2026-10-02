@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest";
 import * as legal from "@/lib/legal/constants";
 
 // Audit F16: public legal pages must not ship template placeholders.
-// Values still awaiting operator input are listed here explicitly; remove each one as it is filled in.
-const AWAITING_OPERATOR_INPUT = new Set(["LEGAL_MAILING_ADDRESS", "LEGAL_GOVERNING_JURISDICTION"]);
+// Values still awaiting operator input would be listed here explicitly; all have been provided (F16).
+const AWAITING_OPERATOR_INPUT = new Set<string>();
 
 describe("legal constants", () => {
   it("contain no template placeholders other than the known pending values", () => {

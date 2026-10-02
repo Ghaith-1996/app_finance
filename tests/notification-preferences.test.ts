@@ -92,6 +92,8 @@ describe("notification preferences actions", () => {
   });
 
   it("saves sms-only preferences when the phone number is valid", async () => {
+    // Audit H2: the number has been verified.
+    maybeSingle.mockResolvedValueOnce({ data: { phone_number: "+14165551234" } });
     const result = await saveCurrentUserNotificationPreferences({
       emailDigestEnabled: false,
       smsDigestEnabled: true,

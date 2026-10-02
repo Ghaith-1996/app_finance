@@ -89,8 +89,11 @@
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 }
 
-* {
-  border-color: var(--border-subtle);
+/* Default border colour only; border-* utilities (e.g. error and brand borders) must win (D04). */
+@layer base {
+  * {
+    border-color: var(--border-subtle);
+  }
 }
 
 html {
@@ -106,16 +109,20 @@ body {
   font-family: var(--font-sans);
 }
 
-img,
-video,
-canvas {
-  max-width: 100%;
-  height: auto;
-}
+/* In the base layer so Tailwind utilities (text-*, h-*) on links and images win; unlayered
+   rules beat every layered utility and turned primary link-buttons light-on-green (D04). */
+@layer base {
+  img,
+  video,
+  canvas {
+    max-width: 100%;
+    height: auto;
+  }
 
-a {
-  color: inherit;
-  text-decoration: none;
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
 }
 
 ::selection {

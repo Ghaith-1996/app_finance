@@ -87,3 +87,27 @@ export function mapInvestmentThesisHistoryRow(
     capturedAt: row.captured_at,
   };
 }
+
+const UNAVAILABLE_ERROR_CODES = new Set(["PGRST205", "PGRST202", "42P01", "42883"]);
+
+/**
+ * Maps a database error to user-facing text (audit F04). Raw PostgREST/Postgres messages such as
+ * "Could not find the table ... in the schema cache" are never shown; a missing table/function
+ * marks the feature unavailable so the UI can disable saving instead of failing on submit.
+ */
+export function describeThesisStorageError(
+  error: { code?: string | null; message?: string | null } | null | undefined,
+): { message: string; unavailable: boolean } {
+  const code = error?.code ?? "";
+  const message = error?.message ?? "";
+  if (UNAVAILABLE_ERROR_CODES.has(code) || /schema cache|does not exist/i.test(message)) {
+    return {
+      message: "Thesis tracking is temporarily unavailable. Your existing notes are not affected; please try again later.",
+      unavailable: true,
+    };
+  }
+  return {
+    message: "We couldn't load or save this thesis right now. Please try again.",
+    unavailable: false,
+  };
+}

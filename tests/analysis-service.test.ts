@@ -24,11 +24,17 @@ function createSupabaseMock({
   holdingsRows,
   runInsertError,
   activeRunRows,
+  insightsInsertError,
+  feedInsertError,
+  publishError,
 }: {
   newsRows: Array<Record<string, unknown>>;
   holdingsRows?: Array<Record<string, unknown>>;
   runInsertError?: { message: string; code?: string } | null;
   activeRunRows?: Array<Record<string, unknown>>;
+  insightsInsertError?: { message: string; code?: string } | null;
+  feedInsertError?: { message: string; code?: string } | null;
+  publishError?: { message: string; code?: string } | null;
 }) {
   const insertedFeedItems: Array<Record<string, unknown>> = [];
   const insertedInsights: Array<Record<string, unknown>> = [];
@@ -71,9 +77,18 @@ function createSupabaseMock({
             }),
           }),
           update: (payload: AnalysisRunRow) => ({
-            eq: async () => {
-              updatedRuns.push(payload);
-              return { error: null };
+            eq: () => {
+              const isPublish = payload.status === "complete" || payload.status === "degraded";
+              const result = () => {
+                if (isPublish && publishError) return { data: null, error: publishError };
+                updatedRuns.push(payload);
+                return { data: [{ id: "run-1" }], error: null };
+              };
+              return {
+                select: async () => result(),
+                then: (resolve: (value: { data: unknown; error: unknown }) => unknown) =>
+                  Promise.resolve(result()).then(resolve),
+              };
             },
           }),
           delete: () => ({
@@ -159,6 +174,7 @@ function createSupabaseMock({
       if (table === "portfolio_insights") {
         return {
           insert: async (rows: Array<Record<string, unknown>>) => {
+            if (insightsInsertError) return { error: insightsInsertError };
             insertedInsights.push(...rows);
             return { error: null };
           },
@@ -167,8 +183,9 @@ function createSupabaseMock({
 
       if (table === "feed_items") {
         return {
-          insert: async (row: Record<string, unknown>) => {
-            insertedFeedItems.push(row);
+          insert: async (rows: Array<Record<string, unknown>> | Record<string, unknown>) => {
+            if (feedInsertError) return { error: feedInsertError };
+            insertedFeedItems.push(...(Array.isArray(rows) ? rows : [rows]));
             return { error: null };
           },
           delete: () => ({
@@ -389,6 +406,47 @@ describe("runAnalysis portfolio match gating", () => {
       "held_ticker_impact",
     ]);
     expect(ai.assessPortfolioMatch).not.toHaveBeenCalled();
+  });
+
+  describe("J2: persistence failures never publish a successful run", () => {
+    const appleNews = () => [
+      baseNewsRow({
+        headline: "Apple supplier raises guidance",
+        stock_tags: ["AAPL"],
+        ticker_impacts: [{ symbol: "AAPL", effect: "bullish" }],
+        overall_effect: "bullish",
+      }),
+    ];
+
+    it.each([
+      ["insight insert", { insightsInsertError: { message: "XX000 insight write rejected" } }, /insights could not be saved/],
+      ["feed insert", { feedInsertError: { message: "XX000 feed write rejected" } }, /Feed items could not be saved/],
+      ["final status update", { publishError: { message: "XX000 run update rejected" } }, /could not be published/],
+    ])("%s failure leaves the run unpublished", async (_label, injected, message) => {
+      mockGetAIProvider.mockReturnValue(createAIProvider());
+      const supabase = createSupabaseMock({ newsRows: appleNews(), ...injected });
+
+      const result = await runAnalysis(supabase as never, "p1");
+
+      expect(result.error).toMatch(message);
+      expect(result).toMatchObject({ runId: "run-1", code: "analysis_failed" });
+      expect(result.meta).toBeUndefined();
+      const statuses = supabase.updatedRuns.map((row) => row.status);
+      expect(statuses).not.toContain("complete");
+      expect(statuses).not.toContain("degraded");
+      expect(statuses.at(-1)).toBe("failed");
+    });
+
+    it("counts only committed feed rows on success", async () => {
+      mockGetAIProvider.mockReturnValue(createAIProvider());
+      const supabase = createSupabaseMock({ newsRows: appleNews() });
+
+      const result = await runAnalysis(supabase as never, "p1");
+
+      expect(result.error).toBeNull();
+      expect(result.meta?.feedItemsCreated).toBe(supabase.insertedFeedItems.length);
+      expect(supabase.updatedRuns.at(-1)?.status).toBe("complete");
+    });
   });
 
   it("persists held stock matches from ticker impacts even when stock tags are empty", async () => {

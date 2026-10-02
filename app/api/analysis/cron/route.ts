@@ -1,6 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { runAnalysis } from "@/lib/services/analysis";
 import { createLogger } from "@/lib/logger";
+import { fetchAllRows } from "@/lib/supabase/paginate";
 
 const log = createLogger("cron-analysis");
 
@@ -37,11 +38,24 @@ async function authorizeCron(request: Request) {
 }
 
 async function getPortfolios(supabase: ReturnType<typeof createServiceClient>) {
-  const { data: portfolios } = await supabase
-    .from("portfolios")
-    .select("id, user_id");
+  const { data: portfolios, error } = await fetchAllRows<PortfolioRow>((from, to) =>
+    supabase.from("portfolios").select("id, user_id").order("id", { ascending: true }).range(from, to),
+  );
+  if (error) throw new Error(`Could not load portfolios: ${error.message}`);
+  return portfolios;
+}
 
-  return (portfolios ?? []) as PortfolioRow[];
+async function getNewestEnrichedAt(supabase: ReturnType<typeof createServiceClient>) {
+  const { data, error } = await supabase
+    .from("news_items")
+    .select("enriched_at")
+    .eq("enrichment_status", "succeeded")
+    .not("enriched_at", "is", null)
+    .order("enriched_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(`Could not read enrichment freshness: ${error.message}`);
+  return (data?.enriched_at as string | null | undefined) ?? null;
 }
 
 async function getLatestCompletedRun(
@@ -65,21 +79,34 @@ async function getEligiblePortfolioIds(
   opts?: { force?: boolean },
 ) {
   const portfolios = await getPortfolios(supabase);
+  const newestEnrichedAt = opts?.force ? null : await getNewestEnrichedAt(supabase);
   const portfolioIds: string[] = [];
   let skippedCount = 0;
+  let upToDateCount = 0;
 
+  // Audit J1: a portfolio needs analysis when it has never produced a usable run, or when
+  // articles were enriched after its last usable run — not merely when this run inserted rows.
+  // A failed run leaves the last usable run older than the news, so it is retried next time.
   for (const portfolio of portfolios) {
     if (!opts?.force) {
       const latestRun = await getLatestCompletedRun(supabase, portfolio.id);
-      if (isInCooldown(latestRun?.completed_at)) {
+      const completedAt = latestRun?.completed_at ?? null;
+      if (isInCooldown(completedAt)) {
         skippedCount++;
+        continue;
+      }
+      const hasNewWork =
+        !completedAt ||
+        (newestEnrichedAt !== null && Date.parse(newestEnrichedAt) > Date.parse(completedAt));
+      if (!hasNewWork) {
+        upToDateCount++;
         continue;
       }
     }
     portfolioIds.push(portfolio.id);
   }
 
-  return { portfolioIds, skippedCount };
+  return { portfolioIds, skippedCount, upToDateCount };
 }
 
 async function runListEligiblePortfolios(request: Request) {
@@ -90,17 +117,27 @@ async function runListEligiblePortfolios(request: Request) {
   const force = url.searchParams.get("force") === "true";
 
   const supabase = createServiceClient();
-  const { portfolioIds, skippedCount } = await getEligiblePortfolioIds(supabase, { force });
+  let eligibility: Awaited<ReturnType<typeof getEligiblePortfolioIds>>;
+  try {
+    eligibility = await getEligiblePortfolioIds(supabase, { force });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    log.error("Analysis cron eligibility failed", { error: message });
+    return json({ error: message }, 503);
+  }
+  const { portfolioIds, skippedCount, upToDateCount } = eligibility;
 
   log.info("Analysis cron eligible portfolios computed", {
     eligible: portfolioIds.length,
     skippedCount,
+    upToDateCount,
     force,
   });
 
   return json({
     portfolioIds,
     skippedCount,
+    upToDateCount,
   });
 }
 
@@ -131,9 +168,15 @@ async function runAnalysisCron(request: Request) {
   }
 
   const supabase = createServiceClient();
-  const portfolios = await getPortfolios(supabase);
-  const portfolio = portfolios.find((row) => row.id === portfolioId);
+  const { data: portfolio, error: portfolioError } = await supabase
+    .from("portfolios")
+    .select("id")
+    .eq("id", portfolioId)
+    .maybeSingle();
 
+  if (portfolioError) {
+    return json({ error: portfolioError.message }, 503);
+  }
   if (!portfolio) {
     return json({ error: "Portfolio not found" }, 404);
   }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Loader2, SendHorizonal, Sparkles } from "lucide-react";
 
@@ -43,6 +43,8 @@ export function ArticleChatPanel({
   selectedTier,
   onSelectedTierChange,
   onActivityChange,
+  initialDraft,
+  onDraftChange,
   className,
   showHeader = true,
   contextMode = "story",
@@ -55,6 +57,10 @@ export function ArticleChatPanel({
   selectedTier: ArticleChatModelTier;
   onSelectedTierChange: (tier: ArticleChatModelTier) => void;
   onActivityChange?: (state: ArticleChatActivityState) => void;
+  /** Unsent text to restore when the panel opens (e.g. after closing and reopening the chat). */
+  initialDraft?: string;
+  /** Called whenever the unsent text changes, so the owner can keep it across unmounts. */
+  onDraftChange?: (draft: string) => void;
   className?: string;
   showHeader?: boolean;
   contextMode?: ArticleChatContextMode;
@@ -70,7 +76,15 @@ export function ArticleChatPanel({
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
-  const [draft, setDraft] = useState("");
+  const [draft, setDraft] = useState(initialDraft ?? "");
+  const initialDraftRef = useRef(initialDraft);
+  useEffect(() => {
+    initialDraftRef.current = initialDraft;
+  }, [initialDraft]);
+
+  useEffect(() => {
+    onDraftChange?.(draft);
+  }, [draft, onDraftChange]);
   const [isVerifiedForCurrentChat, setIsVerifiedForCurrentChat] = useState(
     initialTurnstileVerified,
   );
@@ -110,7 +124,7 @@ export function ArticleChatPanel({
 
     async function loadThread() {
       setMessages([]);
-      setDraft("");
+      setDraft(initialDraftRef.current ?? "");
       setSending(false);
       setError(null);
       setErrorCode(null);

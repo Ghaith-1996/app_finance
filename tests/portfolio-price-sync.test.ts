@@ -18,6 +18,9 @@ type HoldingRow = {
   daily_change?: number;
   quote_currency?: string;
   allocation?: number;
+  previous_close?: number | null;
+  fx_rate_to_usd?: number | null;
+  fx_as_of?: string | null;
 };
 
 type EarningsReportRow = {
@@ -160,7 +163,56 @@ function makeBuilder(table: "portfolios" | "holdings" | "ticker_earnings_reports
   return builder;
 }
 
+// Emulates the apply_holding_price_updates RPC: all-or-nothing, like the SQL function.
+function applyHoldingPriceUpdates(params: {
+  p_portfolio_id: string;
+  p_updates: Array<Record<string, unknown>>;
+  p_sync_state: "complete" | "partial";
+  p_synced_at: string;
+}) {
+  const portfolio = mocked.state.portfolios.find(
+    (row) => row.id === params.p_portfolio_id && row.user_id === mocked.state.authUserId,
+  );
+  if (!portfolio) return { data: null, error: { code: "42501", message: "Portfolio not found or unauthorized" } };
+  for (const update of params.p_updates) {
+    const id = update.id as string;
+    if (mocked.failHoldingUpdateIds.has(id)) {
+      return { data: null, error: { message: `Failed to update holding ${id}` } };
+    }
+  }
+  if (mocked.portfolioUpdateError) {
+    return { data: null, error: { message: mocked.portfolioUpdateError } };
+  }
+  for (const update of params.p_updates) {
+    const row = mocked.state.holdings.find((holding) => holding.id === update.id);
+    if (!row) return { data: null, error: { message: "holding not in portfolio" } };
+    mocked.updateHolding(row.id, params.p_portfolio_id, update);
+    row.allocation = update.allocation as number;
+    if ("price" in update) {
+      row.price = update.price as number;
+      row.current_price = update.price as number;
+      row.previous_close = (update.previousClose as number | null) ?? null;
+      row.daily_change = update.dailyChange as number;
+      row.quote_currency = update.currency as string;
+      row.quote_as_of = update.quoteAsOf as string;
+      row.fx_rate_to_usd = (update.fxRateToUsd as number | null) ?? null;
+      row.fx_as_of = (update.fxAsOf as string | null) ?? null;
+    }
+  }
+  if (params.p_sync_state === "complete") {
+    portfolio.last_synced_at = params.p_synced_at;
+    portfolio.sync_status = "active";
+  } else {
+    portfolio.sync_status = "stale";
+  }
+  return { data: params.p_updates.length, error: null };
+}
+
 const currentSupabase = {
+  rpc: async (name: string, params: Parameters<typeof applyHoldingPriceUpdates>[0]) => {
+    if (name !== "apply_holding_price_updates") throw new Error(`Unexpected rpc ${name}`);
+    return applyHoldingPriceUpdates(params);
+  },
   auth: {
     getUser: async () => ({
       data: {
@@ -395,17 +447,41 @@ describe("portfolio price sync", () => {
     expect(mocked.computePortfolioOverview).toHaveBeenCalledTimes(1);
   });
 
-  it("returns an error status with a clearer message when saving a holding update fails", async () => {
+  it("saves nothing and says so when one holding update is rejected (atomic batch)", async () => {
     mocked.failHoldingUpdateIds = new Set(["holding-2"]);
 
     const result = await refreshPortfolioPricingSnapshot("portfolio-1");
 
     expect(result).toEqual({
       status: "error",
-      updated: 1,
-      message: "Some refreshed holding prices could not be saved.",
+      updated: 0,
+      message: "Failed to save refreshed holding prices. Nothing was changed.",
       overview: null,
     });
+    expect(mocked.state.holdings.every((row) => row.price === undefined)).toBe(true);
+    expect(mocked.state.portfolios[0].last_synced_at).toBe("2026-03-25T11:30:00.000Z");
+  });
+
+  it("reports a partial refresh without stamping a full sync or exceeding 100% allocation (B3)", async () => {
+    mocked.state.holdings[0].current_price = 50;
+    mocked.state.holdings[1].current_price = 50;
+    mocked.state.holdings[0].quantity = 2;
+    mocked.state.holdings[1].quantity = 2;
+    mocked.getQuotes.mockResolvedValue(
+      new Map([["AAPL", { price: 50, previousClose: 50, dailyChange: 0, currency: "USD" }]]),
+    );
+
+    const result = await refreshPortfolioPricingSnapshot("portfolio-1");
+
+    expect(result.status).toBe("partial");
+    expect(result.updated).toBe(1);
+    expect(result.message).toContain("Updated 1 of 2 holdings");
+    expect(result.message).toContain("MSFT");
+    const allocations = mocked.state.holdings.map((row) => row.allocation);
+    expect(allocations).toEqual([50, 50]);
+    expect(mocked.state.portfolios[0].last_synced_at).toBe("2026-03-25T11:30:00.000Z");
+    expect(mocked.state.portfolios[0].sync_status).toBe("stale");
+    expect(mocked.state.holdings[1].quote_as_of).toBe("2026-03-25T11:20:00.000Z");
   });
 
   it("can return refreshed holdings for the full-portfolio section", async () => {
@@ -430,7 +506,7 @@ describe("portfolio price sync", () => {
     expect(result).toEqual({
       status: "no_quotes",
       updated: 0,
-      message: "Live quotes are unavailable right now. Try again shortly.",
+      message: "Live quotes are unavailable right now. Showing last known prices.",
       overview: null,
     });
   });
@@ -448,17 +524,17 @@ describe("portfolio price sync", () => {
     });
   });
 
-  it("returns a specific message when the portfolio sync timestamp update fails", async () => {
+  it("rolls back prices too when the portfolio sync stamp cannot be written", async () => {
     mocked.portfolioUpdateError = "portfolio timestamp failed";
 
     const result = await refreshPortfolioPricingSnapshot("portfolio-1");
 
     expect(result).toEqual({
       status: "error",
-      updated: 2,
-      message:
-        "Refreshed prices saved, but the portfolio sync timestamp could not be updated.",
+      updated: 0,
+      message: "Failed to save refreshed holding prices. Nothing was changed.",
       overview: null,
     });
+    expect(mocked.state.holdings.every((row) => row.price === undefined)).toBe(true);
   });
 });

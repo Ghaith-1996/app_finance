@@ -12,7 +12,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urljoin, urlparse, urlunparse
 
-from .url_safety import assert_safe_public_url
+from .url_safety import (
+    UnsafeDestinationError,
+    assert_safe_public_url,
+    public_network_only,
+    validate_public_url,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -96,68 +101,105 @@ def _configure_newspaper_article(url: str):
     return article
 
 
-def _resolve_safe_fetch_url(url: str) -> tuple[str | None, str | None]:
+MAX_HTML_BYTES = 3_000_000
+MAX_REDIRECT_HOPS = 5
+
+
+def _caused_by_unsafe_destination(exc: BaseException) -> bool:
+    """requests/urllib3 wrap the guard's error; walk causes, contexts and wrapped reasons."""
+    seen: set[int] = set()
+    stack: list[object] = [exc]
+    while stack:
+        current = stack.pop()
+        if current is None or id(current) in seen:
+            continue
+        seen.add(id(current))
+        if isinstance(current, UnsafeDestinationError):
+            return True
+        if isinstance(current, BaseException):
+            stack.extend([current.__cause__, current.__context__, getattr(current, "reason", None), *current.args])
+    return False
+
+
+def fetch_public_html(url: str) -> tuple[str | None, str | None, str | None]:
+    """
+    Fetch publisher HTML with the destination check bound to the connection (audit S1).
+    Returns (final_url, html, error). Every hop is validated, redirects are followed manually,
+    the body is capped at MAX_HTML_BYTES, and all connections run inside public_network_only().
+    """
     ok, reason = assert_safe_public_url(url)
     if not ok:
-        return None, reason
+        return None, None, reason
 
     try:
         import requests
     except ImportError:
-        return url, None
+        return None, None, "extractor_not_available"
 
-    session = requests.Session()
     current_url = url
-
     try:
-        for _ in range(5):
-            response = session.get(
-                current_url,
-                allow_redirects=False,
-                timeout=8,
-                stream=True,
-                headers={"User-Agent": USER_AGENT},
-            )
-            response.close()
+        with public_network_only(), requests.Session() as session:
+            for _ in range(MAX_REDIRECT_HOPS):
+                response = session.get(
+                    current_url,
+                    allow_redirects=False,
+                    timeout=12,
+                    stream=True,
+                    headers={"User-Agent": USER_AGENT},
+                )
+                try:
+                    if response.is_redirect or response.is_permanent_redirect:
+                        location = response.headers.get("location")
+                        if not location:
+                            return None, None, "redirect_without_location"
+                        next_url = urljoin(current_url, location)
+                        ok, reason = validate_public_url(next_url)
+                        if not ok:
+                            return None, None, f"blocked_redirect:{reason}"
+                        current_url = next_url
+                        continue
 
-            if response.is_redirect or response.is_permanent_redirect:
-                location = response.headers.get("location")
-                if not location:
-                    return current_url, None
+                    if response.status_code >= 400:
+                        return None, None, f"http_{response.status_code}"
 
-                next_url = urljoin(current_url, location)
-                ok, reason = assert_safe_public_url(next_url)
-                if not ok:
-                    return None, f"blocked_redirect:{reason}"
-
-                current_url = next_url
-                continue
-
-            return current_url, None
+                    chunks: list[bytes] = []
+                    received = 0
+                    for chunk in response.iter_content(chunk_size=65536):
+                        received += len(chunk)
+                        if received > MAX_HTML_BYTES:
+                            return None, None, "response_too_large"
+                        chunks.append(chunk)
+                    encoding = response.encoding or response.apparent_encoding or "utf-8"
+                    return current_url, b"".join(chunks).decode(encoding, errors="replace"), None
+                finally:
+                    response.close()
     except Exception as exc:
-        logger.debug("Safe redirect preflight failed for %s: %s", current_url, exc)
-        return None, "redirect_preflight_failed"
-    finally:
-        session.close()
+        if _caused_by_unsafe_destination(exc):
+            logger.info("Blocked outbound fetch for %s: %s", current_url, exc)
+            return None, None, "blocked_resolved_ip"
+        logger.debug("Publisher fetch failed for %s: %s", current_url, exc)
+        return None, None, "download_failed"
 
-    return None, "redirect_hop_limit_exceeded"
+    return None, None, "redirect_hop_limit_exceeded"
 
 
 def extract_article_text(url: str) -> tuple[str | None, str | None, str | None]:
     """
     Download and parse a single article URL.
     Returns (text, canonical_url_or_none, error_or_none).
+    The HTML is fetched once by fetch_public_html and handed to newspaper, so newspaper never
+    makes its own (unvalidated) request.
     """
-    safe_url, safe_error = _resolve_safe_fetch_url(url)
-    if safe_error:
-        return None, None, safe_error
+    final_url, html, fetch_error = fetch_public_html(url)
+    if fetch_error or html is None:
+        return None, None, fetch_error or "download_failed"
 
-    article = _configure_newspaper_article(safe_url or url)
+    article = _configure_newspaper_article(final_url or url)
     if article is None:
         return None, None, "extractor_not_available"
 
     try:
-        article.download()
+        article.download(input_html=html)
         article.parse()
         text = (article.text or "").strip()
         canon = getattr(article, "canonical_link", None) or None

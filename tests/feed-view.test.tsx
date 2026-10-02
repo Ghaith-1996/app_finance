@@ -1448,4 +1448,137 @@ describe("FeedView", () => {
     expect(within(sheet).getByRole("button", { name: /^premium$/i })).toHaveAttribute("aria-pressed", "false");
     expect(within(sheet).getByRole("button", { name: /^ultimate$/i })).toHaveAttribute("aria-pressed", "false");
   });
+
+  describe("audit F05 deep links", () => {
+    function mockCurrentFeed() {
+      global.fetch = vi.fn().mockImplementation(async (url: string) => {
+        if (url.startsWith("/api/feed?")) {
+          return {
+            ok: true,
+            json: async () => ({
+              feed: [makeFeedItem({ id: "feed-now", newsItemId: "news-now", headline: "Current story" })],
+              portfolioId: "p1",
+              mode: "personal",
+            }),
+          };
+        }
+        if (url.startsWith("/api/feed/open")) return { ok: true, json: async () => ({ ok: true }) };
+        if (url.includes("/api/article-chat?")) {
+          return { ok: true, json: async () => ({ threadId: "thread-1", messages: [] }) };
+        }
+        throw new Error(`Unexpected fetch: ${url}`);
+      });
+    }
+
+    it("opens a saved story that is outside the current feed window", async () => {
+      setViewport(1440);
+      mockCurrentFeed();
+      const oldStory = makeFeedItem({ id: "news-old", newsItemId: "news-old", headline: "August SEC filing" });
+
+      await act(async () => {
+        render(
+          <FeedView
+            portfolioId="p1"
+            initialStoryId="news-old"
+            initialStory={{ status: "found", story: oldStory }}
+          />,
+        );
+      });
+
+      await waitFor(() => {
+        expect(screen.getByRole("heading", { name: "August SEC filing" })).toBeTruthy();
+      });
+    });
+
+    it("explains when the requested story no longer exists", async () => {
+      setViewport(1440);
+      mockCurrentFeed();
+
+      await act(async () => {
+        render(<FeedView portfolioId="p1" initialStoryId="news-gone" initialStory={{ status: "not_found" }} />);
+      });
+
+      expect(screen.getByRole("status")).toHaveTextContent(/no longer available/i);
+    });
+  });
+
+  describe("audit F01/F14 below the xl breakpoint", () => {
+    function mockFeed(stories: NewsItem[]) {
+      global.fetch = vi.fn().mockImplementation(async (url: string) => {
+        if (url.startsWith("/api/feed?")) {
+          return { ok: true, json: async () => ({ feed: stories, portfolioId: "p1", mode: "personal" }) };
+        }
+        if (url.includes("/api/article-chat?")) {
+          return { ok: true, json: async () => ({ threadId: "thread-1", messages: [] }) };
+        }
+        if (url.startsWith("/api/feed/open")) {
+          return { ok: true, json: async () => ({ ok: true }) };
+        }
+        throw new Error(`Unexpected fetch: ${url}`);
+      });
+    }
+
+    it.each([375, 768, 1024, 1188])(
+      "at %ipx selecting a story opens its detail in a focused dialog, not after the feed",
+      async (width) => {
+        setViewport(width);
+        mockFeed([makeFeedItem({ id: "feed-1", newsItemId: "news-1", headline: "Narrow story" })]);
+
+        await act(async () => {
+          render(<FeedView portfolioId="p1" />);
+        });
+        await act(async () => {
+          fireEvent.click(screen.getByText("Narrow story"));
+        });
+
+        const dialog = await screen.findByRole("dialog", { name: /article details/i });
+        expect(within(dialog).getByRole("heading", { name: "Narrow story" })).toBeTruthy();
+        expect(dialog.contains(document.activeElement)).toBe(true);
+
+        await act(async () => {
+          fireEvent.keyDown(document, { key: "Escape" });
+        });
+        expect(screen.queryByRole("dialog", { name: /article details/i })).toBeNull();
+      },
+    );
+
+    it("keeps a persistent Ask AI entry when nothing is selected", async () => {
+      setViewport(768);
+      mockFeed([makeFeedItem({ id: "feed-1", newsItemId: "news-1", headline: "Any story" })]);
+
+      await act(async () => {
+        render(<FeedView portfolioId="p1" />);
+      });
+
+      expect(screen.getByTestId("floating-ask-ai-button")).toBeTruthy();
+    });
+
+    it("preserves an unsent draft when the chat is closed and reopened", async () => {
+      setViewport(768);
+      mockFeed([makeFeedItem({ id: "feed-1", newsItemId: "news-1", headline: "Any story" })]);
+
+      await act(async () => {
+        render(<FeedView portfolioId="p1" />);
+      });
+      await act(async () => {
+        fireEvent.click(screen.getByTestId("floating-ask-ai-button"));
+      });
+
+      const sheet = await screen.findByTestId("story-chat-sheet");
+      const textarea = within(sheet).getByRole("textbox");
+      await act(async () => {
+        fireEvent.change(textarea, { target: { value: "Unsent question" } });
+      });
+      await act(async () => {
+        fireEvent.click(within(sheet).getByRole("button", { name: /close ask ai chat/i }));
+      });
+      expect(screen.queryByTestId("story-chat-sheet")).toBeNull();
+
+      await act(async () => {
+        fireEvent.click(screen.getByTestId("floating-ask-ai-button"));
+      });
+      const reopened = await screen.findByTestId("story-chat-sheet");
+      expect(within(reopened).getByRole("textbox")).toHaveValue("Unsent question");
+    });
+  });
 });

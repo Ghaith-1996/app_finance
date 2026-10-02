@@ -14,6 +14,11 @@ import {
 import { newsWindowCutoffIso } from "@/lib/services/news/pool-snapshot";
 import { loadPortfolioValueSnapshots } from "@/lib/services/portfolio-value-snapshots";
 import {
+  summarizeValuation,
+  valuationInputFromHolding,
+  valuePortfolio,
+} from "@/lib/services/valuation";
+import {
   calculatePortfolioHealth,
   type PortfolioHealthResult,
 } from "@/lib/services/portfolio-health";
@@ -147,6 +152,8 @@ type HoldingRow = {
   quote_currency: string | null;
   quote_as_of: string | null;
   import_source: string | null;
+  previous_close?: number | string | null;
+  fx_rate_to_usd?: number | string | null;
 };
 
 type AuthenticatedPageContext = {
@@ -168,12 +175,13 @@ const FEED_OVERVIEW_FALLBACK: PortfolioOverview = {
   primaryGoal: "Add a portfolio and run analysis.",
 };
 
+// No portfolio: show true zero/unknown state, never sample money or invented recency (audit F19).
 const PORTFOLIO_OVERVIEW_FALLBACK: PortfolioOverview = {
-  totalValue: 17900,
-  dayChange: -1.92,
+  totalValue: 0,
+  dayChange: 0,
   monthlyChange: 0,
-  lastSyncedAt: "2 mins ago",
-  lastAnalyzedAt: "21 hours ago",
+  lastSyncedAt: "",
+  lastAnalyzedAt: "Never",
   coverage: "0 stories",
   primaryGoal: "Add holdings and run analysis.",
 };
@@ -265,6 +273,8 @@ function mapHoldingFromRow(row: HoldingRow): Holding {
     quoteCurrency: row.quote_currency ?? "USD",
     quoteAsOf: row.quote_as_of ?? null,
     importSource: row.import_source ?? "manual",
+    previousClose: row.previous_close == null ? null : Number(row.previous_close),
+    fxRateToUsd: row.fx_rate_to_usd == null ? null : Number(row.fx_rate_to_usd),
     latestEarningsReportUrl: null,
     latestEarningsReportSource: null,
     latestEarningsReportDate: null,
@@ -928,32 +938,12 @@ function buildPortfolioOverview(
     emptyCoverageLabel?: string;
   },
 ): PortfolioOverview {
-  const enriched = holdings.map((holding) => {
-    const price = Number(holding.currentPrice || holding.price || 0);
-    const quantity = Number(holding.quantity ?? 0);
-    const value =
-      quantity > 0
-        ? quantity * price
-        : price * (Number(holding.allocation ?? 0) / 100) * 1000;
-
-    return {
-      dailyChange: Number(holding.dailyChange ?? 0),
-      value,
-    };
-  });
-
-  const totalValue = enriched.reduce((sum, holding) => sum + holding.value, 0);
-  const weightedDayChange =
-    totalValue > 0
-      ? enriched.reduce(
-          (sum, holding) => sum + holding.dailyChange * (holding.value / totalValue),
-          0,
-        )
-      : 0;
+  const valuation = valuePortfolio(holdings.map(valuationInputFromHolding));
 
   return {
-    totalValue: Math.round(totalValue),
-    dayChange: Math.round(weightedDayChange * 100) / 100,
+    totalValue: Math.round(valuation.totalValue),
+    dayChange: Math.round((valuation.dayChangePercent ?? 0) * 100) / 100,
+    valuation: summarizeValuation(valuation),
     monthlyChange: 0,
     lastSyncedAt: options.lastSyncedAt
       ? formatTimeAgo(options.lastSyncedAt)
@@ -1397,7 +1387,7 @@ export async function loadPortfolioPageData(): Promise<{
       lastSyncedAt: portfolio.lastSyncedAt,
       lastAnalyzedAt: latestRun?.completedAt ?? null,
       feedCount,
-      emptyLastSyncedLabel: "2 mins ago",
+      emptyLastSyncedLabel: "",
       emptyCoverageLabel: "0 stories",
     }),
     feedHighlights,

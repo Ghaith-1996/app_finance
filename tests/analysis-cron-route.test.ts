@@ -39,19 +39,38 @@ import { GET, POST } from "@/app/api/analysis/cron/route";
 function buildMockSupabase({
   portfolios = [],
   latestRunsByPortfolio = {},
+  newestEnrichedAt = new Date().toISOString(),
 }: {
   portfolios?: Array<{ id: string; user_id: string }>;
   latestRunsByPortfolio?: Record<string, string | null | undefined>;
+  newestEnrichedAt?: string | null;
 } = {}) {
   return {
     from: (table: string) => {
       if (table === "portfolios") {
         return {
-          select: () => Promise.resolve({
-            data: portfolios,
-            error: null,
+          select: () => ({
+            order: () => ({
+              range: (from: number, to: number) =>
+                Promise.resolve({ data: portfolios.slice(from, to + 1), error: null }),
+            }),
+            eq: (_column: string, value: string) => ({
+              maybeSingle: () =>
+                Promise.resolve({ data: portfolios.find((row) => row.id === value) ?? null, error: null }),
+            }),
           }),
         };
+      }
+      if (table === "news_items") {
+        const chain = {
+          eq: () => chain,
+          not: () => chain,
+          order: () => chain,
+          limit: () => chain,
+          maybeSingle: () =>
+            Promise.resolve({ data: newestEnrichedAt ? { enriched_at: newestEnrichedAt } : null, error: null }),
+        };
+        return { select: () => chain };
       }
       if (table === "analysis_runs") {
         let selectedPortfolioId: string | null = null;
@@ -173,6 +192,49 @@ describe("GET /api/analysis/cron", () => {
 
     expect(body.portfolioIds).toEqual(["p1", "p2"]);
     expect(body.skippedCount).toBe(0);
+  });
+
+  describe("J1: eligibility follows durable work, not new inserts", () => {
+    const hourAgo = () => new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const halfHourAgo = () => new Date(Date.now() - 30 * 60 * 1000).toISOString();
+
+    it("skips portfolios whose last usable run already covers the newest enriched article", async () => {
+      mockSupabase = buildMockSupabase({
+        portfolios: [{ id: "p1", user_id: "u1" }],
+        latestRunsByPortfolio: { p1: halfHourAgo() },
+        newestEnrichedAt: hourAgo(),
+      });
+      const body = await (await GET(makeGetRequest("test-secret"))).json();
+      expect(body.portfolioIds).toEqual([]);
+      expect(body.upToDateCount).toBe(1);
+    });
+
+    it("selects portfolios when articles were enriched after their last usable run (e.g. backlog recovered, or the last run failed)", async () => {
+      mockSupabase = buildMockSupabase({
+        portfolios: [{ id: "p1", user_id: "u1" }, { id: "p2", user_id: "u2" }],
+        latestRunsByPortfolio: { p1: hourAgo(), p2: halfHourAgo() },
+        newestEnrichedAt: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
+      });
+      const body = await (await GET(makeGetRequest("test-secret"))).json();
+      expect(body.portfolioIds).toEqual(["p1"]);
+    });
+
+    it("always selects portfolios that never produced a usable run", async () => {
+      mockSupabase = buildMockSupabase({
+        portfolios: [{ id: "p1", user_id: "u1" }],
+        latestRunsByPortfolio: {},
+        newestEnrichedAt: null,
+      });
+      const body = await (await GET(makeGetRequest("test-secret"))).json();
+      expect(body.portfolioIds).toEqual(["p1"]);
+    });
+
+    it("reads every portfolio page", async () => {
+      const many = Array.from({ length: 2_350 }, (_, index) => ({ id: `p${index}`, user_id: "u" }));
+      mockSupabase = buildMockSupabase({ portfolios: many });
+      const body = await (await GET(makeGetRequest("test-secret", { force: true }))).json();
+      expect(body.portfolioIds).toHaveLength(2_350);
+    });
   });
 });
 

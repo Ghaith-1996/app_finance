@@ -10,6 +10,7 @@ import { buttonStyles } from "@/components/ui/button";
 import { getBillingSummaryForUser } from "@/lib/billing/subscriptions";
 import { getTranslations } from "@/lib/i18n/server";
 import { Panel } from "@/components/ui/panel";
+import { loadDeepLinkedStory } from "@/lib/server/feed";
 import { loadFeedPageData } from "@/lib/server/page-loaders";
 import {
   chatGrantCookieName,
@@ -64,6 +65,11 @@ export default async function FeedPage({
     data: { user },
   } = await supabase.auth.getUser();
   const billingSummary = user ? await getBillingSummaryForUser(user.id, user.email) : null;
+  // Resolve ?story= by ID so saved/digest/alert links work outside the 24h feed window (F05).
+  const initialStory = await loadDeepLinkedStory(supabase, initialStoryId, {
+    portfolioSymbols: initialFeedPayload?.portfolioSymbols ?? [],
+    watchlistSymbols: initialFeedPayload?.watchlistSymbols ?? [],
+  });
   const { t } = await getTranslations();
 
   // Compute initial Turnstile grant state for the general "Ask AI" chat.
@@ -148,6 +154,7 @@ export default async function FeedPage({
           initialSymbol={initialSymbol}
           initialTicker={initialTicker}
           initialStoryId={initialStoryId}
+          initialStory={initialStory}
           initialFeedPayload={initialFeedPayload}
           allowedModelTiers={billingSummary?.allowedModelTiers}
           defaultModelTier={billingSummary?.defaultModelTier}

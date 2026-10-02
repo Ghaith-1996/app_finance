@@ -742,6 +742,124 @@ async function buildWatchlistOnlyPayload(
   };
 }
 
+const MARKET_NEWS_COLUMNS =
+  "id, headline, source, url, published_at, angle, category, stock_tags, " +
+  "global_summary, overall_effect, ticker_impacts, source_type, metadata, raw_content, detail_open_count";
+
+type MarketNewsRow = {
+  id: string;
+  headline: string;
+  source: string;
+  url: string | null;
+  published_at: string;
+  angle: string | null;
+  category: string;
+  stock_tags: string[] | null;
+  global_summary: string | null;
+  overall_effect: string;
+  ticker_impacts: TickerImpact[] | null;
+  source_type: string;
+  metadata: Record<string, unknown> | null;
+  raw_content: string | null;
+  detail_open_count: number | null;
+};
+
+function mapMarketNewsRow(
+  row: MarketNewsRow,
+  holdingSymbols: Set<string>,
+  wlSymbols: Set<string>,
+): NewsItem {
+  const publishedAtIso = row.published_at ?? new Date().toISOString();
+  const portfolioDirectMatch = resolveDirectStockMatch(
+    row.stock_tags ?? [],
+    row.ticker_impacts ?? [],
+    holdingSymbols,
+  );
+  const watchlistDirectMatch = resolveDirectStockMatch(
+    row.stock_tags ?? [],
+    row.ticker_impacts ?? [],
+    wlSymbols,
+  );
+  return {
+    id: row.id,
+    newsItemId: row.id,
+    headline: row.headline,
+    source: row.source,
+    url: row.url ?? undefined,
+    publishedAt: formatPublishedAt(publishedAtIso),
+    publishedMinutesAgo: minutesAgo(publishedAtIso),
+    angle: row.angle ?? "",
+    category: (row.category ?? "other") as NewsItem["category"],
+    stockTags: row.stock_tags ?? [],
+    globalSummary: row.global_summary ?? "",
+    displayEffect: (row.overall_effect ?? "neutral") as NewsItem["displayEffect"],
+    tickerImpacts: row.ticker_impacts ?? [],
+    sourceType: (row.source_type ?? "other") as NewsItem["sourceType"],
+    sourceConfidence:
+      (row.source_type === "edgar" ? "high" : "standard") as NewsItem["sourceConfidence"],
+    metadata: row.metadata ?? {},
+    isPortfolioMatch: portfolioDirectMatch.matchedSymbols.length > 0,
+    isWatchlistMatch: watchlistDirectMatch.matchedSymbols.length > 0,
+    matchedStockTags: [
+      ...new Set([
+        ...portfolioDirectMatch.matchedSymbols,
+        ...watchlistDirectMatch.matchedSymbols,
+      ]),
+    ],
+  } satisfies NewsItem;
+}
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export type DeepLinkedStoryResult =
+  | { status: "found"; story: NewsItem }
+  | { status: "not_found" }
+  | { status: "invalid" };
+
+/**
+ * Resolves a /feed?story=<id> link independently of the feed's 24-hour window and pagination
+ * (audit F05). Accepts a news item ID, or a feed item ID the caller can read (RLS-scoped).
+ */
+export async function loadDeepLinkedStory(
+  supabase: ServerSupabase,
+  rawId: string | null | undefined,
+  opts: { portfolioSymbols: string[]; watchlistSymbols: string[] },
+): Promise<DeepLinkedStoryResult | null> {
+  const id = rawId?.trim();
+  if (!id) return null;
+  if (!UUID_PATTERN.test(id)) return { status: "invalid" };
+
+  const readNews = async (newsItemId: string) => {
+    const { data } = await supabase
+      .from("news_items")
+      .select(MARKET_NEWS_COLUMNS)
+      .eq("id", newsItemId)
+      .maybeSingle();
+    return (data as unknown as MarketNewsRow | null) ?? null;
+  };
+
+  let row = await readNews(id);
+  if (!row) {
+    const { data: feedRow } = await supabase
+      .from("feed_items")
+      .select("news_item_id")
+      .eq("id", id)
+      .maybeSingle();
+    const newsItemId = (feedRow as { news_item_id?: string } | null)?.news_item_id;
+    if (newsItemId) row = await readNews(newsItemId);
+  }
+  if (!row) return { status: "not_found" };
+
+  return {
+    status: "found",
+    story: mapMarketNewsRow(
+      row,
+      new Set(opts.portfolioSymbols.map((symbol) => symbol.toUpperCase())),
+      new Set(opts.watchlistSymbols.map((symbol) => symbol.toUpperCase())),
+    ),
+  };
+}
+
 async function buildMarketPayload(
   supabase: ServerSupabase,
   opts: {
@@ -777,10 +895,7 @@ async function buildMarketPayload(
 
   let query = supabase
     .from("news_items")
-    .select(
-      "id, headline, source, url, published_at, angle, category, stock_tags, " +
-        "global_summary, overall_effect, ticker_impacts, source_type, metadata, raw_content, detail_open_count",
-    )
+    .select(MARKET_NEWS_COLUMNS)
     .gte("published_at", publishedSince)
     .order("published_at", { ascending: false });
 
@@ -793,25 +908,7 @@ async function buildMarketPayload(
 
   const { data: rows } = await query;
 
-  type NewsRow = {
-    id: string;
-    headline: string;
-    source: string;
-    url: string | null;
-    published_at: string;
-    angle: string | null;
-    category: string;
-    stock_tags: string[] | null;
-    global_summary: string | null;
-    overall_effect: string;
-    ticker_impacts: TickerImpact[] | null;
-    source_type: string;
-    metadata: Record<string, unknown> | null;
-    raw_content: string | null;
-    detail_open_count: number | null;
-  };
-
-  const rawRows = (rows ?? []) as unknown as NewsRow[];
+  const rawRows = (rows ?? []) as unknown as MarketNewsRow[];
   const sourceFilteredRows = !opts.sourceType
     ? rawRows
     : opts.sourceType === "headlines"
@@ -833,45 +930,7 @@ async function buildMarketPayload(
   });
   const stories = recencyFilteredRows.map((row) => {
     const publishedAtIso = row.published_at ?? new Date().toISOString();
-    const portfolioDirectMatch = resolveDirectStockMatch(
-      row.stock_tags ?? [],
-      row.ticker_impacts ?? [],
-      holdingSymbols,
-    );
-    const watchlistDirectMatch = resolveDirectStockMatch(
-      row.stock_tags ?? [],
-      row.ticker_impacts ?? [],
-      wlSymbols,
-    );
-    const isPortfolioMatch = portfolioDirectMatch.matchedSymbols.length > 0;
-    const isWatchlistMatch = watchlistDirectMatch.matchedSymbols.length > 0;
-    const storyBase = {
-      id: row.id,
-      newsItemId: row.id,
-      headline: row.headline,
-      source: row.source,
-      url: row.url ?? undefined,
-      publishedAt: formatPublishedAt(publishedAtIso),
-      publishedMinutesAgo: minutesAgo(publishedAtIso),
-      angle: row.angle ?? "",
-      category: (row.category ?? "other") as NewsItem["category"],
-      stockTags: row.stock_tags ?? [],
-      globalSummary: row.global_summary ?? "",
-      displayEffect: (row.overall_effect ?? "neutral") as NewsItem["displayEffect"],
-      tickerImpacts: row.ticker_impacts ?? [],
-      sourceType: (row.source_type ?? "other") as NewsItem["sourceType"],
-      sourceConfidence:
-        (row.source_type === "edgar" ? "high" : "standard") as NewsItem["sourceConfidence"],
-      metadata: row.metadata ?? {},
-      isPortfolioMatch,
-      isWatchlistMatch,
-      matchedStockTags: [
-        ...new Set([
-          ...portfolioDirectMatch.matchedSymbols,
-          ...watchlistDirectMatch.matchedSymbols,
-        ]),
-      ],
-    } satisfies NewsItem;
+    const storyBase = mapMarketNewsRow(row, holdingSymbols, wlSymbols);
     const story = {
       ...storyBase,
       thesisMatches: buildInvestmentThesisMatches(storyBase, investmentTheses),

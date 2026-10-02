@@ -21,6 +21,7 @@ import { NewsFeedCard } from "@/components/app/news-feed-card";
 import { SaveArticleButton } from "@/components/app/save-article-button";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonStyles } from "@/components/ui/button";
+import { ModalDialog } from "@/components/ui/modal-dialog";
 import { Panel } from "@/components/ui/panel";
 import { buildScoreExplanation } from "@/lib/feed/score-explanation";
 import {
@@ -47,7 +48,7 @@ import {
   isRecentIngestHint,
   type LastIngestSnapshot,
 } from "@/lib/ingest-hint";
-import type { FeedResponsePayload } from "@/lib/server/feed";
+import type { DeepLinkedStoryResult, FeedResponsePayload } from "@/lib/server/feed";
 import { sanitizeExternalUrl } from "@/lib/security/external-url";
 
 /** UI recency choices; API and ingestion cap visibility at 24 hours. */
@@ -89,6 +90,12 @@ const DEFAULT_CHAT_ACTIVITY: ArticleChatActivityState = {
 const REALTIME_REFRESH_DEBOUNCE_MS = 800;
 type FeedChatContext = "story" | "general";
 
+/** Unsent chat text kept per conversation so closing the chat never silently discards it (F14). */
+type ChatDraftBinding = {
+  initialDraft?: string;
+  onDraftChange?: (draft: string) => void;
+};
+
 function defaultSortForMode(mode: FeedMode): FeedSort {
   return mode === "market" ? "recent" : "match";
 }
@@ -103,6 +110,7 @@ export function FeedView({
   initialSymbol,
   initialTicker,
   initialStoryId,
+  initialStory,
   initialFeedPayload,
   allowedModelTiers = ["free", "premium", "ultimate"],
   defaultModelTier = "free",
@@ -116,6 +124,8 @@ export function FeedView({
   initialTicker?: string;
   /** When set (e.g. from `/feed?story=<newsItemId>`), select the matching article after the feed loads. */
   initialStoryId?: string;
+  /** Server-resolved ?story= target, independent of the current feed window (F05). */
+  initialStory?: DeepLinkedStoryResult | null;
   initialFeedPayload?: FeedResponsePayload | null;
   allowedModelTiers?: ArticleChatModelTier[];
   defaultModelTier?: ArticleChatModelTier;
@@ -194,6 +204,7 @@ export function FeedView({
   const initialFetchHandledRef = useRef(false);
   const initialSymbolAppliedRef = useRef(false);
   const initialStoryAppliedRef = useRef(false);
+  const pinnedStoryIdRef = useRef(initialStory?.status === "found" ? initialStory.story.id : null);
 
   useEffect(() => {
     setLastIngestHint(readLastIngestSnapshot());
@@ -337,6 +348,8 @@ export function FeedView({
         );
         setSelectedStoryId((prev) => {
           if (prev && newFeed.some((item) => item.id === prev)) return prev;
+          // A deep-linked story outside the current page/window stays open (F05).
+          if (prev && pinnedStoryIdRef.current === prev) return prev;
           return null;
         });
         setError(null);
@@ -596,11 +609,18 @@ export function FeedView({
       ? `Update paused: ${backgroundError}`
       : sortNotice;
 
+  const pinnedStory = initialStory?.status === "found" ? initialStory.story : null;
   const selectedStory = selectedStoryId
     ? visibleStories.find((s) => s.id === selectedStoryId) ??
+      (pinnedStory && pinnedStory.id === selectedStoryId ? pinnedStory : null) ??
       visibleStories[0] ??
       null
     : null;
+  const [deepLinkNoticeDismissed, setDeepLinkNoticeDismissed] = useState(false);
+  const deepLinkUnavailable =
+    !deepLinkNoticeDismissed &&
+    Boolean(initialStoryId?.trim()) &&
+    (initialStory?.status === "not_found" || initialStory?.status === "invalid");
   const chatHasActivity = chatActivity.hasMessages || chatActivity.hasDraft;
   const chatStory = chatContext === "story" ? selectedStory : null;
   const isStoryChatOpen = Boolean(chatOpen && chatStory);
@@ -620,15 +640,20 @@ export function FeedView({
     resetChatSurface();
   }, [chatContext, chatOpen, resetChatSurface, selectedStory]);
 
-  useEffect(() => {
-    if (!showMobileChat || typeof document === "undefined") return undefined;
-
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = previousOverflow;
-    };
-  }, [showMobileChat]);
+  const chatDraftsRef = useRef(new Map<string, string>());
+  const chatDraftKey = chatContext === "story" && chatStory ? `story:${chatStory.newsItemId}` : "general";
+  const handleChatDraftChange = useCallback(
+    (draft: string) => {
+      if (draft.trim()) chatDraftsRef.current.set(chatDraftKey, draft);
+      else chatDraftsRef.current.delete(chatDraftKey);
+    },
+    [chatDraftKey],
+  );
+  // Read at render so a reopened chat gets the text saved since the last open.
+  const chatDraftBinding: ChatDraftBinding = {
+    initialDraft: chatDraftsRef.current.get(chatDraftKey),
+    onDraftChange: handleChatDraftChange,
+  };
 
   const selectStory = useCallback(
     (story: NewsItem) => {
@@ -649,9 +674,9 @@ export function FeedView({
     const raw = initialStoryId?.trim();
     if (!raw || initialStoryAppliedRef.current) return;
 
-    const match = visibleStories.find(
-      (story) => story.newsItemId === raw || story.id === raw,
-    );
+    const match =
+      visibleStories.find((story) => story.newsItemId === raw || story.id === raw) ??
+      (pinnedStory && (pinnedStory.newsItemId === raw || pinnedStory.id === raw) ? pinnedStory : null);
     if (!match) return;
 
     initialStoryAppliedRef.current = true;
@@ -664,7 +689,7 @@ export function FeedView({
         .getElementById(`feed-story-${match.newsItemId || match.id}`)
         ?.scrollIntoView?.({ behavior: "smooth", block: "center" });
     });
-  }, [initialStoryId, trackStoryOpen, visibleStories]);
+  }, [initialStoryId, pinnedStory, trackStoryOpen, visibleStories]);
 
   const handleStoryOpen = useCallback(
     (story: NewsItem) => {
@@ -1002,6 +1027,25 @@ export function FeedView({
           </div>
         </div>
 
+        {deepLinkUnavailable ? (
+          <div
+            role="status"
+            className="flex items-start justify-between gap-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-200"
+          >
+            <p>
+              The story you opened is no longer available in Pulsefolio. It may have been removed
+              by its source; the rest of your feed is shown below.
+            </p>
+            <button
+              type="button"
+              onClick={() => setDeepLinkNoticeDismissed(true)}
+              className="shrink-0 text-xs font-semibold uppercase tracking-[0.14em]"
+            >
+              Dismiss
+            </button>
+          </div>
+        ) : null}
+
         {visibleStories.length === 0 ? (
           <FeedEmptyState
             mode={mode}
@@ -1068,11 +1112,13 @@ export function FeedView({
 
       <div className="flex flex-col gap-5 xl:sticky xl:top-28 xl:self-start xl:max-h-[calc(100vh-8rem)] xl:overflow-y-auto">
         <FeedMomentumCard insights={insights} />
-        <GlobalAskAiButton
-          hasSelectedStory={Boolean(selectedStory)}
-          isOpen={chatOpen}
-          onClick={handleGlobalAskAiClick}
-        />
+        {isDesktopChatLayout ? (
+          <GlobalAskAiButton
+            hasSelectedStory={Boolean(selectedStory)}
+            isOpen={chatOpen}
+            onClick={handleGlobalAskAiClick}
+          />
+        ) : null}
         {showDesktopChat ? (
           <StoryChatSidebar
             context={chatContext}
@@ -1084,8 +1130,9 @@ export function FeedView({
             onClose={resetChatSurface}
             onActivityChange={handleChatActivityChange}
             initialGeneralChatTurnstileVerified={initialGeneralChatTurnstileVerified}
+            draft={chatDraftBinding}
           />
-        ) : selectedStory && !chatOpen ? (
+        ) : selectedStory && !chatOpen && isDesktopChatLayout ? (
           <DetailPanel
             story={selectedStory}
             mode={mode}
@@ -1096,6 +1143,34 @@ export function FeedView({
         ) : null}
       </div>
       </div>
+
+      {/* Below the desktop breakpoint the rail sits after the whole feed, so the selected
+          article opens in a sheet and Ask AI stays reachable from a floating button (F01). */}
+      {!isDesktopChatLayout && selectedStory && !chatOpen ? (
+        <ModalDialog label="Article details" onClose={handleCloseStory} testId="story-detail-sheet">
+          <div className="flex-1 overflow-y-auto px-5 py-6">
+            <DetailPanel
+              story={selectedStory}
+              mode={mode}
+              isChatOpen={isStoryChatOpen}
+              onToggleChat={handleToggleChat}
+              onClose={handleCloseStory}
+            />
+          </div>
+        </ModalDialog>
+      ) : null}
+
+      {!isDesktopChatLayout && !chatOpen && !selectedStory ? (
+        <button
+          type="button"
+          data-testid="floating-ask-ai-button"
+          onClick={handleGlobalAskAiClick}
+          className="fixed bottom-5 right-5 z-40 inline-flex items-center gap-2 rounded-full bg-brand px-5 py-3 text-sm font-semibold text-[#080c11] shadow-[0_8px_30px_rgba(16,185,129,0.35)] transition hover:bg-brand-strong"
+        >
+          <MessageSquare className="h-4 w-4" aria-hidden="true" />
+          Ask AI
+        </button>
+      ) : null}
 
 
       {showMobileChat ? (
@@ -1109,6 +1184,7 @@ export function FeedView({
           onClose={resetChatSurface}
           onActivityChange={handleChatActivityChange}
           initialGeneralChatTurnstileVerified={initialGeneralChatTurnstileVerified}
+          draft={chatDraftBinding}
         />
       ) : null}
 
@@ -1269,6 +1345,7 @@ function StoryChatSidebar({
   onClose,
   onActivityChange,
   initialGeneralChatTurnstileVerified,
+  draft,
 }: {
   context: FeedChatContext;
   story: NewsItem | null;
@@ -1279,6 +1356,7 @@ function StoryChatSidebar({
   onClose: () => void;
   onActivityChange: (state: ArticleChatActivityState) => void;
   initialGeneralChatTurnstileVerified: boolean;
+  draft?: ChatDraftBinding;
 }) {
   const isStoryContext = context === "story" && story;
 
@@ -1297,6 +1375,8 @@ function StoryChatSidebar({
         selectedTier={selectedTier}
         onSelectedTierChange={onSelectedTierChange}
         onActivityChange={onActivityChange}
+        initialDraft={draft?.initialDraft}
+        onDraftChange={draft?.onDraftChange}
         showHeader={false}
         className="border-0 bg-transparent p-0"
         initialTurnstileVerified={
@@ -1317,6 +1397,7 @@ function StoryChatMobileSheet({
   onClose,
   onActivityChange,
   initialGeneralChatTurnstileVerified,
+  draft,
 }: {
   context: FeedChatContext;
   story: NewsItem | null;
@@ -1327,50 +1408,43 @@ function StoryChatMobileSheet({
   onClose: () => void;
   onActivityChange: (state: ArticleChatActivityState) => void;
   initialGeneralChatTurnstileVerified: boolean;
+  draft?: ChatDraftBinding;
 }) {
   const isStoryContext = context === "story" && story;
 
   return (
-    <div
-      data-testid="story-chat-sheet"
-      className="fixed inset-0 z-50 xl:hidden"
+    <ModalDialog
+      label="Ask AI chat"
+      onClose={onClose}
+      testId="story-chat-sheet"
+      overlayClassName="xl:hidden"
+      initialFocusSelector="textarea"
     >
-      <button
-        type="button"
-        aria-label="Close Ask AI chat"
-        className="absolute inset-0 bg-black/55 backdrop-blur-sm"
-        onClick={onClose}
-      />
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label="Ask AI chat"
-        className="absolute right-0 top-0 flex h-full w-full max-w-xl flex-col border-l border-white/10 bg-background shadow-2xl"
-      >
-        <div className="flex-1 overflow-y-auto px-5 py-6">
-          <div className="rounded-2xl border border-white/[0.06] bg-surface-raised p-5 shadow-sm">
-            <StoryChatHeader context={context} story={story} onClose={onClose} />
-            <div className="mt-5">
-              <ArticleChatPanel
-                portfolioId={portfolioId}
-                newsItemId={isStoryContext ? story.newsItemId : undefined}
-                headline={isStoryContext ? story.headline : "No active article"}
-                contextMode={isStoryContext ? "story" : "general"}
-                allowedTiers={allowedTiers}
-                selectedTier={selectedTier}
-                onSelectedTierChange={onSelectedTierChange}
-                onActivityChange={onActivityChange}
-                showHeader={false}
-                className="border-0 bg-transparent p-0"
-                initialTurnstileVerified={
-                  isStoryContext ? false : initialGeneralChatTurnstileVerified
-                }
-              />
-            </div>
+      <div className="flex-1 overflow-y-auto px-5 py-6">
+        <div className="rounded-2xl border border-white/[0.06] bg-surface-raised p-5 shadow-sm">
+          <StoryChatHeader context={context} story={story} onClose={onClose} />
+          <div className="mt-5">
+            <ArticleChatPanel
+              portfolioId={portfolioId}
+              newsItemId={isStoryContext ? story.newsItemId : undefined}
+              headline={isStoryContext ? story.headline : "No active article"}
+              contextMode={isStoryContext ? "story" : "general"}
+              allowedTiers={allowedTiers}
+              selectedTier={selectedTier}
+              onSelectedTierChange={onSelectedTierChange}
+              onActivityChange={onActivityChange}
+              initialDraft={draft?.initialDraft}
+              onDraftChange={draft?.onDraftChange}
+              showHeader={false}
+              className="border-0 bg-transparent p-0"
+              initialTurnstileVerified={
+                isStoryContext ? false : initialGeneralChatTurnstileVerified
+              }
+            />
           </div>
         </div>
       </div>
-    </div>
+    </ModalDialog>
   );
 }
 
@@ -1421,19 +1495,14 @@ function StorySwitchConfirmDialog({
   onConfirm: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-      <button
-        type="button"
-        aria-label="Dismiss story switch confirmation"
-        className="absolute inset-0 bg-black/55 backdrop-blur-sm"
-        onClick={onCancel}
-      />
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label="Switch story chat"
-        className="relative w-full max-w-md rounded-3xl border border-white/[0.08] bg-surface-raised p-6 shadow-2xl"
-      >
+    <ModalDialog
+      label="Switch story chat"
+      onClose={onCancel}
+      placement="center"
+      overlayClassName="z-[60]"
+      className="rounded-3xl border border-white/[0.08] bg-surface-raised p-6 shadow-2xl"
+    >
+      <div>
         <div className="space-y-3">
           <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-brand">
             Switch story?
@@ -1454,7 +1523,7 @@ function StorySwitchConfirmDialog({
           </Button>
         </div>
       </div>
-    </div>
+    </ModalDialog>
   );
 }
 
@@ -1525,10 +1594,11 @@ function DetailPanel({
         </div>
         <button
           type="button"
+          aria-label="Close article details"
           className="shrink-0 rounded-full border border-white/10 bg-white/5 p-2 text-slate-500 transition hover:bg-white/10 hover:text-slate-300"
           onClick={onClose}
         >
-          <X className="h-4 w-4" />
+          <X className="h-4 w-4" aria-hidden="true" />
         </button>
       </div>
 

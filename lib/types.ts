@@ -1,3 +1,5 @@
+import type { PortfolioValuationSummary } from "@/lib/services/valuation";
+
 type Sentiment = "positive" | "watch" | "negative" | "neutral";
 export type ImpactLevel = "High" | "Medium" | "Low";
 export type StockEffect = "bullish" | "bearish" | "neutral";
@@ -86,6 +88,10 @@ export interface Holding extends LatestEarningsReportFields {
   quoteCurrency: string;
   quoteAsOf: string | null;
   importSource: string;
+  /** Provider previous close in the quote currency, when known. */
+  previousClose?: number | null;
+  /** Quote-currency → USD rate stored with the quote; null means no conversion is available. */
+  fxRateToUsd?: number | null;
 }
 
 export interface HoldingDraft {
@@ -120,8 +126,12 @@ export interface HoldingResolutionCandidate {
 export type SaveMode = "replace" | "merge";
 
 export interface PortfolioOverview {
+  /** USD total of every position that could be valued (see lib/services/valuation.ts). */
   totalValue: number;
+  /** Aggregate previous-close day return in percent; 0 when unknown (see valuation.dayChangePercent). */
   dayChange: number;
+  /** Currency, freshness and completeness of the figures above. Absent on legacy fixtures. */
+  valuation?: PortfolioValuationSummary;
   monthlyChange: number;
   lastSyncedAt: string;
   lastAnalyzedAt: string;
@@ -129,7 +139,7 @@ export interface PortfolioOverview {
   primaryGoal: string;
 }
 
-type PortfolioPricingRefreshStatus = "updated" | "no_quotes" | "error";
+type PortfolioPricingRefreshStatus = "updated" | "partial" | "no_quotes" | "error";
 
 export interface PortfolioPricingRefreshResult {
   status: PortfolioPricingRefreshStatus;

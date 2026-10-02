@@ -157,8 +157,11 @@ jobs:
           echo "article_ids=${article_ids}" >> "$GITHUB_OUTPUT"
           echo "should_enrich=${should_enrich}" >> "$GITHUB_OUTPUT"
 
-      - name: Enrich articles in batches
-        if: steps.ingest.outputs.should_enrich == 'true'
+      # Audit J1: the steps below run even when this run inserted nothing or an earlier step failed.
+      # Enrichment drains the durable enrichment_status backlog, so articles inserted by a run that
+      # crashed before enrichment are recovered by the next run without new upstream articles.
+      - name: Drain enrichment backlog
+        if: ${{ !cancelled() }}
         env:
           CRON_ENDPOINT: ${{ secrets.CRON_ENDPOINT }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
@@ -166,37 +169,28 @@ jobs:
           set -euo pipefail
 
           ENRICH_URL="${CRON_ENDPOINT}/enrich"
-          ARTICLE_IDS='${{ steps.ingest.outputs.article_ids }}'
+          echo "Draining enrichment backlog via ${ENRICH_URL}"
 
-          echo "Enriching articles via ${ENRICH_URL}"
-          echo "Total article IDs: $(echo "${ARTICLE_IDS}" | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))')"
-
-          python3 - "$ARTICLE_IDS" "$ENRICH_URL" <<'PY'
+          python3 - "$ENRICH_URL" <<'PY'
           import json
           import os
           import subprocess
           import sys
 
-          ids = json.loads(sys.argv[1])
-          enrich_url = sys.argv[2]
+          enrich_url = sys.argv[1]
           cron_secret = os.environ["CRON_SECRET"]
-          batch_size = 10
-          batches = [ids[i:i+batch_size] for i in range(0, len(ids), batch_size)]
+          max_batches = 30
+          totals = {"enriched": 0, "retrying": 0, "failed": 0, "skipped": 0}
+          remaining = None
 
-          print(f'Processing {len(ids)} article(s) in {len(batches)} batch(es)')
-
-          failed = False
-          for i, batch in enumerate(batches):
-              print(f'--- Batch {i+1}/{len(batches)}: {len(batch)} article(s) ---')
-              payload = json.dumps({'articleIds': batch})
-
+          for i in range(max_batches):
               result = subprocess.run([
                   'curl', '-sS',
                   '-X', 'POST',
                   '-H', f'Authorization: Bearer {cron_secret}',
                   '-H', 'Content-Type: application/json',
                   '-H', 'Accept: application/json',
-                  '-d', payload,
+                  '-d', json.dumps({'backlog': True, 'limit': 10}),
                   '-w', '\n%{http_code}',
                   enrich_url
               ], capture_output=True, text=True, timeout=120)
@@ -204,56 +198,52 @@ jobs:
               lines = result.stdout.strip().rsplit('\n', 1)
               body = lines[0] if len(lines) > 1 else ''
               http_code = lines[-1].strip()
-
-              print(f'HTTP {http_code}')
-
-              if not (200 <= int(http_code) < 300):
-                  print(f'Enrich batch {i+1} failed with HTTP {http_code}')
-                  failed = True
-                  break
-
               try:
                   resp = json.loads(body)
-                  if resp.get('error'):
-                      print(f'Enrich batch {i+1} returned error: {resp["error"]}')
-                      failed = True
-                      break
-                  print(f'  enriched={resp.get("enriched", "?")}, skipped={resp.get("skipped", "?")}')
               except json.JSONDecodeError:
-                  print(f'Enrich batch {i+1} returned invalid JSON')
-                  failed = True
+                  resp = {}
+
+              if not http_code.isdigit() or not (200 <= int(http_code) < 300) or resp.get('error'):
+                  print(f'Enrich batch {i+1} failed: HTTP {http_code} error={resp.get("error")}')
+                  print(f'Totals so far: {json.dumps(totals)}')
+                  sys.exit(1)
+
+              for key in totals:
+                  totals[key] += int(resp.get(key, 0))
+              remaining = int(resp.get('remaining', 0))
+              processed = sum(int(resp.get(key, 0)) for key in totals)
+              print(f'Batch {i+1}: {json.dumps({k: resp.get(k) for k in totals})} remaining={remaining}')
+
+              if remaining == 0 or processed == 0:
                   break
 
-          if failed:
-              sys.exit(1)
-
-          print('All enrich batches completed successfully')
+          print(f'Enrichment totals: {json.dumps(totals)} remaining_due={remaining}')
+          if totals['retrying'] or totals['failed']:
+              print('Some articles hit AI failures; they stay queued with backoff (failed = attempts exhausted).')
           PY
 
-      - name: Extract full text for new articles
-        if: steps.ingest.outputs.should_enrich == 'true'
+      - name: Extract full text (new and queued articles)
+        if: ${{ !cancelled() }}
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          ARTICLE_IDS: ${{ steps.ingest.outputs.article_ids }}
         run: |
           set -euo pipefail
 
-          ARTICLE_IDS='${{ steps.ingest.outputs.article_ids }}'
-          ID_COUNT="$(echo "${ARTICLE_IDS}" | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))')"
+          ID_CSV="$(printf '%s' "${ARTICLE_IDS:-[]}" | python3 -c 'import json,sys; print(",".join(json.loads(sys.stdin.read() or "[]")))')"
 
-          if [ "${ID_COUNT}" -eq 0 ]; then
-            echo "No article IDs to extract"
-            exit 0
+          if [ -n "${ID_CSV}" ]; then
+            echo "Extracting full text for new articles"
+            python -m workers.news_ingestion.extract_full_text --ids "${ID_CSV}"
           fi
 
-          echo "Extracting full text for ${ID_COUNT} article(s)"
-
-          ID_CSV="$(echo "${ARTICLE_IDS}" | python3 -c 'import json,sys; print(",".join(json.load(sys.stdin)))')"
-          python -m workers.news_ingestion.extract_full_text --ids "${ID_CSV}"
+          echo "Extracting rows left queued by earlier runs"
+          python -m workers.news_ingestion.extract_full_text --queued --limit 40
           echo "Full text extraction completed"
 
-      - name: Fetch eligible portfolio ids
-        if: steps.ingest.outputs.should_enrich == 'true'
+      - name: Fetch portfolios that need analysis
+        if: ${{ !cancelled() }}
         id: analysis_targets
         env:
           CRON_ENDPOINT: ${{ secrets.CRON_ENDPOINT }}
@@ -264,7 +254,9 @@ jobs:
           BASE_URL="${CRON_ENDPOINT%/api/news/cron}"
           ANALYSIS_URL="${BASE_URL}/api/analysis/cron"
 
-          echo "Fetching eligible portfolio ids via ${ANALYSIS_URL}"
+          # No force: the route selects portfolios without a usable run, or with articles enriched
+          # since their last usable run, outside the cooldown.
+          echo "Fetching portfolios that need analysis via ${ANALYSIS_URL}"
 
           response_file="$(mktemp)"
 
@@ -275,7 +267,7 @@ jobs:
               -H "Accept: application/json" \
               -o "${response_file}" \
               -w "%{http_code}" \
-              "${ANALYSIS_URL}?force=true"
+              "${ANALYSIS_URL}"
           )"
 
           echo "HTTP ${http_code}"
@@ -287,101 +279,87 @@ jobs:
             exit 1
           fi
 
-          portfolio_ids="$(python3 - "$response_file" <<'PY'
-          import json
-          import sys
+          python3 -c 'import json, sys; d = json.load(open(sys.argv[1])); print("Eligible portfolios: %d, in cooldown: %s, already up to date: %s" % (len(d.get("portfolioIds", [])), d.get("skippedCount", 0), d.get("upToDateCount", 0)))' "$response_file"
 
-          data = json.load(open(sys.argv[1]))
-          print(json.dumps(data.get("portfolioIds", [])))
-          PY
-          )"
-          has_portfolios="$(python3 - "$response_file" <<'PY'
-          import json
-          import sys
-
-          data = json.load(open(sys.argv[1]))
-          print("true" if len(data.get("portfolioIds", [])) > 0 else "false")
-          PY
-          )"
-          skipped_count="$(python3 - "$response_file" <<'PY'
-          import json
-          import sys
-
-          data = json.load(open(sys.argv[1]))
-          print(int(data.get("skippedCount", 0)))
-          PY
-          )"
-
-          echo "Eligible portfolios: $(echo "${portfolio_ids}" | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))')"
-          echo "Skipped by cooldown: ${skipped_count}"
-
+          portfolio_ids="$(python3 -c 'import json, sys; print(json.dumps(json.load(open(sys.argv[1])).get("portfolioIds", [])))' "$response_file")"
           echo "portfolio_ids=${portfolio_ids}" >> "$GITHUB_OUTPUT"
-          echo "has_portfolios=${has_portfolios}" >> "$GITHUB_OUTPUT"
 
       - name: Run portfolio analysis per portfolio
-        if: steps.ingest.outputs.should_enrich == 'true'
+        if: ${{ !cancelled() && steps.analysis_targets.outcome == 'success' }}
         env:
           CRON_ENDPOINT: ${{ secrets.CRON_ENDPOINT }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          PORTFOLIO_IDS: ${{ steps.analysis_targets.outputs.portfolio_ids }}
         run: |
           set -euo pipefail
 
           BASE_URL="${CRON_ENDPOINT%/api/news/cron}"
           ANALYSIS_URL="${BASE_URL}/api/analysis/cron"
-          PORTFOLIO_IDS='${{ steps.analysis_targets.outputs.portfolio_ids }}'
 
           echo "Running portfolio analysis via ${ANALYSIS_URL}"
 
-          python3 - "$PORTFOLIO_IDS" "$ANALYSIS_URL" <<'PY'
+          python3 - "$ANALYSIS_URL" <<'PY'
           import json
           import os
           import subprocess
           import sys
 
-          portfolio_ids = json.loads(sys.argv[1])
-          analysis_url = sys.argv[2]
+          portfolio_ids = json.loads(os.environ.get("PORTFOLIO_IDS") or "[]")
+          analysis_url = sys.argv[1]
           cron_secret = os.environ["CRON_SECRET"]
           print(f'Processing {len(portfolio_ids)} portfolio(s) sequentially')
 
+          # One failing portfolio must not prevent the remaining portfolios from running (audit J1).
+          failures = []
+          processed = skipped = 0
           for i, portfolio_id in enumerate(portfolio_ids):
               print(f'--- Portfolio {i+1}/{len(portfolio_ids)}: {portfolio_id} ---')
               payload = json.dumps({'portfolioId': portfolio_id, 'force': True})
 
-              result = subprocess.run([
-                  'curl', '-sS',
-                  '-X', 'POST',
-                  '-H', f'Authorization: Bearer {cron_secret}',
-                  '-H', 'Content-Type: application/json',
-                  '-H', 'Accept: application/json',
-                  '-d', payload,
-                  '-w', '\n%{http_code}',
-                  analysis_url
-              ], capture_output=True, text=True, timeout=300)
+              try:
+                  result = subprocess.run([
+                      'curl', '-sS',
+                      '-X', 'POST',
+                      '-H', f'Authorization: Bearer {cron_secret}',
+                      '-H', 'Content-Type: application/json',
+                      '-H', 'Accept: application/json',
+                      '-d', payload,
+                      '-w', '\n%{http_code}',
+                      analysis_url
+                  ], capture_output=True, text=True, timeout=300)
+              except subprocess.TimeoutExpired:
+                  failures.append((portfolio_id, 'timeout'))
+                  continue
 
               lines = result.stdout.strip().rsplit('\n', 1)
               body = lines[0] if len(lines) > 1 else ''
               http_code = lines[-1].strip()
-
               print(f'HTTP {http_code}')
 
-              if not (200 <= int(http_code) < 300):
-                  print(f'Analysis failed for portfolio {portfolio_id} with HTTP {http_code}')
-                  sys.exit(1)
+              if not http_code.isdigit() or not (200 <= int(http_code) < 300):
+                  failures.append((portfolio_id, f'HTTP {http_code}'))
+                  continue
 
               try:
                   resp = json.loads(body)
               except json.JSONDecodeError:
-                  print(f'Analysis returned invalid JSON for portfolio {portfolio_id}')
-                  sys.exit(1)
+                  failures.append((portfolio_id, 'invalid JSON'))
+                  continue
 
               if resp.get('error'):
-                  print(f'Analysis returned error for portfolio {portfolio_id}: {resp["error"]}')
-                  sys.exit(1)
+                  failures.append((portfolio_id, resp['error']))
+                  continue
 
               if resp.get('skipped'):
-                  print(f'Portfolio {portfolio_id} skipped due to cooldown')
+                  skipped += 1
+                  print(f'Portfolio {portfolio_id} skipped ({resp.get("code") or "cooldown"})')
               else:
+                  processed += 1
                   print(f'Portfolio {portfolio_id} processed successfully')
 
-          print('All portfolio analyses completed successfully')
+          print(f'Analysis summary: processed={processed} skipped={skipped} failed={len(failures)}')
+          for portfolio_id, reason in failures:
+              print(f'  FAILED {portfolio_id}: {reason}')
+          if failures:
+              sys.exit(1)
           PY

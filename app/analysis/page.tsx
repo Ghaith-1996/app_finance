@@ -51,7 +51,7 @@ export default async function AnalysisPage({
     >
       <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
         <div className="space-y-6">
-          <Panel glow className="space-y-6 border-white/[0.06] bg-[#0d1520] p-8">
+          <Panel glow className="space-y-6 border-white/[0.06] bg-surface-panel p-8">
             {portfolioId ? (
               <AnalysisRunTrigger
                 portfolioId={portfolioId}

@@ -168,7 +168,7 @@ function PlatformSection() {
             })}
           </div>
           <div className="grid gap-4">
-            <Panel className="space-y-6 bg-[#0d1520] p-7">
+            <Panel className="theme-inverse space-y-6 bg-[#0d1520] p-7">
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <Badge tone="brand">
@@ -314,7 +314,7 @@ function FinalCallToAction() {
       <div className="mx-auto max-w-7xl">
         <Panel
           glow
-          className="flex flex-col gap-8 bg-[#0d1520] p-8 lg:flex-row lg:items-center lg:justify-between lg:p-10"
+          className="theme-inverse flex flex-col gap-8 bg-[#0d1520] p-8 lg:flex-row lg:items-center lg:justify-between lg:p-10"
         >
           <div className="max-w-2xl space-y-4">
             <Badge tone="brand">

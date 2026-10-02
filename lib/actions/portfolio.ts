@@ -13,6 +13,13 @@ import {
   normalizeRows,
 } from "@/lib/services/csv-parser";
 import { getQuote, getQuotes, searchSymbol } from "@/lib/services/yahoo-finance";
+import { getFxRatesToBase } from "@/lib/services/fx";
+import {
+  buildHoldingPricingPlan,
+  PRICING_HOLDING_COLUMNS,
+  type PricingHoldingRow,
+} from "@/lib/services/holding-pricing";
+import { validateHoldingsPayload } from "@/lib/services/holdings-validation";
 import type {
   Holding,
   HoldingDraft,
@@ -75,6 +82,8 @@ function mapHoldingFromDb(row: any) {
     quoteCurrency: (row.quote_currency as string) ?? "USD",
     quoteAsOf: (row.quote_as_of as string) ?? null,
     importSource: (row.import_source as string) ?? "manual",
+    previousClose: row.previous_close == null ? null : Number(row.previous_close),
+    fxRateToUsd: row.fx_rate_to_usd == null ? null : Number(row.fx_rate_to_usd),
     latestEarningsReportUrl: null,
     latestEarningsReportSource: null,
     latestEarningsReportDate: null,
@@ -274,171 +283,51 @@ export async function saveHoldings(input: SaveHoldingsInput) {
     return { error: "Unauthorized", portfolioId: null as string | null };
   }
 
-  let portfolioId = input.portfolioId;
-
-  if (!portfolioId) {
-    const { data: portfolio, error: portfolioError } = await supabase
-      .from("portfolios")
-      .insert({
-        user_id: user.id,
-        name: input.portfolioName ?? "My Portfolio",
-        source_type: input.sourceType ?? "manual",
-        sync_status: "active",
-      })
-      .select("id")
-      .single();
-
-    if (portfolioError || !portfolio) {
-      return { error: portfolioError?.message ?? "Failed to create portfolio", portfolioId: null };
-    }
-    portfolioId = portfolio.id;
-  } else {
-    const { data: existing } = await supabase
-      .from("portfolios")
-      .select("id")
-      .eq("id", portfolioId)
-      .eq("user_id", user.id)
-      .single();
-    if (!existing) {
-      return { error: "Portfolio not found or unauthorized", portfolioId: null };
-    }
+  const existingPortfolioId = input.portfolioId ?? null;
+  if (input.mode !== "replace" && input.mode !== "merge") {
+    return { error: "Choose whether to replace or merge holdings.", portfolioId: existingPortfolioId };
   }
 
-  if (input.mode === "replace") {
-    await supabase.from("holdings").delete().eq("portfolio_id", portfolioId);
+  const validation = validateHoldingsPayload(input.holdings);
+  if (!validation.ok) {
+    return { error: validation.error, portfolioId: existingPortfolioId };
   }
 
-  if (input.mode === "merge") {
-    const { data: existingHoldings } = await supabase
-      .from("holdings")
-      .select("id, symbol")
-      .eq("portfolio_id", portfolioId);
+  // Validation, ownership, portfolio creation and the replace/merge all commit or roll back together.
+  const { data: savedPortfolioId, error: saveError } = await supabase.rpc("save_portfolio_holdings", {
+    p_portfolio_id: existingPortfolioId,
+    p_portfolio_name: input.portfolioName ?? null,
+    p_source_type: normalizeSaveSourceType(input.sourceType),
+    p_mode: input.mode,
+    p_holdings: validation.holdings,
+  });
 
-    const existingMap = new Map(
-      (existingHoldings ?? []).map((h) => [h.symbol.toUpperCase(), h.id]),
-    );
-
-    for (const h of input.holdings) {
-      const existingId = existingMap.get(h.symbol.toUpperCase());
-      if (existingId) {
-        await supabase
-          .from("holdings")
-          .update({
-            company: h.company,
-            quantity: h.quantity,
-            average_cost: h.averageCost,
-            sector: h.sector,
-            market: h.market,
-            source: h.importSource === "csv" ? "CSV Import" : "Manual",
-            thesis: h.thesis || null,
-            import_source: h.importSource,
-          })
-          .eq("id", existingId);
-      } else {
-        await supabase.from("holdings").insert({
-          portfolio_id: portfolioId,
-          symbol: h.symbol.toUpperCase(),
-          company: h.company,
-          sector: h.sector,
-          market: h.market,
-          source: h.importSource === "csv" ? "CSV Import" : "Manual",
-          quantity: h.quantity,
-          average_cost: h.averageCost,
-          thesis: h.thesis || null,
-          import_source: h.importSource,
-        });
-      }
-    }
-  } else {
-    const holdingsRows = input.holdings.map((h) => ({
-      portfolio_id: portfolioId!,
-      symbol: h.symbol.toUpperCase(),
-      company: h.company,
-      sector: h.sector,
-      market: h.market,
-      source: h.importSource === "csv" ? "CSV Import" : "Manual",
-      quantity: h.quantity,
-      average_cost: h.averageCost,
-      thesis: h.thesis || null,
-      import_source: h.importSource,
-    }));
-
-    if (holdingsRows.length > 0) {
-      const { error: insertErr } = await supabase.from("holdings").insert(holdingsRows);
-      if (insertErr) {
-        return { error: insertErr.message, portfolioId: null };
-      }
-    }
+  if (saveError || typeof savedPortfolioId !== "string") {
+    return {
+      error: describeSaveHoldingsError(saveError),
+      portfolioId: existingPortfolioId,
+    };
   }
 
-  const nextSourceType = normalizeSaveSourceType(input.sourceType);
-  if (nextSourceType) {
-    await supabase
-      .from("portfolios")
-      .update({
-        source_type: nextSourceType,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", portfolioId)
-      .eq("user_id", user.id);
-  }
-
-  // Enrich with live quotes
-  const { data: allHoldings } = await supabase
-    .from("holdings")
-    .select("id, symbol, quantity")
-    .eq("portfolio_id", portfolioId);
-
-  if (allHoldings && allHoldings.length > 0) {
-    const symbols = allHoldings.map((h) => h.symbol as string);
-    try {
-      const quotes = await getQuotes(symbols);
-      let totalValue = 0;
-
-      for (const h of allHoldings) {
-        const q = quotes.get((h.symbol as string).toUpperCase());
-        if (q) {
-          await supabase
-            .from("holdings")
-            .update({
-              price: q.price,
-              current_price: q.price,
-              daily_change: q.dailyChange,
-              quote_currency: q.currency,
-              quote_as_of: new Date().toISOString(),
-            })
-            .eq("id", h.id);
-          totalValue += Number(h.quantity) * q.price;
-        }
-      }
-
-      // Recompute allocation based on value weight
-      if (totalValue > 0) {
-        for (const h of allHoldings) {
-          const q = quotes.get((h.symbol as string).toUpperCase());
-          const posValue = Number(h.quantity) * (q?.price ?? 0);
-          const allocation = (posValue / totalValue) * 100;
-          await supabase
-            .from("holdings")
-            .update({ allocation: Math.round(allocation * 100) / 100 })
-            .eq("id", h.id);
-        }
-      }
-    } catch {
-      // Yahoo unavailable; holdings saved without live prices
-    }
-  }
-
-  await supabase
-    .from("portfolios")
-    .update({
-      last_synced_at: new Date().toISOString(),
-      sync_status: "active",
-    })
-    .eq("id", portfolioId);
+  // Positions are committed; quote enrichment is a separate, non-fatal step.
+  const pricing = await syncHoldingPricesInternal(savedPortfolioId);
 
   revalidateAll();
-  return { error: null, portfolioId };
+  return {
+    error: null,
+    portfolioId: savedPortfolioId,
+    pricingStatus: pricing.status,
+    pricingMessage: pricing.status === "updated" ? null : pricing.message,
+  };
+}
+
+function describeSaveHoldingsError(error: { code?: string; message?: string } | null): string {
+  if (!error) return "Holdings could not be saved. Your previous holdings were not changed.";
+  if (error.code === "42501") return "Portfolio not found or unauthorized.";
+  if (error.code === "22023" && error.message?.startsWith("invalid_holdings: ")) {
+    return `${error.message.slice("invalid_holdings: ".length)}. Nothing was saved.`;
+  }
+  return "Holdings could not be saved. Your previous holdings were not changed — please try again.";
 }
 
 // ─── Reads ──────────────────────────────────────────────────────────────────
@@ -722,10 +611,11 @@ export async function getPortfolioOverview(portfolioId: string) {
 }
 
 type SyncHoldingPricesResult = {
-  status: "updated" | "no_quotes" | "error";
+  status: "updated" | "partial" | "no_quotes" | "error";
   updated: number;
   error: string | null;
   message: string | null;
+  missingSymbols?: string[];
   /** When true, safe to call revalidatePath (not during RSC render). */
   shouldRevalidate: boolean;
 };
@@ -841,7 +731,7 @@ export async function refreshPortfolioPricingSnapshot(
     : undefined;
 
   return {
-    status: "updated",
+    status: r.status === "partial" ? "partial" : "updated",
     updated: r.updated,
     message:
       r.message ??
@@ -886,12 +776,23 @@ async function syncHoldingPricesInternal(
     };
   }
 
-  const { data: holdings } = await context.supabase
+  const { data: holdingsData, error: holdingsError } = await context.supabase
     .from("holdings")
-    .select("id, symbol, quantity")
+    .select(PRICING_HOLDING_COLUMNS)
     .eq("portfolio_id", portfolioId);
 
-  if (!holdings || holdings.length === 0) {
+  if (holdingsError) {
+    return {
+      status: "error",
+      updated: 0,
+      error: holdingsError.message,
+      message: "Could not load holdings to refresh.",
+      shouldRevalidate: false,
+    };
+  }
+
+  const holdings = (holdingsData ?? []) as unknown as PricingHoldingRow[];
+  if (holdings.length === 0) {
     return {
       status: "error",
       updated: 0,
@@ -901,8 +802,8 @@ async function syncHoldingPricesInternal(
     };
   }
 
-  const symbols = holdings.map((h) => h.symbol as string);
-  let quotes: Map<string, { price: number; dailyChange: number; currency?: string }>;
+  const symbols = holdings.map((h) => h.symbol);
+  let quotes: Awaited<ReturnType<typeof getQuotes>>;
   try {
     quotes = await getQuotes(symbols);
   } catch {
@@ -910,7 +811,7 @@ async function syncHoldingPricesInternal(
       status: "no_quotes",
       updated: 0,
       error: null,
-      message: "Live quotes are unavailable right now. Try again shortly.",
+      message: "Live quotes are unavailable right now. Showing last known prices.",
       shouldRevalidate: false,
     };
   }
@@ -920,95 +821,59 @@ async function syncHoldingPricesInternal(
       status: "no_quotes",
       updated: 0,
       error: null,
-      message: "No live quotes were returned. Try again shortly.",
+      message: "No live quotes were returned. Showing last known prices.",
       shouldRevalidate: false,
     };
   }
 
+  const fxRates = await getFxRatesToBase([...quotes.values()].map((quote) => quote.currency));
   const now = new Date().toISOString();
-  let totalValue = 0;
+  const plan = buildHoldingPricingPlan(holdings, quotes, fxRates, now);
 
-  const matched = holdings
-    .map((h) => {
-      const quote = quotes.get((h.symbol as string).toUpperCase());
-      if (!quote) return null;
-      const posValue = Number(h.quantity) * quote.price;
-      totalValue += posValue;
-      return { id: h.id as string, quote, posValue };
-    })
-    .filter((m): m is NonNullable<typeof m> => m !== null);
-
-  if (matched.length === 0) {
+  if (plan.refreshedSymbols.length === 0) {
     return {
       status: "no_quotes",
       updated: 0,
       error: null,
-      message: "No live quotes matched your holdings. Try again shortly.",
+      message: "No live quotes matched your holdings. Showing last known prices.",
       shouldRevalidate: false,
     };
   }
 
-  let updated = 0;
+  // Prices, allocations and the sync stamp are applied in one transaction.
+  const { error: applyError } = await context.supabase.rpc("apply_holding_price_updates", {
+    p_portfolio_id: portfolioId,
+    p_updates: plan.updates,
+    p_sync_state: plan.syncState,
+    p_synced_at: now,
+  });
 
-  for (const matchedHolding of matched) {
-    const holdingUpdate = {
-      price: matchedHolding.quote.price,
-      current_price: matchedHolding.quote.price,
-      daily_change: matchedHolding.quote.dailyChange,
-      quote_currency: matchedHolding.quote.currency,
-      quote_as_of: now,
-      ...(totalValue > 0
-        ? {
-            allocation:
-              Math.round((matchedHolding.posValue / totalValue) * 10000) / 100,
-          }
-        : {}),
-    };
-
-    const { error: holdingUpdateError } = await context.supabase
-      .from("holdings")
-      .update(holdingUpdate)
-      .eq("id", matchedHolding.id)
-      .eq("portfolio_id", portfolioId);
-
-    if (holdingUpdateError) {
-      return {
-        status: "error",
-        updated,
-        error: holdingUpdateError.message,
-        message:
-          updated > 0
-            ? "Some refreshed holding prices could not be saved."
-            : "Failed to save refreshed holding prices.",
-        shouldRevalidate: false,
-      };
-    }
-
-    updated += 1;
-  }
-
-  if (updated === 0) {
+  if (applyError) {
     return {
       status: "error",
       updated: 0,
-      error: "No holding rows were updated",
-      message: "Failed to save refreshed holding prices.",
+      error: applyError.message,
+      message: "Failed to save refreshed holding prices. Nothing was changed.",
       shouldRevalidate: false,
     };
   }
 
-  const { error: portfolioUpdateError } = await context.supabase
-    .from("portfolios")
-    .update({ last_synced_at: now, sync_status: "active" })
-    .eq("id", portfolioId);
-
-  if (portfolioUpdateError) {
+  const updated = plan.refreshedSymbols.length;
+  if (plan.syncState === "partial") {
+    const notes: string[] = [];
+    if (plan.missingQuoteSymbols.length > 0) {
+      notes.push(`no live quote for ${plan.missingQuoteSymbols.join(", ")} (showing last known price)`);
+    }
+    if (plan.valuation.missingFxCurrencies.length > 0) {
+      notes.push(`no USD exchange rate for ${plan.valuation.missingFxCurrencies.join(", ")}`);
+    }
     return {
-      status: "error",
+      status: "partial",
       updated,
-      error: portfolioUpdateError.message,
-      message: "Refreshed prices saved, but the portfolio sync timestamp could not be updated.",
-      shouldRevalidate: false,
+      error: null,
+      message: `Updated ${updated} of ${holdings.length} holdings — ${notes.join("; ")}.`,
+      missingSymbols: plan.missingQuoteSymbols,
+      shouldRevalidate: true,
     };
   }
 

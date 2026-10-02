@@ -59,7 +59,8 @@ describe("PortfolioValueCard", () => {
     });
 
     expect(await screen.findByText("$18,250")).toBeTruthy();
-    expect(screen.getByText(/\+0.9%/i)).toBeTruthy();
+    // Signed, two-decimal day change with an explicit "today" basis (audit F10/F11).
+    expect(screen.getByText(/\+0\.90% today/i)).toBeTruthy();
     expect(screen.getByText(/updated just now/i)).toBeTruthy();
     expect(mocked.routerRefresh).not.toHaveBeenCalled();
   });

@@ -21,6 +21,7 @@ function feedbackToneClass(status: PortfolioPricingRefreshResult["status"]) {
   switch (status) {
     case "updated":
       return "text-emerald-400";
+    case "partial":
     case "no_quotes":
       return "text-amber-400";
     case "error":

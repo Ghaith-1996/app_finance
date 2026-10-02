@@ -37,7 +37,7 @@ export function PortfolioPricingSection({
   const autoRefreshStartedRef = useRef(false);
 
   function handleRefreshed(result: PortfolioPricingRefreshResult) {
-    if (result.status !== "updated") return;
+    if (result.status !== "updated" && result.status !== "partial") return;
     if (result.overview) {
       setOverview(result.overview);
     }
@@ -59,7 +59,7 @@ export function PortfolioPricingSection({
 
     void refreshPortfolioPricingSnapshot(portfolioId, { includeHoldings: true })
       .then((result) => {
-        if (!active || result.status !== "updated") return;
+        if (!active || (result.status !== "updated" && result.status !== "partial")) return;
         if (result.overview) {
           setOverview(result.overview);
         }
@@ -82,11 +82,12 @@ export function PortfolioPricingSection({
   }, [initialHoldings.length, portfolioId]);
 
   return (
-    <div className="flex-1 space-y-10 lg:space-y-12">
+    <div className="min-w-0 space-y-10 lg:space-y-12">
       <div className="mb-8 sm:mb-10">
         <PortfolioPerformanceChart
           totalValue={overview.totalValue}
           dayChange={overview.dayChange ?? 0}
+          valuation={overview.valuation}
           portfolioCreatedAt={portfolioCreatedAt}
           holdings={holdings}
           historicalSnapshots={initialValueSnapshots}
@@ -100,7 +101,7 @@ export function PortfolioPricingSection({
           <div>
             <h2 className="text-[22px] font-bold tracking-tight text-white">Active Holdings</h2>
             <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-500">
-              <p>Synced {overview.lastSyncedAt}</p>
+              <p>{overview.lastSyncedAt ? `Synced ${overview.lastSyncedAt}` : "Not synced yet"}</p>
               {autoRefreshing ? (
                 <span className="text-[11px] font-medium text-slate-400">Auto-refreshing...</span>
               ) : null}

@@ -38,7 +38,7 @@ const COLUMNS: Array<{ key: SortKey; label: string; align?: "left" | "right" }> 
 ];
 
 const inputClass =
-  "w-full rounded-xl border border-white/10 bg-[#0d1520] px-3 py-2 text-sm text-white outline-none placeholder:text-slate-600 focus:border-brand focus:ring-1 focus:ring-brand";
+  "w-full rounded-xl border border-white/10 bg-surface-input px-3 py-2 text-sm text-white outline-none placeholder:text-slate-600 focus:border-brand focus:ring-1 focus:ring-brand";
 
 const MOBILE_GRID =
   "grid-cols-[minmax(0,1.8fr)_minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,1fr)]";
@@ -184,25 +184,25 @@ function HoldingAdjustPanel({
           Stock details
         </p>
         <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-          <div className="rounded-xl border border-white/[0.06] bg-[#0d1520]/70 px-3 py-3">
+          <div className="rounded-xl border border-white/[0.06] bg-surface-input/70 px-3 py-3">
             <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
               Symbol
             </p>
             <p className="mt-1 text-sm font-semibold text-white">{holding.symbol}</p>
           </div>
-          <div className="rounded-xl border border-white/[0.06] bg-[#0d1520]/70 px-3 py-3">
+          <div className="rounded-xl border border-white/[0.06] bg-surface-input/70 px-3 py-3">
             <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
               Company
             </p>
             <p className="mt-1 truncate text-sm font-semibold text-white">{holding.company}</p>
           </div>
-          <div className="rounded-xl border border-white/[0.06] bg-[#0d1520]/70 px-3 py-3">
+          <div className="rounded-xl border border-white/[0.06] bg-surface-input/70 px-3 py-3">
             <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
               Current price
             </p>
             <p className="mt-1 text-sm font-semibold text-white">{formatPrice(price)}</p>
           </div>
-          <div className="rounded-xl border border-white/[0.06] bg-[#0d1520]/70 px-3 py-3">
+          <div className="rounded-xl border border-white/[0.06] bg-surface-input/70 px-3 py-3">
             <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
               Day %
             </p>
@@ -216,7 +216,7 @@ function HoldingAdjustPanel({
               {dayChange.toFixed(2)}%
             </p>
           </div>
-          <div className="rounded-xl border border-white/[0.06] bg-[#0d1520]/70 px-3 py-3">
+          <div className="rounded-xl border border-white/[0.06] bg-surface-input/70 px-3 py-3">
             <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
               Current value
             </p>

@@ -11,15 +11,35 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import {
+  describeOverview,
+  formatSignedPercent,
+  formatSignedUsd,
+  type OverviewDisplay,
+} from "@/lib/portfolio/value-display";
 import { cn, formatCurrency } from "@/lib/utils";
+import type { PortfolioValuationSummary } from "@/lib/services/valuation";
 import type { Holding, PortfolioValueSnapshot } from "@/lib/types";
 
 interface PortfolioPerformanceChartProps {
   totalValue: number;
   dayChange: number;
+  /** Canonical valuation behind totalValue/dayChange; drives the hero figures and their as-of time. */
+  valuation?: PortfolioValuationSummary;
   portfolioCreatedAt: string;
   holdings: Holding[];
   historicalSnapshots?: PortfolioValueSnapshot[];
+}
+
+function formatAsOf(timestamp: number | null): string | null {
+  if (timestamp === null || !Number.isFinite(timestamp)) return null;
+  return new Date(timestamp).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  });
 }
 
 interface ChartPoint {
@@ -298,7 +318,7 @@ function CustomTooltip({
   });
 
   return (
-    <div className="rounded-xl border border-white/10 bg-[#0f1419] px-4 py-3 shadow-xl">
+    <div className="rounded-xl border border-white/10 bg-surface-raised px-4 py-3 shadow-xl">
       <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
         {point.label}
       </p>
@@ -345,6 +365,7 @@ function formatQuoteDescription(snapshot: ActualPerformanceSnapshot): string {
 export function PortfolioPerformanceChart({
   totalValue,
   dayChange,
+  valuation,
   portfolioCreatedAt,
   holdings,
   historicalSnapshots = [],
@@ -353,14 +374,45 @@ export function PortfolioPerformanceChart({
     () => new Date(portfolioCreatedAt),
     [portfolioCreatedAt],
   );
-  const snapshot = useMemo(
-    () => {
-      const fallback = buildActualPerformanceSnapshot(holdings, totalValue, createdAt, dayChange);
-      return buildHistoricalPerformanceSnapshot(historicalSnapshots, fallback);
-    },
-    [historicalSnapshots, holdings, totalValue, createdAt, dayChange],
+  // "Today" always comes from the same live valuation as the total (audit F10); stored
+  // snapshots only drive the history chart and its separately labelled "since" change.
+  const live = useMemo(
+    () => buildActualPerformanceSnapshot(holdings, totalValue, createdAt, dayChange),
+    [holdings, totalValue, createdAt, dayChange],
   );
-  const data = snapshot.data;
+  const snapshot = useMemo(
+    () => buildHistoricalPerformanceSnapshot(historicalSnapshots, live),
+    [historicalSnapshots, live],
+  );
+  const liveAsOfMs = valuation?.newestQuoteAsOf
+    ? Date.parse(valuation.newestQuoteAsOf)
+    : live.latestQuoteAt;
+  const data = useMemo(() => {
+    if (snapshot.source !== "snapshots") return snapshot.data;
+    const lastPoint = snapshot.data[snapshot.data.length - 1];
+    if (!liveAsOfMs || !lastPoint || liveAsOfMs <= lastPoint.date || totalValue <= 0) {
+      return snapshot.data;
+    }
+    return [
+      ...snapshot.data,
+      { date: liveAsOfMs, label: "Now", value: totalValue, detail: "Current value from the latest quotes" },
+    ];
+  }, [snapshot, liveAsOfMs, totalValue]);
+
+  const hero: OverviewDisplay = valuation
+    ? describeOverview({ totalValue, dayChange, valuation })
+    : {
+        value: formatCurrency(totalValue),
+        dayChangePercent: formatSignedPercent(live.dayGainPercent),
+        dayChangeAmount: live.previousCloseValue > 0 ? formatSignedUsd(live.dayGainDollar) : null,
+        direction: live.dayGainDollar > 0 ? "up" : live.dayGainDollar < 0 ? "down" : "flat",
+        notes: [],
+        asOf: null,
+      };
+  const heroAsOf = formatAsOf(liveAsOfMs ?? null);
+  const historyStart = snapshot.source === "snapshots" ? (snapshot.data[0]?.date ?? null) : null;
+  const historyChange =
+    snapshot.source === "snapshots" && snapshot.data.length >= 2 ? totalValue - snapshot.data[0].value : null;
 
   const { min: domainMin, max: domainMax, ticks } = useMemo(
     () => computeDomain(data),
@@ -369,7 +421,7 @@ export function PortfolioPerformanceChart({
 
   const axisRange = domainMax - domainMin;
 
-  const isPositive = snapshot.dayGainDollar >= 0;
+  const isPositive = hero.direction !== "down";
 
   const gradientId = "performanceGradient";
 
@@ -381,8 +433,14 @@ export function PortfolioPerformanceChart({
             Total Portfolio Value
           </p>
           <p className="mt-2 text-[34px] font-bold leading-none tracking-tight text-white sm:text-[42px]">
-            {formatCurrency(totalValue)}
+            {hero.value}
           </p>
+          {heroAsOf ? <p className="mt-2 text-xs text-slate-500">{`As of ${heroAsOf}`}</p> : null}
+          {hero.notes.map((note) => (
+            <p key={note} className="mt-1 text-xs text-amber-300">
+              {note}
+            </p>
+          ))}
         </div>
         <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center sm:gap-5">
           <div
@@ -394,25 +452,28 @@ export function PortfolioPerformanceChart({
             )}
           >
             <TrendingUp
+              aria-hidden="true"
               className={cn("h-4 w-4", !isPositive && "rotate-180")}
             />
             <span className="text-sm font-bold">
-              {isPositive ? "+" : ""}
-              {snapshot.dayGainPercent.toFixed(1)}% Today
+              {hero.direction === "unknown" ? "Day change unavailable" : `${hero.dayChangePercent} today`}
             </span>
           </div>
           <div className="sm:text-right">
             <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">
-              24H Gain
+              Day change
             </p>
             <p
               className={cn(
                 "mt-1 text-2xl font-bold tracking-tight",
-                isPositive ? "text-brand" : "text-red-400",
+                hero.direction === "down"
+                  ? "text-red-400"
+                  : hero.direction === "up"
+                    ? "text-brand"
+                    : "text-slate-400",
               )}
             >
-              {isPositive ? "+" : ""}
-              {formatCurrency(Math.abs(snapshot.dayGainDollar))}
+              {hero.dayChangeAmount ?? "—"}
             </p>
           </div>
         </div>
@@ -437,9 +498,13 @@ export function PortfolioPerformanceChart({
             <span className="rounded-xl border border-white/[0.06] bg-white/[0.03] px-3 py-1.5 text-xs font-bold text-slate-400">
               {snapshot.source === "snapshots" ? "Stored hourly values" : "Actual holdings"}
             </span>
-            {snapshot.previousCloseValue > 0 ? (
+            {historyChange !== null && historyStart !== null ? (
               <span className="rounded-xl border border-white/[0.06] bg-white/[0.03] px-3 py-1.5 text-xs font-bold text-slate-400">
-                Prev close {formatCurrency(Math.round(snapshot.previousCloseValue))}
+                {`Since ${new Date(historyStart).toLocaleDateString("en-US", { month: "short", day: "numeric" })}: ${formatSignedUsd(historyChange)}`}
+              </span>
+            ) : live.previousCloseValue > 0 ? (
+              <span className="rounded-xl border border-white/[0.06] bg-white/[0.03] px-3 py-1.5 text-xs font-bold text-slate-400">
+                Prev close {formatCurrency(Math.round(live.previousCloseValue))}
               </span>
             ) : null}
           </div>

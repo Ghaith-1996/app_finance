@@ -6,8 +6,8 @@ import { Activity } from "lucide-react";
 
 import { InlineRefreshPricesButton } from "@/components/app/inline-refresh-prices-button";
 import { Panel } from "@/components/ui/panel";
+import { describeOverview, refreshedOverview, UNKNOWN_VALUE } from "@/lib/portfolio/value-display";
 import type { PortfolioOverview, PortfolioPricingRefreshResult } from "@/lib/types";
-import { formatCurrency, formatPercent } from "@/lib/utils";
 
 export function PortfolioSnapshotPanel({
   initialOverview,
@@ -15,16 +15,16 @@ export function PortfolioSnapshotPanel({
 }: {
   initialOverview: Pick<
     PortfolioOverview,
-    "totalValue" | "dayChange" | "monthlyChange" | "lastSyncedAt" | "coverage"
+    "totalValue" | "dayChange" | "monthlyChange" | "lastSyncedAt" | "coverage" | "valuation"
   >;
   portfolioId: string | null;
 }) {
   const [overview, setOverview] = useState(initialOverview);
+  const display = describeOverview(overview);
 
   function handleRefreshed(result: PortfolioPricingRefreshResult) {
-    if (result.status === "updated" && result.overview) {
-      setOverview(result.overview);
-    }
+    const next = refreshedOverview(result);
+    if (next) setOverview(next);
   }
 
   return (
@@ -38,18 +38,22 @@ export function PortfolioSnapshotPanel({
             Portfolio snapshot
           </p>
           <p className="text-lg font-semibold text-white">
-            {formatCurrency(overview.totalValue)}
+            {display.value}
           </p>
         </div>
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
-        <Metric label="Day change" value={formatPercent(overview.dayChange)} />
-        <Metric label="30 day move" value={formatPercent(overview.monthlyChange)} />
+        <Metric
+          label="Day change"
+          value={display.dayChangeAmount ? `${display.dayChangePercent} (${display.dayChangeAmount})` : display.dayChangePercent}
+        />
+        {/* 30-day change is not computed yet; show unknown rather than an invented 0%. */}
+        <Metric label="30 day move" value={UNKNOWN_VALUE} />
         <Metric
           label="Last sync"
           value={
             <div className="flex flex-wrap items-center gap-2">
-              <span>{overview.lastSyncedAt}</span>
+              <span>{overview.lastSyncedAt || "Not synced yet"}</span>
               {portfolioId ? (
                 <InlineRefreshPricesButton
                   portfolioId={portfolioId}

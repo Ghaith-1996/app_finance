@@ -333,14 +333,16 @@ export default async function FullPortfolioPage() {
     <AppShell
       eyebrow=""
       title="Portfolio Strategy"
-      description="Advanced position oversight for your diversified Signal Emerald custody account."
+      description="Positions, performance and insights for the portfolio you track in Pulsefolio."
       activePath="/portfolio"
       backHref="/portfolio"
       showOnboardingNav={showOnboardingNav}
       showAdminLink={showAdminLink}
     >
-      <div className="overflow-hidden rounded-[1.75rem] bg-[#0a0f15] p-4 shadow-inner sm:rounded-[2.25rem] sm:p-6 lg:p-8 xl:p-10">
-        <div className="flex flex-col gap-8 lg:flex-row xl:gap-10 2xl:gap-12">
+      {/* Audit F02: no overflow clipping; the rail stacks below the content until there is room
+          for both columns, and the content column can shrink (minmax(0,1fr)). */}
+      <div className="rounded-[1.75rem] bg-surface-panel p-4 shadow-inner sm:rounded-[2.25rem] sm:p-6 lg:p-8 xl:p-10">
+        <div className="grid grid-cols-1 gap-8 xl:grid-cols-[minmax(0,1fr)_340px] xl:gap-10 2xl:grid-cols-[minmax(0,1fr)_360px] 2xl:gap-12">
           <PortfolioPricingSection
             portfolioId={portfolioId}
             portfolioCreatedAt={portfolioCreatedAt ?? new Date().toISOString()}
@@ -392,7 +394,7 @@ export default async function FullPortfolioPage() {
             </div>
           </PortfolioPricingSection>
 
-          <div className="w-full shrink-0 space-y-4 lg:w-[320px] xl:w-[340px] 2xl:w-[360px]">
+          <div className="w-full min-w-0 space-y-4">
             <div className="relative overflow-hidden rounded-[2.5rem] border border-white/[0.06] bg-surface-raised p-5 sm:p-8 shadow-sm">
               <div className="pointer-events-none absolute top-0 right-0 h-32 w-32 rounded-bl-full bg-gradient-to-bl from-white/5 to-transparent" />
 

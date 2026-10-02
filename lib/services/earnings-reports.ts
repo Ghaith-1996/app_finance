@@ -6,6 +6,7 @@ import {
   validatePublisherUrl,
   type PublisherHostnameLookup,
 } from "@/lib/security/publisher-url";
+import { safePublicFetchAsFetch } from "@/lib/security/safe-fetch";
 import { getCompanyWebsiteSeed } from "@/lib/services/twelvedata";
 import type {
   LatestEarningsReportFields,
@@ -420,7 +421,8 @@ async function scanCompanyPage(
   seedUrl: string,
   options?: CompanyDiscoveryOptions,
 ) {
-  const html = await fetchTextPage(pageUrl, options?.fetchImpl ?? fetch, {
+  // Default transport re-validates the destination at connect time (audit S1).
+  const html = await fetchTextPage(pageUrl, options?.fetchImpl ?? safePublicFetchAsFetch, {
     lookupImpl: options?.lookupImpl,
   });
   if (!html) return [];
@@ -864,7 +866,7 @@ export async function syncTrackedEarningsReports(
 
         if (companySeedUrl) {
           const companyDiscovery = await discoverCompanyLink(companySeedUrl, {
-            fetchImpl,
+            fetchImpl: deps?.fetchImpl,
             reportDateHint: secReport?.reportDate ?? secReport?.filingDate ?? null,
           });
           companyReportUrl = companyDiscovery?.url ?? null;

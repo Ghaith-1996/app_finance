@@ -191,3 +191,30 @@ Phase 2 acceptance matrix: B4 ✔ B5 ✔ B6 ✔ B7 ✔ (needs Stripe sandbox run
 Gate after J5: typecheck pass; SQL rebuild of 37 migrations + 6 SQL suites pass; Vitest 101 files / 583 tests with one
 known load-timeout flake (`turnstile-protected-routes`, passes in isolation). The lower file count reflects test files
 deleted/edited in the working tree by the user during this session; those changes were left uncommitted and untouched.
+
+## Phase 3 checkpoint (2026-10-02)
+
+| ID | Result | Implementation | Evidence | Commit |
+|---|---|---|---|---|
+| S2 | **fixed** | admin email allowlist trusts only server-owned `email_confirmed_at`; `user_metadata.email_verified` (user-writable) ignored | `tests/admin-verification-s2.test.ts` (forged metadata denied, confirmed email allowed, ID allowlist unaffected) | ee9882b |
+| F06 | **fixed** | Portfolio / Today story links use `storyHref(newsItemId)` → `/feed?story=…` | `tests/feed-phase3.test.tsx` | 5ce5e70 |
+| F07 | **fixed** | one `FEED_PAGE_SIZE` (100) in `lib/feed/constants.ts`; client follows server `pageSize` | `tests/feed-phase3.test.tsx`, `tests/feed-route.test.ts` (no overlap/gap across pages) | 5ce5e70 |
+| F08 | **fixed** | filtered-empty vs source-empty states; Clear filters always offered when filters hide results | `tests/feed-phase3.test.tsx` | 5ce5e70 |
+| F09 | **fixed** | all ticker pills rendered (wrapping), no `slice(0,3)` | `tests/feed-phase3.test.tsx` | 5ce5e70 |
+| F12 | **fixed** | collapsed nav subtree is `inert` + `aria-hidden`; focus not trapped in hidden links | `tests/app-shell-a11y.test.tsx` | d687f08 |
+| F13/F14 | **fixed (Phase 1)** | shared `ModalDialog`; drafts kept per conversation | `tests/modal-dialog.test.tsx`, `tests/feed-view.test.tsx` | 7ed06ef |
+| F15 | **fixed** | `lib/time/format.ts`: one relative formatter ("Just now" < 1 min only; minute/hour/day boundaries; skew clamps to 0) and absolute times in `America/Toronto` with zone label, so server/browser render identical text. Replaced 6 local formatters (page-loaders, portfolio overview, feed published-at, alerts, Portfolio top stories, Today activity, analysis run). Health card: analysis age no longer "Just now" for < 1 h; quote factor reads "Within 24h" instead of "Fresh" | `tests/time-format-f15.test.ts` (boundaries, skew, invalid input, EDT/EST labels, health labels) | de1d73e |
+| F20 | **fixed** | icon-only mobile nav links have accessible names | `tests/app-shell-a11y.test.tsx` | d687f08 |
+| F21 | **fixed** | account menu rendered in mobile header | `tests/app-shell-a11y.test.tsx` | d687f08 |
+| F22 | **fixed** | add-position form: `htmlFor`/ids, `aria-invalid`/`aria-describedby`, focus first invalid field | `tests/add-position-form-a11y.test.tsx` | d687f08 |
+| H1 | **fixed (TS); Python unexecuted** | `lib/supabase/paginate.ts` `fetchAllRows` (offset advances by rows actually returned, so a PostgREST max-rows cap cannot truncate); used by digest, smart-alert prefs, analysis cron, snapshots, earnings universe; `workers/news_ingestion/pagination.py` for `cron_runner*.py` | `tests/pagination-h1.test.ts`; `workers/news_ingestion/tests/test_pagination.py` written — **not yet run (Docker down)** | 535a21f |
+| H3 | **fixed** | every provider fetch uses `AbortSignal.timeout(AI_REQUEST_TIMEOUT_MS)` → classified `provider_timeout`; legacy OpenAI/Anthropic copilots no longer return stub text on failure | `tests/ai-request-deadline.test.ts` | 8e2573f |
+| H4 | **fixed** | `lib/security/chat-request.ts` runtime-validates chat bodies → deliberate 400; quota infrastructure errors → 503 | `tests/chat-request-validation.test.ts` | ef11e81 |
+| H6 | **fixed (unrun in GitHub)** | `.github/workflows/ci.yml`: web (typecheck, lint, test, build), dependency audit, python tests, database validator | first PR run will be the evidence | 535a21f |
+| H7 | **fixed (docs + validator); staging check open** | `supabase/README.md` deploy table 032–037, duplicate-prefix (008/019/024) ledger risk, no renames; `scripts/db/validate-migrations.sh` clean rebuild | validator: 37 migrations + 6 SQL suites pass | 79ba524 |
+| H8 | **fixed** | `lib/services/job-health.ts` + admin-only `GET /api/admin/job-health`: ingestion freshness, enrichment backlog age, failed runs, stale quote share, failed/uncertain deliveries; a failed health query reports degraded, never ok | `tests/job-health.test.ts` | 79ba524 |
+| H2 | **blocked (decision)** | SMS opt-in / possession verification policy needed | — | — |
+
+Gate after F15: typecheck pass; lint 0 errors / 18 warnings (baseline 20); Vitest 110 files / 629 tests pass;
+`next build` passes with local env (only the pre-existing middleware→proxy deprecation notice).
+Not run this checkpoint (Docker Desktop down): Python unittest suite incl. `test_pagination.py`, SQL validator re-run.

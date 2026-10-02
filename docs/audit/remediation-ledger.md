@@ -157,3 +157,23 @@ Gate results on the Phase 1 tree: Vitest 113 files / 709 tests passed (baseline 
 errors / 20 warnings (identical set to baseline); build pass; SQL: clean rebuild of all 34 migrations + upgrade seeds +
 3 SQL suites pass; Python 80/80 (baseline 73 + 7). `test_preflight` fails only when run from the working copy that
 contains local untracked env files — it passes from a clean copy (test-isolation caveat, pre-existing).
+
+## Decisions and Phase 2 progress (2026-10-02)
+
+User decisions: **F16** operator = Ghaith Alali, contact/privacy channel = ghaith.alali1996@gmail.com, no refunds
+and cancel any time (mailing address and governing jurisdiction still not provided). **H5** failed AI requests
+must not count against quota.
+
+| ID | Result | Implementation | Evidence | Commit |
+|---|---|---|---|---|
+| F16 | **partially fixed** | operator, contact, privacy contact/channel, refund notice filled; Last Updated → Oct 2, 2026 | `tests/legal-placeholders.test.ts` fails on any new placeholder; pending: `LEGAL_MAILING_ADDRESS`, `LEGAL_GOVERNING_JURISDICTION` | 7ed06ef / 13841a9 |
+| H5 | **fixed (TS); SQL unvalidated** | `035_ai_quota_release.sql` `release_ai_quota` refunds the exact charged bucket; routes keep the unit only when an answer is delivered; burst limit still counts. Also revoked EXECUTE on all quota/rate-limit functions from anon/authenticated (they accept arbitrary user ids) | route tests (refund on 503, kept on success); `supabase/tests/035_ai_quota_release.test.sql` written — **not yet run (Docker down)** | 13841a9 |
+| B6 | **fixed** | side column required for transaction mode (parser + manual mapper); skipped rows reported with reasons; non-empty → empty is an explicit error that opens the mapping step | `tests/csv-parser-b6.test.ts` (audit repro case now imports) | 933fb79 |
+| J4 | **fixed** | dedupe key `portfolio:news:<newsItemId>`; articles already alerted under any key are skipped (covers legacy keys, no transition duplicates) | `tests/smart-alerts-dedupe.test.ts` (unique-enforcing fake; read state preserved) | 933fb79 |
+| J6 | **fixed** | cached report kept on failure/no-result; only `last_checked_at`/`error` written; no null-writing fallback on persistence errors; `failed`/`stale` stats; route 502 when every lookup failed; tracked-symbol scan paginated (H1) | `tests/earnings-reports-service.test.ts` (audit scenario + recovery), cron route test | 933fb79 |
+| B7 | **fixed (code); STG Stripe sandbox** | different-subscription events reconcile via `subscriptions.list` + deterministic `selectAuthoritativeSubscription`; Stripe-unreachable fallback never downgrades entitled access | `tests/billing-subscription-reconcile.test.ts` (both orders, duplicates, outage) | 8ab54cf |
+| B4 | todo — needs Docker (atomic position RPC + ledger) | | | |
+| J5 | todo — needs Docker (atomic delivery claim) | | | |
+
+Gate after 8ab54cf: Vitest 117 files / 732 tests; typecheck pass; lint 0 errors / 20 warnings (baseline set).
+Caveat: under heavy machine load a few UI tests can exceed Vitest's 5 s default timeout and pass on rerun.

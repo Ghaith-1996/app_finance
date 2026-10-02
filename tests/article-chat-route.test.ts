@@ -13,6 +13,8 @@ vi.mock("@/lib/security/turnstile", () => ({
 const mockAnswerArticleQuestion = vi.fn();
 const mockAnswerPortfolioQuestion = vi.fn();
 const mockAssertUserCanUseAI = vi.fn();
+const mockReleaseAIUsage = vi.fn();
+const RESERVED_USAGE = { aiQuotaWindow: "day", aiQuotaResetsAt: "2026-10-03T04:00:00.000Z" };
 const mockComputePortfolioOverview = vi.fn().mockResolvedValue({
   totalValue: 125000,
   dayChange: 1400,
@@ -36,6 +38,7 @@ vi.mock("@/lib/security/ai-access", async () => {
   return {
     ...actual,
     assertUserCanUseAI: (...args: unknown[]) => mockAssertUserCanUseAI(...args),
+    releaseAIUsage: (...args: unknown[]) => mockReleaseAIUsage(...args),
   };
 });
 
@@ -314,7 +317,9 @@ describe("POST /api/article-chat", () => {
     mockAnswerArticleQuestion.mockReset();
     mockAnswerPortfolioQuestion.mockReset();
     mockAssertUserCanUseAI.mockReset();
-    mockAssertUserCanUseAI.mockResolvedValue(undefined);
+    mockAssertUserCanUseAI.mockResolvedValue(RESERVED_USAGE);
+    mockReleaseAIUsage.mockReset();
+    mockReleaseAIUsage.mockResolvedValue(undefined);
     mockComputePortfolioOverview.mockClear();
     mockGetAIProviderById.mockClear();
     currentSupabase = createSupabaseMock({});
@@ -366,6 +371,24 @@ describe("POST /api/article-chat", () => {
     expect(insertUserCalls).toBe(0);
     expect(insertAssistantCalls).toBe(0);
     expect(mockGetAIProviderById).toHaveBeenCalledWith("openrouter");
+    // Audit H5: a failed request gives its reserved quota unit back.
+    expect(mockReleaseAIUsage).toHaveBeenCalledTimes(1);
+    expect(mockReleaseAIUsage).toHaveBeenCalledWith(expect.any(String), RESERVED_USAGE);
+  });
+
+  it("keeps the quota unit when the answer is delivered (H5)", async () => {
+    mockAnswerArticleQuestion.mockResolvedValue("Delivered answer");
+
+    const res = await POST(
+      new Request("http://localhost/api/article-chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ portfolioId: "p1", newsItemId: "n1", message: "What is the risk?" }),
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(mockReleaseAIUsage).not.toHaveBeenCalled();
   });
 
   it("defaults article chat to the free tier when modelTier is omitted", async () => {

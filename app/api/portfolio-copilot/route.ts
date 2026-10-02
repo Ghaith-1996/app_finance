@@ -20,6 +20,7 @@ import { createClient } from "@/lib/supabase/server";
 import {
   AIUsageAccessError,
   assertUserCanUseAI,
+  releaseAIUsage,
 } from "@/lib/security/ai-access";
 import {
   buildChatGrantSetCookieHeader,
@@ -160,8 +161,9 @@ export async function POST(request: Request) {
     return respondForChat({ error: "Portfolio not found" }, 404);
   }
 
+  let usage: Awaited<ReturnType<typeof assertUserCanUseAI>> | null = null;
   try {
-    await assertUserCanUseAI(user, modelTier, "portfolio_copilot");
+    usage = await assertUserCanUseAI(user, modelTier, "portfolio_copilot");
   } catch (error) {
     if (error instanceof BillingAccessError) {
       return respondForChat(
@@ -192,6 +194,8 @@ export async function POST(request: Request) {
     throw error;
   }
 
+  // Audit H5: the reserved quota unit is kept only once an answer is returned.
+  let delivered = false;
   try {
     const [overview, holdingsResult, runResult, watchlistResult] = await Promise.all([
       computePortfolioOverview(supabase, portfolioId),
@@ -375,11 +379,16 @@ export async function POST(request: Request) {
       );
     }
 
+    delivered = true;
     return respondForChat({ answer });
   } catch (error) {
     return respondForChat(
       { error: error instanceof Error ? error.message : "Failed to answer question" },
       500,
     );
+  } finally {
+    if (!delivered) {
+      await releaseAIUsage(user.id, usage);
+    }
   }
 }

@@ -10,6 +10,8 @@ vi.mock("@/lib/security/turnstile", () => ({
 
 const mockAnswerPortfolioQuestion = vi.fn();
 const mockAssertUserCanUseAI = vi.fn();
+const mockReleaseAIUsage = vi.fn();
+const RESERVED_USAGE = { aiQuotaWindow: "month", aiQuotaResetsAt: "2026-11-01T04:00:00.000Z" };
 const mockComputePortfolioOverview = vi.fn().mockResolvedValue({
   totalValue: 85000,
   dayChange: 920,
@@ -34,6 +36,7 @@ vi.mock("@/lib/security/ai-access", async () => {
   return {
     ...actual,
     assertUserCanUseAI: (...args: unknown[]) => mockAssertUserCanUseAI(...args),
+    releaseAIUsage: (...args: unknown[]) => mockReleaseAIUsage(...args),
   };
 });
 
@@ -206,12 +209,40 @@ describe("POST /api/portfolio-copilot", () => {
   beforeEach(() => {
     mockAnswerPortfolioQuestion.mockReset();
     mockAssertUserCanUseAI.mockReset();
-    mockAssertUserCanUseAI.mockResolvedValue(undefined);
+    mockAssertUserCanUseAI.mockResolvedValue(RESERVED_USAGE);
+    mockReleaseAIUsage.mockReset();
+    mockReleaseAIUsage.mockResolvedValue(undefined);
     mockComputePortfolioOverview.mockClear();
     mockGetAIProviderById.mockClear();
     currentSupabase = createSupabaseMock({});
     delete process.env.ADMIN_USER_IDS;
     delete process.env.ADMIN_USER_EMAILS;
+  });
+
+  describe("H5: failed requests do not count against quota", () => {
+    const ask = () =>
+      POST(
+        new Request("http://localhost/api/portfolio-copilot", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ portfolioId: "p1", message: "What should I watch?" }),
+        }),
+      );
+
+    it("refunds the reserved unit when the provider fails", async () => {
+      mockAnswerPortfolioQuestion.mockRejectedValue(new Error("upstream timeout"));
+      const res = await ask();
+      expect(res.status).toBe(503);
+      expect(mockReleaseAIUsage).toHaveBeenCalledTimes(1);
+      expect(mockReleaseAIUsage).toHaveBeenCalledWith(expect.any(String), RESERVED_USAGE);
+    });
+
+    it("keeps the unit when an answer is returned", async () => {
+      mockAnswerPortfolioQuestion.mockResolvedValue("Answer");
+      const res = await ask();
+      expect(res.status).toBe(200);
+      expect(mockReleaseAIUsage).not.toHaveBeenCalled();
+    });
   });
 
   it("defaults to the free tier when modelTier is omitted", async () => {

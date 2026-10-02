@@ -18,6 +18,7 @@ import { createLogger } from "@/lib/logger";
 import {
   AIUsageAccessError,
   assertUserCanUseAI,
+  releaseAIUsage,
 } from "@/lib/security/ai-access";
 import {
   buildChatGrantSetCookieHeader,
@@ -684,8 +685,9 @@ export async function POST(request: Request) {
     }
   }
 
+  let usage: Awaited<ReturnType<typeof assertUserCanUseAI>> | null = null;
   try {
-    await assertUserCanUseAI(
+    usage = await assertUserCanUseAI(
       user,
       modelTier,
       newsItemId ? "article_chat" : "portfolio_copilot",
@@ -722,6 +724,8 @@ export async function POST(request: Request) {
 
   const providerId = providerIdForTier(modelTier);
   const ai = getAIProviderById(providerId);
+  // Audit H5: the reserved quota unit is kept only once the user actually receives an answer.
+  let delivered = false;
 
   try {
     if (!newsItemId) {
@@ -756,6 +760,7 @@ export async function POST(request: Request) {
         threadId: null,
         messages: buildEphemeralMessages(history, message, answer),
       };
+      delivered = true;
       return respondForChat(responseBody);
     }
 
@@ -810,6 +815,8 @@ export async function POST(request: Request) {
     if (insertMessagesError) {
       return respondForChat({ error: insertMessagesError.message }, 500);
     }
+    // The answer is stored in the thread, so the user will see it even if a later step fails.
+    delivered = true;
 
     const { error: updateThreadError } = await supabase
       .from("article_chat_threads")
@@ -827,5 +834,9 @@ export async function POST(request: Request) {
       { error: error instanceof Error ? error.message : "Failed to send chat message" },
       500,
     );
+  } finally {
+    if (!delivered) {
+      await releaseAIUsage(user.id, usage);
+    }
   }
 }

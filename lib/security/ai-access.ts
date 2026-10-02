@@ -4,8 +4,10 @@ import type { User } from "@supabase/supabase-js";
 
 import {
   consumeAIQuotaForUser,
+  releaseAIQuotaForUser,
   type AIQuotaSummary,
 } from "@/lib/billing/ai-usage";
+import { createLogger } from "@/lib/logger";
 import {
   BillingAccessError,
   getBillingSummaryForUser,
@@ -123,4 +125,26 @@ export async function assertUserCanUseAI(
       };
 
   return mergeQuotaSummary(effectiveSummary, quotaCheck);
+}
+
+const releaseLog = createLogger("ai-access");
+
+/**
+ * Refunds the quota unit reserved by assertUserCanUseAI for a request that did not deliver an
+ * answer (audit H5). Best effort: a failed refund is logged, never surfaced to the user.
+ */
+export async function releaseAIUsage(userId: string, usage: BillingSummary | null): Promise<void> {
+  if (!usage?.aiQuotaWindow || !usage.aiQuotaResetsAt) return;
+  try {
+    await releaseAIQuotaForUser({
+      userId,
+      quotaWindow: usage.aiQuotaWindow,
+      resetsAt: usage.aiQuotaResetsAt,
+    });
+  } catch (error) {
+    releaseLog.error("Failed to release AI quota after an unsuccessful request", {
+      userId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 }

@@ -4,7 +4,7 @@ The worker lives at `workers/news_ingestion/` and is spawned by Next.js routes (
 
 ## Python environment
 
-- Install deps: `pip install -r requirements.txt` (from the app repo root).
+- Install deps: `pip install --require-hashes -r requirements.lock` (from the app repo root; the same pinned set the scheduled workflows use). `requirements.txt` holds the editable ranges the lock is compiled from.
 - Ensure `python` or `python3` is on `PATH` when the Next.js server runs.
 
 ## EDGAR / edgartools

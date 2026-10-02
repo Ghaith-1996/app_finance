@@ -99,6 +99,8 @@ export function createMockServiceSupabase(input: {
       filters: [] as Array<{ type: "eq" | "in" | "gte" | "lte"; key: string; value: unknown }>,
       order: null as null | { key: string; ascending: boolean },
       limit: null as number | null,
+      range: null as null | [number, number],
+      anyOf: [] as Array<Array<{ key: string; value: unknown }>>,
     };
 
     const apply = () => {
@@ -120,8 +122,16 @@ export function createMockServiceSupabase(input: {
         });
       }
 
+      for (const group of state.anyOf) {
+        rows = rows.filter((row) => group.some(({ key, value }) => getValue(row, key) === value));
+      }
+
       if (state.limit != null) {
         rows = rows.slice(0, state.limit);
+      }
+
+      if (state.range) {
+        rows = rows.slice(state.range[0], state.range[1] + 1);
       }
 
       return rows;
@@ -150,6 +160,21 @@ export function createMockServiceSupabase(input: {
       },
       limit(value: number) {
         state.limit = value;
+        return builder;
+      },
+      range(from: number, to: number) {
+        state.range = [from, to];
+        return builder;
+      },
+      // Supports the "col.eq.true,col2.eq.false" form used by the services.
+      or(expression: string) {
+        state.anyOf.push(
+          expression.split(",").map((part) => {
+            const [key, , raw] = part.split(".");
+            const value = raw === "true" ? true : raw === "false" ? false : raw;
+            return { key, value };
+          }),
+        );
         return builder;
       },
       maybeSingle: async () => ({ data: apply()[0] ?? null, error: null }),

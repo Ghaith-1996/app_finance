@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createLogger } from "@/lib/logger";
+import { fetchAllRows } from "@/lib/supabase/paginate";
 import { createServiceClient } from "@/lib/supabase/service";
 
 type SupabaseLike = ReturnType<typeof createServiceClient>;
@@ -163,17 +164,22 @@ function alertSeverityFromNews(row: CriticalNewsRow): SmartAlertSeverity {
 }
 
 async function loadAlertPreferences(supabase: SupabaseLike): Promise<PreferenceRow[]> {
-  const { data, error } = await supabase
-    .from("user_notification_preferences")
-    .select(
-      "user_id, critical_news_alerts_enabled, earnings_report_alerts_enabled, price_move_alerts_enabled, price_move_threshold_percent, concentration_alerts_enabled, concentration_threshold_percent",
-    )
-    .or(
-      "critical_news_alerts_enabled.eq.true,earnings_report_alerts_enabled.eq.true,price_move_alerts_enabled.eq.true,concentration_alerts_enabled.eq.true",
-    );
+  // Audit H1: read every page of opted-in users.
+  const { data, error } = await fetchAllRows<PreferenceRow>((from, to) =>
+    supabase
+      .from("user_notification_preferences")
+      .select(
+        "user_id, critical_news_alerts_enabled, earnings_report_alerts_enabled, price_move_alerts_enabled, price_move_threshold_percent, concentration_alerts_enabled, concentration_threshold_percent",
+      )
+      .or(
+        "critical_news_alerts_enabled.eq.true,earnings_report_alerts_enabled.eq.true,price_move_alerts_enabled.eq.true,concentration_alerts_enabled.eq.true",
+      )
+      .order("user_id", { ascending: true })
+      .range(from, to),
+  );
 
   if (error) throw new Error(error.message);
-  return (data ?? []) as PreferenceRow[];
+  return data;
 }
 
 async function loadUserPortfolios(

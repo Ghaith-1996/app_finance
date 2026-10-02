@@ -2,6 +2,7 @@ import "server-only";
 
 import { getAppBaseUrl } from "@/lib/billing/stripe";
 import { createLogger } from "@/lib/logger";
+import { fetchAllRows } from "@/lib/supabase/paginate";
 import { createServiceClient } from "@/lib/supabase/service";
 import { sanitizeExternalUrl } from "@/lib/security/external-url";
 import { resolveDirectStockMatch } from "@/lib/services/news/direct-match";
@@ -318,15 +319,22 @@ function mapDigestRow(row: DigestRow): DailyDigestSnapshot {
 }
 
 async function loadDigestRecipients(supabase: ServiceClient): Promise<DigestRecipient[]> {
-  const { data, error } = await supabase
-    .from("user_notification_preferences")
-    .select("user_id, email_digest_enabled, sms_digest_enabled, phone_number");
+  // Audit H1: filter in the database and read every page, so opted-in users beyond the
+  // response row cap are not silently skipped.
+  const { data, error } = await fetchAllRows<PreferenceRow>((from, to) =>
+    supabase
+      .from("user_notification_preferences")
+      .select("user_id, email_digest_enabled, sms_digest_enabled, phone_number")
+      .or("email_digest_enabled.eq.true,sms_digest_enabled.eq.true")
+      .order("user_id", { ascending: true })
+      .range(from, to),
+  );
 
   if (error) {
     throw new Error(error.message);
   }
 
-  return ((data ?? []) as PreferenceRow[])
+  return data
     .map((row) => ({
       userId: row.user_id,
       emailDigestEnabled: Boolean(row.email_digest_enabled),

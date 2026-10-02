@@ -25,6 +25,7 @@ function makeSupabase(db: Record<string, Row[]>) {
   function builder(table: string) {
     const filters: Array<(row: Row) => boolean> = [];
     let limit: number | null = null;
+    let offset = 0;
     const api = {
       select: () => api,
       or: () => api,
@@ -45,6 +46,11 @@ function makeSupabase(db: Record<string, Row[]>) {
         limit = value;
         return api;
       },
+      range: (from: number, to: number) => {
+        offset = from;
+        limit = to - from + 1;
+        return api;
+      },
       maybeSingle: async () => ({ data: (db[table] ?? []).filter((row) => filters.every((f) => f(row)))[0] ?? null, error: null }),
       upsert: async (rows: Row | Row[], options?: { ignoreDuplicates?: boolean }) => {
         for (const row of Array.isArray(rows) ? rows : [rows]) {
@@ -61,7 +67,7 @@ function makeSupabase(db: Record<string, Row[]>) {
       },
       then: (resolve: (value: { data: Row[]; error: null }) => void) => {
         let rows = (db[table] ?? []).filter((row) => filters.every((f) => f(row)));
-        if (limit != null) rows = rows.slice(0, limit);
+        if (limit != null) rows = rows.slice(offset, offset + limit);
         resolve({ data: rows, error: null });
       },
     };

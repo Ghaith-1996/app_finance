@@ -24,6 +24,7 @@ except ImportError:
 from supabase import create_client
 
 from .main import run as run_worker
+from .pagination import fetch_all_rows
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
@@ -43,8 +44,8 @@ def _unique_upper(values):
 
 
 def resolve_global_tickers(client) -> list[str]:
-    holdings = client.table("holdings").select("symbol").execute().data or []
-    watchlist = client.table("watchlist_items").select("symbol").execute().data or []
+    holdings = fetch_all_rows(client, "holdings", "symbol")
+    watchlist = fetch_all_rows(client, "watchlist_items", "symbol")
     return _unique_upper(
         [row.get("symbol") for row in holdings] + [row.get("symbol") for row in watchlist]
     )
@@ -52,7 +53,7 @@ def resolve_global_tickers(client) -> list[str]:
 
 def _build_portfolio_queries(client) -> list[str]:
     """Build keyword queries from all holdings (symbol + company name)."""
-    holdings = client.table("holdings").select("symbol, company").execute().data or []
+    holdings = fetch_all_rows(client, "holdings", "symbol, company")
     queries: list[str] = []
     seen: set[str] = set()
 

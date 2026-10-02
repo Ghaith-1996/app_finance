@@ -66,6 +66,7 @@ export function SavedArticlesList({
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search saved articles, tickers, sources..."
+            aria-label="Search saved articles"
             className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-slate-600"
           />
         </label>

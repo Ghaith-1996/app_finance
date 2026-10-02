@@ -65,9 +65,10 @@ export function PostCommentsPanel({ postId, onClose }: Props) {
         <button
           type="button"
           onClick={onClose}
+          aria-label="Back to community feed"
           className="rounded-lg p-1.5 text-slate-500 transition hover:bg-white/5 hover:text-slate-300"
         >
-          <ArrowLeft className="h-4 w-4" />
+          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
         </button>
         <p className="text-sm font-semibold text-white">Comments</p>
       </div>

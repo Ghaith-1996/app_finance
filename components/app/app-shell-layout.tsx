@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Activity,
   ArrowLeft,
@@ -123,7 +123,19 @@ export function AppShellLayout({
     };
   }, [unreadAlertCount]);
 
+  // Audit F12: after the user toggles the sidebar, focus moves to the control that reverses it,
+  // so it never stays on (or tabs into) the hidden navigation.
+  const showNavigationRef = useRef<HTMLButtonElement>(null);
+  const hideNavigationRef = useRef<HTMLButtonElement>(null);
+  const focusAfterToggleRef = useRef(false);
+  useEffect(() => {
+    if (!focusAfterToggleRef.current) return;
+    focusAfterToggleRef.current = false;
+    (collapsed ? showNavigationRef : hideNavigationRef).current?.focus();
+  }, [collapsed]);
+
   const persistCollapsed = useCallback((next: boolean) => {
+    focusAfterToggleRef.current = true;
     setCollapsed(next);
     try {
       localStorage.setItem(STORAGE_KEY, next ? "1" : "0");
@@ -142,6 +154,7 @@ export function AppShellLayout({
       {/* Expand rail when sidebar hidden */}
       {collapsed ? (
         <button
+          ref={showNavigationRef}
           type="button"
           onClick={() => persistCollapsed(false)}
           className="fixed left-0 top-1/2 z-[60] hidden -translate-y-1/2 rounded-r-lg border border-l-0 border-subtle bg-surface px-1.5 py-4 text-secondary shadow-[var(--surface-shadow)] transition hover:bg-surface-raised hover:text-primary lg:flex"
@@ -158,6 +171,7 @@ export function AppShellLayout({
           collapsed ? "w-0 translate-x-[-4px] overflow-hidden border-0 opacity-0" : "w-[260px] opacity-100",
         )}
         aria-hidden={collapsed}
+        inert={collapsed}
       >
         <div className="flex h-full min-w-[260px] flex-col">
           <div className="flex items-start justify-between gap-2 px-6 pt-8 pb-4">
@@ -171,6 +185,7 @@ export function AppShellLayout({
               </div>
             </Link>
             <button
+              ref={hideNavigationRef}
               type="button"
               onClick={() => persistCollapsed(true)}
               className="shrink-0 rounded-lg p-2 text-secondary transition hover:bg-surface-soft hover:text-primary"
@@ -314,6 +329,12 @@ export function AppShellLayout({
                 <Link
                   key={item.href}
                   href={item.href}
+                  aria-label={
+                    item.href === "/alerts" && resolvedUnreadAlertCount > 0
+                      ? `${item.label} (${resolvedUnreadAlertCount} unread)`
+                      : item.label
+                  }
+                  aria-current={pathname === item.href ? "page" : undefined}
                   className={cn(
                     "relative flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition",
                     pathname === item.href
@@ -321,9 +342,9 @@ export function AppShellLayout({
                       : "text-secondary hover:text-primary",
                   )}
                 >
-                  <Icon className="h-3.5 w-3.5" />
+                  <Icon className="h-3.5 w-3.5" aria-hidden="true" />
                   {item.href === "/alerts" && resolvedUnreadAlertCount > 0 ? (
-                    <span className="absolute -right-1 -top-1 inline-flex min-w-4 items-center justify-center rounded-full bg-amber-400 px-1 text-[9px] font-bold text-[#080c11]">
+                    <span aria-hidden="true" className="absolute -right-1 -top-1 inline-flex min-w-4 items-center justify-center rounded-full bg-amber-400 px-1 text-[9px] font-bold text-[#080c11]">
                       {resolvedUnreadAlertCount > 9 ? "9+" : resolvedUnreadAlertCount}
                     </span>
                   ) : null}
@@ -333,6 +354,7 @@ export function AppShellLayout({
             })}
             <Link
               href="/portfolio"
+              aria-label={t("shell.overview")}
               className={cn(
                 "flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition",
                 isOverviewSection(pathname)
@@ -340,11 +362,13 @@ export function AppShellLayout({
                   : "text-secondary hover:text-primary",
               )}
             >
-              <LayoutDashboard className="h-3.5 w-3.5" />
+              <LayoutDashboard className="h-3.5 w-3.5" aria-hidden="true" />
               <span className="hidden sm:inline">{t("shell.overview")}</span>
             </Link>
             <ThemeToggle compact />
           </nav>
+          {/* Audit F21: account, settings and sign-out stay reachable without the desktop sidebar. */}
+          <UserMenu showAdminLink={showAdminLink} compact />
         </div>
         <div className="flex gap-4 overflow-x-auto whitespace-nowrap border-t border-subtle px-4 py-2 text-[11px] text-secondary sm:px-5">
           <Link href="/portfolio/full" className={cn(pathname === "/portfolio/full" && "font-medium text-brand")}>

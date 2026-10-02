@@ -218,3 +218,23 @@ deleted/edited in the working tree by the user during this session; those change
 Gate after F15: typecheck pass; lint 0 errors / 18 warnings (baseline 20); Vitest 110 files / 629 tests pass;
 `next build` passes with local env (only the pre-existing middleware→proxy deprecation notice).
 Not run this checkpoint (Docker Desktop down): Python unittest suite incl. `test_pagination.py`, SQL validator re-run.
+
+## Phase 4 checkpoint and close-out (2026-10-02)
+
+Decisions: **H2** = possession verification required before SMS; **H12** contact = ghaith.alali1996@gmail.com.
+
+| ID | Result | Commit |
+|---|---|---|
+| H2 | **fixed** — migration 038, hashed one-time codes with SQL-enforced limits, server-only verified numbers, digest gate, settings UI | e9712a3 |
+| H9 | **fixed** — table/sector/health/chart read `valueHoldings` | 7bfa468 |
+| H10 | **fixed** — LRU cap, shared in-flight misses | 320dac1 |
+| H11 | **fixed** — hash-pinned `requirements.lock` in CI and workflows | 5a34a62 |
+| H12 | **fixed** — `SECURITY.md`, `server-only` boundaries + test | 1d5f0ed, f4eed85 |
+| F17 / F23 | **fixed** | fee843a |
+| F18 | **blocked** (GitHub repo setting) | — |
+| D04 / D05 / D10 / D11 / D13 / D14 | fixed or partially fixed (see report) | 2d04b86, cf9dfce, e42e65f |
+| D15 | investigated; decision needed | — |
+
+Docker re-runs: Python 70/70 (incl. `test_pagination.py`), SQL validator 38 migrations + 7 suites.
+Two committed tests that the other session had deleted locally were found failing on a clean checkout after F16/H2
+and aligned in 335b31e. Final gates and the per-ID table: [`AUDIT_REMEDIATION_REPORT.md`](AUDIT_REMEDIATION_REPORT.md).

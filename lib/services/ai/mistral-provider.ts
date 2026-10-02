@@ -12,6 +12,7 @@ import { AIChatError, assertNonEmptyArticleChatReply } from "./ai-chat-errors";
 import {
   ARTICLE_CHAT_MAX_TOKENS,
   PORTFOLIO_COPILOT_MAX_TOKENS,
+  AI_REQUEST_TIMEOUT_MS,
 } from "./constants";
 import { validateMistralConfig } from "@/lib/env";
 import { createLogger } from "@/lib/logger";
@@ -59,6 +60,7 @@ async function respond(
 
   const res = await fetch(MISTRAL_API_URL, {
     method: "POST",
+    signal: AbortSignal.timeout(AI_REQUEST_TIMEOUT_MS),
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${apiKey}`,

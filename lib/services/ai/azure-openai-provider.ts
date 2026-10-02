@@ -13,6 +13,7 @@ import { stubAIProvider } from "./stub-provider";
 import {
   ARTICLE_CHAT_MAX_TOKENS,
   PORTFOLIO_COPILOT_MAX_TOKENS,
+  AI_REQUEST_TIMEOUT_MS,
 } from "./constants";
 import { validateAzureConfig } from "@/lib/env";
 import { createLogger } from "@/lib/logger";
@@ -96,6 +97,7 @@ async function respond(
 
   const res = await fetch(`${baseUrl}responses`, {
     method: "POST",
+    signal: AbortSignal.timeout(AI_REQUEST_TIMEOUT_MS),
     headers: {
       "Content-Type": "application/json",
       "api-key": apiKey,

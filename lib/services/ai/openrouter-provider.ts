@@ -12,6 +12,7 @@ import { AIChatError, assertNonEmptyArticleChatReply } from "./ai-chat-errors";
 import {
   ARTICLE_CHAT_MAX_TOKENS,
   PORTFOLIO_COPILOT_MAX_TOKENS,
+  AI_REQUEST_TIMEOUT_MS,
 } from "./constants";
 import { stubAIProvider } from "./stub-provider";
 import { parsePortfolioMatchAssessment } from "./portfolio-match";
@@ -55,6 +56,7 @@ async function chatComplete(
 ): Promise<string | null> {
   const res = await fetch(OPENROUTER_BASE, {
     method: "POST",
+    signal: AbortSignal.timeout(AI_REQUEST_TIMEOUT_MS),
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${apiKey}`,

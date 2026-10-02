@@ -12,6 +12,7 @@ import { assertNonEmptyArticleChatReply } from "./ai-chat-errors";
 import {
   ARTICLE_CHAT_MAX_TOKENS,
   PORTFOLIO_COPILOT_MAX_TOKENS,
+  AI_REQUEST_TIMEOUT_MS,
 } from "./constants";
 import { stubAIProvider } from "./stub-provider";
 import { parsePortfolioMatchAssessment } from "./portfolio-match";
@@ -34,6 +35,7 @@ async function chat(
 ): Promise<string | null> {
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
+    signal: AbortSignal.timeout(AI_REQUEST_TIMEOUT_MS),
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${key}`,
@@ -139,18 +141,15 @@ export function createOpenAIProvider(): IAIProvider {
       return assertNonEmptyArticleChatReply(text);
     },
 
+    // Failures surface as errors (503 + quota refund), never as a canned stub answer.
     async answerPortfolioQuestion(context: PortfolioCopilotContext) {
-      try {
-        const p = portfolioCopilotPrompt(context);
-        const text = await chat(
-          key,
-          [{ role: "system", content: p.system }, { role: "user", content: p.user }],
-          PORTFOLIO_COPILOT_MAX_TOKENS,
-        );
-        return text ?? (await stubAIProvider.answerPortfolioQuestion(context));
-      } catch {
-        return stubAIProvider.answerPortfolioQuestion(context);
-      }
+      const p = portfolioCopilotPrompt(context);
+      const text = await chat(
+        key,
+        [{ role: "system", content: p.system }, { role: "user", content: p.user }],
+        PORTFOLIO_COPILOT_MAX_TOKENS,
+      );
+      return assertNonEmptyArticleChatReply(text);
     },
   };
 }

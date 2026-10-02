@@ -232,9 +232,9 @@ export interface NewsItem {
   isWatchlistMatch?: boolean;
 }
 
+/** An illustrative user scenario. Not a customer review: no names or endorsement (audit D10). */
 export interface Testimonial {
   quote: string;
-  name: string;
   role: string;
 }
 

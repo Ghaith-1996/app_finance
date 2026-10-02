@@ -10,8 +10,8 @@ export function HowItWorks() {
       <div className="mx-auto max-w-7xl space-y-12">
         <SectionHeading
           eyebrow="How it works"
-          title="A simpler flow from account sync to daily brief"
-          description="The experience should feel less like a power-user terminal and more like a calm financial home that already understands the portfolio."
+          title="A simpler flow from your holdings to a daily brief"
+          description="Pulsefolio maps your holdings to the news that affects them, so the daily brief starts from what you own."
         />
         <div className="grid gap-4 lg:grid-cols-3">
           {workflowSteps.map((step, index) => (

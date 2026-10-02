@@ -19,17 +19,6 @@ import {
 } from "@/lib/security/chat-turnstile-grant";
 import { createClient } from "@/lib/supabase/server";
 
-function analysisPulseFill(lastAnalyzedAt: string): number {
-  if (lastAnalyzedAt === "Never") return 12;
-  if (lastAnalyzedAt.includes("Just now")) return 98;
-  if (lastAnalyzedAt.includes("minute")) return 90;
-  const hoursMatch = lastAnalyzedAt.match(/(\d+)\s*hours?/);
-  if (hoursMatch) return Math.max(38, 88 - Number(hoursMatch[1]) * 9);
-  const daysMatch = lastAnalyzedAt.match(/(\d+)\s*days?/);
-  if (daysMatch) return Math.max(18, 55 - Number(daysMatch[1]) * 10);
-  return 55;
-}
-
 export default async function FeedPage({
   searchParams,
 }: {
@@ -86,7 +75,6 @@ export default async function FeedPage({
     initialGeneralChatTurnstileVerified = hasValidChatGrantValue(rawGrant, scope);
   }
 
-  const pulsePct = analysisPulseFill(portfolioOverview.lastAnalyzedAt);
 
   return (
     <AppShell
@@ -137,14 +125,6 @@ export default async function FeedPage({
               {portfolioOverview.lastAnalyzedAt}
             </p>
             <p className="text-sm text-slate-500">Auto-updated every 20 min</p>
-            <div className="pt-2">
-              <div className="h-2 overflow-hidden rounded-full bg-white/5">
-                <div
-                  className="h-full rounded-full bg-brand transition-[width] duration-500"
-                  style={{ width: `${pulsePct}%` }}
-                />
-              </div>
-            </div>
           </Panel>
         </div>
 

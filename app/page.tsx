@@ -2,7 +2,6 @@ import Link from "next/link";
 
 import {
   ArrowRight,
-  CheckCircle2,
   Newspaper,
   NotebookPen,
   ShieldCheck,
@@ -93,7 +92,7 @@ function ProblemSection() {
         <SectionHeading
           eyebrow="Why this product exists"
           title="Financial products feel smarter when they remember what the user owns"
-          description="This first pass keeps the finance workflow approachable: one place to connect a portfolio, understand what changed, and open a feed that already knows what matters."
+          description="Pulsefolio keeps the finance workflow approachable: one place to add a portfolio, understand what changed, and open a feed that already knows what matters."
         />
         <div className="grid gap-4 lg:grid-cols-3">
           {painPoints.map((painPoint) => (
@@ -240,28 +239,24 @@ function ProofSection() {
     <section className="px-6 py-20 lg:px-8">
       <div className="mx-auto max-w-7xl space-y-12">
         <SectionHeading
-          eyebrow="What makes it feel current"
-          title="A warmer, more personal finance language"
-          description="Direct but reassuring, product-led, and centered on helping people feel more in control of their money."
+          eyebrow="Who it's for"
+          title="Built for self-directed investors"
+          description="Illustrative scenarios of the questions Pulsefolio is designed to answer. They are examples, not customer reviews."
           align="center"
         />
         <div className="grid gap-4 lg:grid-cols-2">
           {testimonials.map((testimonial) => (
             <Panel
-              key={testimonial.name}
+              key={testimonial.role}
               className="space-y-5 p-6"
             >
               <Badge tone="neutral">
-                Product sentiment
+                Illustrative scenario
               </Badge>
               <p className="text-xl leading-8 text-white">
                 &ldquo;{testimonial.quote}&rdquo;
               </p>
-              <div className="flex items-center gap-3 text-sm text-slate-500">
-                <CheckCircle2 className="h-4 w-4 text-brand" />
-                <span>{testimonial.name}</span>
-                <span>{testimonial.role}</span>
-              </div>
+              <p className="text-sm text-slate-500">{testimonial.role}</p>
             </Panel>
           ))}
         </div>
@@ -319,13 +314,13 @@ function FinalCallToAction() {
         >
           <div className="max-w-2xl space-y-4">
             <Badge tone="brand">
-              Next phase ready
+              Get started
             </Badge>
             <h2 className="text-4xl font-semibold tracking-tight text-white">
               Your intelligent portfolio home starts here.
             </h2>
             <p className="text-lg leading-8 text-slate-400">
-              Connect a portfolio, run the AI analysis, and open a daily brief
+              Add a portfolio, run the AI analysis, and open a daily brief
               that already knows what matters — all in one place.
             </p>
           </div>

@@ -1216,14 +1216,6 @@ function pickInsight(insights: PortfolioInsight[], needle: string) {
   return insights.find((i) => i.title.toLowerCase().includes(needle));
 }
 
-function themeMeterPercent(seed: string): number {
-  let h = 0;
-  for (let i = 0; i < seed.length; i++) {
-    h = (h + seed.charCodeAt(i) * (i + 1)) % 41;
-  }
-  return 52 + h;
-}
-
 function FeedMomentumCard({ insights }: { insights: PortfolioInsight[] }) {
   const themeInsight = pickInsight(insights, "theme") ?? insights[0];
   const macroInsight = pickInsight(insights, "macro") ?? insights[1];
@@ -1233,9 +1225,6 @@ function FeedMomentumCard({ insights }: { insights: PortfolioInsight[] }) {
     /critical|inversion|recession|crash|emergency|\bselloff\b/i.test(
       `${macroInsight.value} ${macroInsight.detail}`,
     );
-  const themePct = themeInsight
-    ? themeMeterPercent(themeInsight.value + themeInsight.detail)
-    : 62;
 
   return (
     <div className="glass-surface rounded-2xl border border-subtle bg-surface-raised p-6 text-primary shadow-[var(--surface-shadow)]">
@@ -1262,12 +1251,6 @@ function FeedMomentumCard({ insights }: { insights: PortfolioInsight[] }) {
               Run analysis to surface the theme your feed is overweighting.
             </p>
           )}
-          <div className="mt-3 h-2 overflow-hidden rounded-full bg-surface-soft">
-            <div
-              className="h-full rounded-full bg-brand"
-              style={{ width: `${themePct}%` }}
-            />
-          </div>
         </div>
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-secondary">

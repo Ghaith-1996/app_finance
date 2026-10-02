@@ -431,13 +431,11 @@ export const testimonials: Testimonial[] = [
   {
     quote:
       "I do not need more market headlines. I need one place that tells me what changed, what matters, and which holdings are exposed.",
-    name: "Maya Chen",
     role: "Self-directed investor",
   },
   {
     quote:
-      "The product feels more like an intelligent financial home than a dashboard. The AI summary is what makes the news feed useful every day.",
-    name: "Daniel Ortiz",
+      "I want the news feed to explain itself: a short AI summary of why a story matters to what I hold, every day.",
     role: "Long-term portfolio builder",
   },
 ];

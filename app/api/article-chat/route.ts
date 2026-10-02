@@ -1,3 +1,4 @@
+import { parseChatRequestBody } from "@/lib/security/chat-request";
 import { NextResponse } from "next/server";
 
 import { PLAN_LABELS } from "@/lib/billing/plans";
@@ -618,29 +619,23 @@ export async function POST(request: Request) {
   const { supabase, user, response } = await requireAuthedContext();
   if (response) return response;
 
-  let body: {
-    portfolioId?: string;
-    newsItemId?: string;
-    message?: string;
-    modelTier?: string;
-    history?: unknown;
-    turnstileToken?: string;
-  } = {};
+  let rawBody: unknown;
   try {
-    body = await request.json();
+    rawBody = await request.json();
   } catch {
     return json({ error: "Invalid JSON body" }, 400);
   }
 
-  const portfolioId = body.portfolioId?.trim();
-  const newsItemId = body.newsItemId?.trim();
-  const message = body.message?.trim();
-  const modelTier = parseModelTier(body.modelTier);
-  const history = parseHistory(body.history);
-
-  if (!portfolioId || !message) {
-    return json({ error: "portfolioId and message are required" }, 400);
+  const parsed = parseChatRequestBody(rawBody, { allowNewsItem: true });
+  if (!parsed.ok) {
+    return json({ error: parsed.error }, 400);
   }
+  const body = parsed.value;
+  const portfolioId = body.portfolioId;
+  const newsItemId = body.newsItemId ?? undefined;
+  const message = body.message;
+  const modelTier = parseModelTier(body.modelTier);
+  const history = body.history;
   if (!modelTier) {
     return json({ error: "modelTier must be 'free', 'premium', or 'ultimate'" }, 400);
   }
@@ -719,7 +714,14 @@ export async function POST(request: Request) {
         429,
       );
     }
-    throw error;
+    // Quota/billing infrastructure failure (audit H4): a deliberate 503, not an unhandled 500.
+    return respondForChat(
+      {
+        error: "AI access could not be verified right now. Please try again shortly.",
+        code: "usage_check_unavailable",
+      },
+      503,
+    );
   }
 
   const providerId = providerIdForTier(modelTier);

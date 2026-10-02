@@ -26,6 +26,7 @@ import {
 const log = createLogger("daily-digest");
 const MAX_DIGEST_STORIES = 10;
 const STALE_PENDING_DELIVERY_MS = 10 * 60 * 1000;
+const MAX_DELIVERY_ATTEMPTS = 3;
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
@@ -125,7 +126,7 @@ type DigestRecipient = {
 };
 
 type DeliveryAttemptDecision =
-  | { action: "send" }
+  | { action: "send"; claimToken: string }
   | { action: "skip"; resultStatus: "skipped" | "uncertain" };
 
 function shouldRunDailyDigestCronAt(now: Date): boolean {
@@ -613,80 +614,61 @@ async function loadDelivery(
   return (data as DeliveryRow | null) ?? null;
 }
 
-function isStalePending(row: DeliveryRow): boolean {
-  if (row.status !== "pending") return false;
-  return Date.now() - new Date(row.updated_at).getTime() > STALE_PENDING_DELIVERY_MS;
-}
-
-async function markDeliveryStatus(
-  supabase: ServiceClient,
-  digestId: string,
-  channel: DeliveryChannel,
-  status: DeliveryStatus,
-  providerMessageId: string | null,
-  errorText: string | null,
-): Promise<void> {
-  const { error } = await supabase
-    .from("notification_deliveries")
-    .upsert(
-      {
-        digest_id: digestId,
-        channel,
-        status,
-        provider_message_id: providerMessageId,
-        error_text: errorText,
-        sent_at: status === "sent" ? new Date().toISOString() : null,
-      },
-      { onConflict: "digest_id,channel" },
-    );
-
-  if (error) {
-    throw new Error(error.message);
-  }
-}
-
-async function beginDeliveryAttempt(
+/**
+ * Atomically decides whether this worker may contact the provider (audit J5). Exactly one
+ * concurrent caller receives a claim token; confirmed failures are retried up to the attempt cap,
+ * uncertain sends are never replayed, and a stale SMS claim becomes uncertain.
+ */
+async function claimDelivery(
   supabase: ServiceClient,
   digestId: string,
   channel: DeliveryChannel,
 ): Promise<DeliveryAttemptDecision> {
-  const existing = await loadDelivery(supabase, digestId, channel);
-  if (!existing) {
-    await markDeliveryStatus(supabase, digestId, channel, "pending", null, null);
-    return { action: "send" };
+  const { data, error } = await supabase.rpc("claim_notification_delivery", {
+    p_digest_id: digestId,
+    p_channel: channel,
+    p_max_attempts: MAX_DELIVERY_ATTEMPTS,
+    p_stale_after: `${Math.round(STALE_PENDING_DELIVERY_MS / 1000)} seconds`,
+  });
+  if (error) {
+    throw new Error(error.message);
   }
 
-  if (channel === "sms") {
-    if (existing.status === "pending" && isStalePending(existing)) {
-      await markDeliveryStatus(
-        supabase,
-        digestId,
-        channel,
-        "uncertain",
-        existing.provider_message_id,
-        existing.error_text ??
-          "SMS delivery state became stale before confirmation; automatic resend was blocked to avoid duplicates.",
-      );
-      return { action: "skip", resultStatus: "uncertain" };
-    }
-
-    return { action: "skip", resultStatus: "skipped" };
+  const row = (Array.isArray(data) ? data[0] : data) as
+    | { action: string; claim_token: string | null; status: string }
+    | null;
+  if (row?.action === "send" && row.claim_token) {
+    return { action: "send", claimToken: row.claim_token };
   }
+  return { action: "skip", resultStatus: row?.status === "uncertain" ? "uncertain" : "skipped" };
+}
 
-  if (
-    existing.status === "sent" ||
-    existing.status === "skipped" ||
-    existing.status === "uncertain"
-  ) {
-    return { action: "skip", resultStatus: "skipped" };
+/** Records the outcome only if this worker still holds the claim. */
+async function completeDelivery(
+  supabase: ServiceClient,
+  digestId: string,
+  channel: DeliveryChannel,
+  claimToken: string,
+  result: { status: DeliveryStatus; providerMessageId: string | null; errorText: string | null },
+): Promise<void> {
+  const { data, error } = await supabase.rpc("complete_notification_delivery", {
+    p_digest_id: digestId,
+    p_channel: channel,
+    p_claim_token: claimToken,
+    p_status: result.status,
+    p_provider_message_id: result.providerMessageId,
+    p_error_text: result.errorText,
+  });
+  if (error) {
+    throw new Error(error.message);
   }
-
-  if (existing.status === "pending" && !isStalePending(existing)) {
-    return { action: "skip", resultStatus: "skipped" };
+  if (data !== true) {
+    log.warn("Delivery outcome not recorded: claim was taken over by another worker", {
+      digestId,
+      channel,
+      status: result.status,
+    });
   }
-
-  await markDeliveryStatus(supabase, digestId, channel, "pending", null, null);
-  return { action: "send" };
 }
 
 async function deliverChannel(input: {
@@ -697,11 +679,7 @@ async function deliverChannel(input: {
   phoneNumber?: string | null;
   baseUrl: string;
 }): Promise<DailyDigestDeliveryResult> {
-  const decision = await beginDeliveryAttempt(
-    input.supabase,
-    input.digest.id,
-    input.channel,
-  );
+  const decision = await claimDelivery(input.supabase, input.digest.id, input.channel);
   if (decision.action === "skip") {
     const existing = await loadDelivery(input.supabase, input.digest.id, input.channel);
     return {
@@ -713,8 +691,9 @@ async function deliverChannel(input: {
     };
   }
 
+  let result: DailyDigestDeliveryResult;
   try {
-    const result =
+    result =
       input.channel === "email"
         ? await sendDigestEmail({
             digest: input.digest,
@@ -726,27 +705,10 @@ async function deliverChannel(input: {
             phoneNumber: input.phoneNumber,
             baseUrl: input.baseUrl,
           });
-
-    await markDeliveryStatus(
-      input.supabase,
-      input.digest.id,
-      input.channel,
-      result.status,
-      result.providerMessageId,
-      result.errorText,
-    );
-    return result;
   } catch (error) {
+    // Thrown before the provider accepted anything (e.g. missing configuration): confirmed failure.
     const message = error instanceof Error ? error.message : String(error);
-    await markDeliveryStatus(
-      input.supabase,
-      input.digest.id,
-      input.channel,
-      "failed",
-      null,
-      message,
-    );
-    return {
+    result = {
       channel: input.channel,
       status: "failed",
       digestId: input.digest.id,
@@ -754,6 +716,9 @@ async function deliverChannel(input: {
       errorText: message,
     };
   }
+
+  await completeDelivery(input.supabase, input.digest.id, input.channel, decision.claimToken, result);
+  return result;
 }
 
 export async function runDailyDigestCron(input?: {

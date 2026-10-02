@@ -146,10 +146,12 @@ export async function sendDigestSms(input: {
       | { sid?: string; message?: string; code?: number }
       | null;
 
+    // 4xx (including 429) is a confirmed non-acceptance and may be retried. A 5xx is ambiguous —
+    // Twilio may have queued the message — so it is never retried automatically (audit J5).
     if (!response.ok) {
       return {
         channel: "sms",
-        status: "failed",
+        status: response.status >= 500 ? "uncertain" : "failed",
         digestId: input.digest.id,
         providerMessageId: payload?.sid ?? null,
         errorText:

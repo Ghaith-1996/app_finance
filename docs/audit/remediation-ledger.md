@@ -177,3 +177,17 @@ must not count against quota.
 
 Gate after 8ab54cf: Vitest 117 files / 732 tests; typecheck pass; lint 0 errors / 20 warnings (baseline set).
 Caveat: under heavy machine load a few UI tests can exceed Vitest's 5 s default timeout and pass on rerun.
+
+## Phase 2 completion — B4, J5 (2026-10-02)
+
+| ID | Result | Implementation | Evidence | Commit |
+|---|---|---|---|---|
+| H5 SQL | **validated** | `035_ai_quota_release.test.sql` passes on real Postgres (bucket-exact refund across a reset boundary, floor at zero, service-role-only grants) | validator run with Docker | 13841a9 |
+| B4 | **fixed** | `036_atomic_position_changes.sql`: immutable `holding_transactions` ledger keyed by client operation id; `apply_holding_transaction` claims the id first, locks the holding, rejects oversell, closes on sell-all; actions call it; table reuses the id only for identical retries | `036_atomic_position_changes.test.sql` races two real sessions via dblink: two concurrent +5 adds → 10→20 (B observed blocked), same operation id from two sessions → applied once, other gets `duplicate`; plus retry, reused-id, oversell, sell-all, cross-user, anon. `tests/portfolio-position-changes.test.ts` | 92625b4 |
+| J5 | **fixed** | `037_notification_delivery_claims.sql`: `claim_notification_delivery` (one token per attempt; failed retried ≤3; uncertain never replayed; stale SMS → uncertain; stale email reclaimed) and token-checked `complete_notification_delivery`; Twilio 5xx now `uncertain` (4xx incl. 429 stay `failed`) | `037_notification_delivery_claims.test.sql` (two real sessions: one `send`, one `skip`); `tests/digest-delivery-claims.test.ts` (concurrent runs → one provider call; 429 then success; timeout never resent; attempt cap); `tests/twilio-response-classification.test.ts` | this commit |
+
+Phase 2 acceptance matrix: B4 ✔ B5 ✔ B6 ✔ B7 ✔ (needs Stripe sandbox run) J3 ✔ J4 ✔ J5 ✔ J6 ✔.
+
+Gate after J5: typecheck pass; SQL rebuild of 37 migrations + 6 SQL suites pass; Vitest 101 files / 583 tests with one
+known load-timeout flake (`turnstile-protected-routes`, passes in isolation). The lower file count reflects test files
+deleted/edited in the working tree by the user during this session; those changes were left uncommitted and untouched.

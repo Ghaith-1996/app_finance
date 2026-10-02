@@ -170,8 +170,78 @@ export function createMockServiceSupabase(input: {
     return builder;
   }
 
+  // Emulates claim_notification_delivery / complete_notification_delivery (037). Each call runs to
+  // completion synchronously, which mirrors the row lock the SQL functions take.
+  function rpc(name: string, params: Row) {
+    const deliveries = tableRows("notification_deliveries");
+    const find = () =>
+      deliveries.find((row) => row.digest_id === params.p_digest_id && row.channel === params.p_channel);
+    const nowIso = new Date().toISOString();
+
+    if (name === "claim_notification_delivery") {
+      const maxAttempts = Number(params.p_max_attempts ?? 3);
+      const staleMs = Number(String(params.p_stale_after ?? "600 seconds").split(" ")[0]) * 1000;
+      const token = `claim-${Math.random().toString(36).slice(2)}`;
+      const row = find();
+      if (!row) {
+        deliveries.push(
+          ensureDefaults("notification_deliveries", {
+            digest_id: params.p_digest_id,
+            channel: params.p_channel,
+            status: "pending",
+            attempt_count: 1,
+            claim_token: token,
+            claimed_at: nowIso,
+          }, deliveries.length),
+        );
+        return Promise.resolve({ data: [{ action: "send", claim_token: token, status: "pending", attempt_count: 1 }], error: null });
+      }
+      const attempts = Number(row.attempt_count ?? 1);
+      const skip = (status: unknown) =>
+        Promise.resolve({ data: [{ action: "skip", claim_token: null, status, attempt_count: attempts }], error: null });
+      if (["sent", "skipped", "uncertain"].includes(String(row.status))) return skip(row.status);
+      if (row.status === "pending") {
+        const claimedAt = Date.parse(String(row.claimed_at ?? row.updated_at));
+        if (Date.now() - claimedAt <= staleMs) return skip("pending");
+        if (params.p_channel === "sms") {
+          Object.assign(row, {
+            status: "uncertain",
+            claim_token: null,
+            error_text:
+              row.error_text ??
+              "SMS delivery state became stale before confirmation; automatic resend was blocked to avoid duplicates.",
+            updated_at: nowIso,
+          });
+          return skip("uncertain");
+        }
+      }
+      if (attempts >= maxAttempts) return skip(row.status);
+      Object.assign(row, { status: "pending", claim_token: token, claimed_at: nowIso, attempt_count: attempts + 1, updated_at: nowIso });
+      return Promise.resolve({ data: [{ action: "send", claim_token: token, status: "pending", attempt_count: attempts + 1 }], error: null });
+    }
+
+    if (name === "complete_notification_delivery") {
+      const row = find();
+      if (!row || row.status !== "pending" || row.claim_token !== params.p_claim_token) {
+        return Promise.resolve({ data: false, error: null });
+      }
+      Object.assign(row, {
+        status: params.p_status,
+        provider_message_id: params.p_provider_message_id,
+        error_text: params.p_error_text,
+        sent_at: params.p_status === "sent" ? nowIso : row.sent_at ?? null,
+        claim_token: null,
+        updated_at: nowIso,
+      });
+      return Promise.resolve({ data: true, error: null });
+    }
+
+    return Promise.resolve({ data: null, error: { message: `Unexpected rpc ${name}` } });
+  }
+
   return {
     __db: db,
+    rpc,
     auth: {
       admin: {
         getUserById: async (userId: string) => ({

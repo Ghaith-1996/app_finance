@@ -256,9 +256,36 @@ async function buildCriticalNewsAlerts(input: {
 
   if (error) throw new Error(error.message);
 
-  return ((data ?? []) as unknown as CriticalNewsRow[])
+  const criticalRows = ((data ?? []) as unknown as CriticalNewsRow[])
     .filter(isCriticalNews)
-    .slice(0, 5)
+    .slice(0, 5);
+
+  // Audit J4: an alert's identity is the article, not the per-run feed row. Articles that already
+  // have an alert for this portfolio (including ones keyed before this change) are not re-alerted,
+  // so reanalysis keeps one alert and its read state.
+  const newsIds = criticalRows
+    .map((row) => (Array.isArray(row.news_items) ? row.news_items[0] : row.news_items)?.id)
+    .filter((id): id is string => Boolean(id));
+  const alreadyAlerted = new Set<string>();
+  if (newsIds.length > 0) {
+    const { data: existing, error: existingError } = await input.supabase
+      .from("notification_alerts")
+      .select("payload")
+      .eq("user_id", input.preference.user_id)
+      .eq("portfolio_id", input.portfolio.id)
+      .eq("alert_type", "critical_news")
+      .in("payload->>newsItemId", newsIds);
+    if (existingError) throw new Error(existingError.message);
+    for (const row of (existing ?? []) as Array<{ payload: { newsItemId?: string } | null }>) {
+      if (row.payload?.newsItemId) alreadyAlerted.add(row.payload.newsItemId);
+    }
+  }
+
+  return criticalRows
+    .filter((row) => {
+      const newsId = (Array.isArray(row.news_items) ? row.news_items[0] : row.news_items)?.id;
+      return !newsId || !alreadyAlerted.has(newsId);
+    })
     .map((row) => {
       const news = Array.isArray(row.news_items) ? row.news_items[0] : row.news_items;
       const newsItemId = news?.id ?? "";
@@ -275,7 +302,9 @@ async function buildCriticalNewsAlerts(input: {
         action_href: newsItemId ? `/feed?story=${encodeURIComponent(newsItemId)}` : "/feed",
         source_table: "feed_items",
         source_id: row.id,
-        dedupe_key: `${input.portfolio.id}:${row.id}`,
+        dedupe_key: newsItemId
+          ? `${input.portfolio.id}:news:${newsItemId}`
+          : `${input.portfolio.id}:${row.id}`,
         payload: {
           newsItemId,
           headline,

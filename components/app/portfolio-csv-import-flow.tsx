@@ -93,14 +93,16 @@ export function PortfolioCsvImportFlow({
 
     try {
       const result = await previewCSVImport(content);
-      if (result.error) {
-        setError(result.error);
-        return;
-      }
       if (result.needsMapping) {
+        // Show why (e.g. every row was skipped) alongside the mapping step that can fix it.
+        setError(result.error);
         setNeedsMapping(true);
         setCsvHeaders(result.headers);
         setSuggestedMapping(result.suggestedMapping);
+        return;
+      }
+      if (result.error) {
+        setError(result.error);
         return;
       }
       setDrafts(result.drafts);

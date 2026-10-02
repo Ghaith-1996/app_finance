@@ -10,7 +10,7 @@ import { computePortfolioOverview } from "@/lib/services/portfolio";
 import {
   parseCSV,
   detectColumnMapping,
-  normalizeRows,
+  normalizeRowsWithReport,
 } from "@/lib/services/csv-parser";
 import { getQuote, getQuotes, searchSymbol } from "@/lib/services/yahoo-finance";
 import { getFxRatesToBase } from "@/lib/services/fx";
@@ -178,7 +178,18 @@ export async function previewCSVImport(csvText: string) {
     };
   }
 
-  const drafts = normalizeRows(rows, colResult.mapping, colResult.isTransactionFile);
+  const normalized = normalizeRowsWithReport(rows, colResult.mapping, colResult.isTransactionFile);
+  if (normalized.error) {
+    // Never present a non-empty file as an empty import (audit B6); offer the mapping step instead.
+    return {
+      drafts: [] as HoldingDraft[],
+      needsMapping: true,
+      headers,
+      suggestedMapping: colResult.mapping as Record<string, number>,
+      error: normalized.error,
+    };
+  }
+  const drafts = normalized.drafts;
 
   for (const draft of drafts) {
     if (!draft.symbol) continue;
@@ -225,7 +236,11 @@ export async function previewCSVWithMapping(
   }
 
   const { rows } = parseCSV(csvText);
-  const drafts = normalizeRows(rows, mapping, isTransactionFile);
+  const normalized = normalizeRowsWithReport(rows, mapping, isTransactionFile);
+  if (normalized.error) {
+    return { drafts: [] as HoldingDraft[], error: normalized.error };
+  }
+  const drafts = normalized.drafts;
 
   for (const draft of drafts) {
     if (!draft.symbol) continue;

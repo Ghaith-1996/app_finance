@@ -44,7 +44,8 @@ export function ColumnMapper({
 
   function handleSubmit() {
     if (!isValid) return;
-    const isTransactionFile = hasSide || mapping.date != null;
+    // A date column alone does not make a file transaction history (audit B6).
+    const isTransactionFile = hasSide;
     onConfirm(mapping, isTransactionFile);
   }
 

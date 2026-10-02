@@ -7,6 +7,7 @@ import {
   type PublisherHostnameLookup,
 } from "@/lib/security/publisher-url";
 import { safePublicFetchAsFetch } from "@/lib/security/safe-fetch";
+import { fetchAllRows } from "@/lib/supabase/paginate";
 import { getCompanyWebsiteSeed } from "@/lib/services/twelvedata";
 import type {
   LatestEarningsReportFields,
@@ -145,6 +146,10 @@ export type EarningsReportSyncResult = {
   secFallbacks: number;
   missing: number;
   inactivated: number;
+  /** Symbols whose discovery providers failed this run (audit J6). */
+  failed: number;
+  /** Symbols that kept their last known report because no new one was verified. */
+  stale: number;
 };
 
 type EarningsReportSyncDeps = {
@@ -688,9 +693,14 @@ export async function resolveLatestSecEarningsReport(
 export async function resolveTrackedSymbolUniverse(
   supabase: SupabaseLike,
 ): Promise<string[]> {
+  // Every row must be read: a capped page would mark tracked symbols inactive (audit H1).
   const [{ data: holdings, error: holdingsError }, { data: watchlistItems, error: watchlistError }] = await Promise.all([
-    supabase.from("holdings").select("symbol"),
-    supabase.from("watchlist_items").select("symbol"),
+    fetchAllRows<TickerSymbolRow>((from, to) =>
+      supabase.from("holdings").select("symbol").order("id", { ascending: true }).range(from, to),
+    ),
+    fetchAllRows<TickerSymbolRow>((from, to) =>
+      supabase.from("watchlist_items").select("symbol").order("id", { ascending: true }).range(from, to),
+    ),
   ]);
 
   if (holdingsError) {
@@ -802,26 +812,36 @@ export async function syncTrackedEarningsReports(
   const trackedSymbolSet = new Set(trackedSymbols);
   const existingRowsResult = await supabase
     .from("ticker_earnings_reports")
-    .select("symbol, is_active");
+    .select("symbol, is_active, preferred_url, url_source, company_url, sec_url, report_date, filing_form, title");
   ensureSupabaseSucceeded(
     "Failed to load existing earnings report rows",
     existingRowsResult,
   );
-  const existingRows = existingRowsResult.data;
+  const existingRows = (existingRowsResult.data ?? []) as Array<{
+    symbol: string | null;
+    is_active: boolean | null;
+    preferred_url: string | null;
+  }>;
+  const symbolsWithCachedReport = new Set(
+    existingRows
+      .filter((row) => Boolean(row.preferred_url))
+      .map((row) => normalizeSymbol(String(row.symbol ?? "")))
+      .filter((symbol): symbol is string => Boolean(symbol)),
+  );
 
-  const activeExistingSymbols = (existingRows ?? [])
+  const activeExistingSymbols = existingRows
     .filter((row) => row.is_active === true)
     .map((row) => normalizeSymbol(String(row.symbol ?? "")))
     .filter((symbol): symbol is string => Boolean(symbol));
 
   let secTickerMap: Map<string, string> | null = null;
+  let secTickerMapError: string | null = null;
   if (trackedSymbols.length > 0 && !deps?.resolveLatestSecEarningsReport) {
     try {
       secTickerMap = await loadSecTickerMap(fetchImpl);
     } catch (error) {
-      log.warn("Failed to load SEC ticker map", {
-        error: error instanceof Error ? error.message : String(error),
-      });
+      secTickerMapError = error instanceof Error ? error.message : String(error);
+      log.warn("Failed to load SEC ticker map", { error: secTickerMapError });
     }
   }
 
@@ -832,6 +852,55 @@ export async function syncTrackedEarningsReports(
     secFallbacks: 0,
     missing: 0,
     inactivated: 0,
+    failed: 0,
+    stale: 0,
+  };
+
+  // Audit J6: a refresh only replaces report data with a verified new result. When discovery fails
+  // (or finds nothing) and a report is already cached, the cached link/date stay usable and only the
+  // check time and error are recorded.
+  const recordWithoutNewReport = async (symbol: string, errorMessage: string, providerFailed: boolean) => {
+    if (providerFailed) stats.failed += 1;
+
+    if (symbolsWithCachedReport.has(symbol)) {
+      const keepResult = await supabase
+        .from("ticker_earnings_reports")
+        .upsert(
+          {
+            symbol,
+            is_active: true,
+            last_checked_at: nowIso,
+            error: providerFailed
+              ? `Refresh failed; showing the last known report. ${errorMessage}`
+              : "No newer report found; showing the last known report.",
+          },
+          { onConflict: "symbol" },
+        );
+      ensureSupabaseSucceeded(`Failed to record earnings refresh status for ${symbol}`, keepResult);
+      stats.stale += 1;
+      return;
+    }
+
+    const emptyResult = await supabase
+      .from("ticker_earnings_reports")
+      .upsert(
+        {
+          symbol,
+          preferred_url: null,
+          url_source: null,
+          company_url: null,
+          sec_url: null,
+          report_date: null,
+          filing_form: null,
+          title: null,
+          is_active: true,
+          last_checked_at: nowIso,
+          error: errorMessage,
+        },
+        { onConflict: "symbol" },
+      );
+    ensureSupabaseSucceeded(`Failed to upsert earnings report row for ${symbol}`, emptyResult);
+    stats.missing += 1;
   };
 
   for (const symbol of trackedSymbols) {
@@ -841,48 +910,52 @@ export async function syncTrackedEarningsReports(
     let companySeedUrl: string | null = null;
     let companyReportUrl: string | null = null;
     let companyTitle: string | null = null;
-    let preferredUrl: string | null = null;
-    let urlSource: LatestEarningsReportSource | null = null;
-    let errorMessage: string | null = null;
+    const providerErrors: string[] = [];
+    if (secTickerMapError) providerErrors.push(`SEC ticker map: ${secTickerMapError}`);
 
     try {
-      try {
-        const [secResult, companySeedResult] = await Promise.allSettled([
-          resolveSecReport(symbol, { fetchImpl, tickerMap: secTickerMap ?? undefined }),
-          getWebsiteSeed(symbol),
-        ]);
+      const [secResult, companySeedResult] = await Promise.allSettled([
+        resolveSecReport(symbol, { fetchImpl, tickerMap: secTickerMap ?? undefined }),
+        getWebsiteSeed(symbol),
+      ]);
 
-        if (secResult.status === "fulfilled") {
-          secReport = secResult.value;
-        } else {
-          errorMessage = secResult.reason instanceof Error
-            ? secResult.reason.message
-            : String(secResult.reason);
-        }
+      if (secResult.status === "fulfilled") {
+        secReport = secResult.value;
+      } else {
+        providerErrors.push(secResult.reason instanceof Error ? secResult.reason.message : String(secResult.reason));
+      }
 
-        if (companySeedResult.status === "fulfilled") {
-          companySeedUrl = companySeedResult.value;
-        }
+      if (companySeedResult.status === "fulfilled") {
+        companySeedUrl = companySeedResult.value;
+      } else {
+        providerErrors.push(
+          companySeedResult.reason instanceof Error ? companySeedResult.reason.message : String(companySeedResult.reason),
+        );
+      }
 
-        if (companySeedUrl) {
+      if (companySeedUrl) {
+        try {
           const companyDiscovery = await discoverCompanyLink(companySeedUrl, {
             fetchImpl: deps?.fetchImpl,
             reportDateHint: secReport?.reportDate ?? secReport?.filingDate ?? null,
           });
           companyReportUrl = companyDiscovery?.url ?? null;
           companyTitle = companyDiscovery?.title ?? null;
+        } catch (error) {
+          providerErrors.push(error instanceof Error ? error.message : String(error));
         }
-      } catch (error) {
-        errorMessage = error instanceof Error ? error.message : String(error);
       }
 
-      preferredUrl = companyReportUrl ?? secReport?.url ?? null;
-      urlSource = companyReportUrl ? "company" : (secReport?.url ? "sec" : null);
+      const preferredUrl = companyReportUrl ?? secReport?.url ?? null;
+      const urlSource: LatestEarningsReportSource | null = companyReportUrl ? "company" : (secReport?.url ? "sec" : null);
 
-      if (preferredUrl) {
-        errorMessage = null;
-      } else {
-        errorMessage = errorMessage ?? "No earnings report link found.";
+      if (!preferredUrl) {
+        await recordWithoutNewReport(
+          symbol,
+          providerErrors.join("; ") || "No earnings report link found.",
+          providerErrors.length > 0,
+        );
+        continue;
       }
 
       const upsertResult = await supabase
@@ -899,7 +972,7 @@ export async function syncTrackedEarningsReports(
             title: companyTitle ?? secReport?.title ?? null,
             is_active: true,
             last_checked_at: nowIso,
-            error: errorMessage,
+            error: null,
           },
           { onConflict: "symbol" },
         );
@@ -908,42 +981,14 @@ export async function syncTrackedEarningsReports(
         upsertResult,
       );
 
-      if (preferredUrl) {
-        stats.resolved += 1;
-        if (urlSource === "company") stats.companyLinks += 1;
-        if (urlSource === "sec") stats.secFallbacks += 1;
-      } else {
-        stats.missing += 1;
-      }
+      stats.resolved += 1;
+      if (urlSource === "company") stats.companyLinks += 1;
+      if (urlSource === "sec") stats.secFallbacks += 1;
     } catch (error) {
-      const errorRowUpsertResult = await supabase
-        .from("ticker_earnings_reports")
-        .upsert(
-          {
-            symbol,
-            preferred_url: null,
-            url_source: null,
-            company_url: null,
-            sec_url: null,
-            report_date: null,
-            filing_form: null,
-            title: null,
-            is_active: true,
-            last_checked_at: nowIso,
-            error: error instanceof Error ? error.message : String(error),
-          },
-          { onConflict: "symbol" },
-        );
-      ensureSupabaseSucceeded(
-        `Failed to upsert earnings report error row for ${symbol}`,
-        errorRowUpsertResult,
-      );
-
       if (error instanceof EarningsReportPersistenceError) {
         throw error;
       }
-
-      stats.missing += 1;
+      await recordWithoutNewReport(symbol, error instanceof Error ? error.message : String(error), true);
     }
   }
 

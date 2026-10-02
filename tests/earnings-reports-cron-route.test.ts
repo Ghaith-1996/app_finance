@@ -53,6 +53,8 @@ describe("POST /api/earnings-reports/cron", () => {
       secFallbacks: 1,
       missing: 1,
       inactivated: 2,
+      failed: 0,
+      stale: 0,
     });
     mockLoggerInfo.mockReset();
     mockLoggerError.mockReset();
@@ -76,8 +78,20 @@ describe("POST /api/earnings-reports/cron", () => {
       secFallbacks: 1,
       missing: 1,
       inactivated: 2,
+      failed: 0,
+      stale: 0,
+      partial: false,
     });
     expect(mockSyncTrackedEarningsReports).toHaveBeenCalledWith({ kind: "service-client" });
+  });
+
+  it("reports partial provider failure and returns 502 when every lookup failed (J6)", async () => {
+    mockSyncTrackedEarningsReports.mockResolvedValueOnce({
+      processed: 2, resolved: 0, companyLinks: 0, secFallbacks: 0, missing: 0, inactivated: 0, failed: 2, stale: 2,
+    });
+    const response = await POST(makeRequest("test-secret"));
+    expect(response.status).toBe(502);
+    expect(await response.json()).toMatchObject({ failed: 2, stale: 2, partial: true });
   });
 
   it("returns 500 when the sync service throws", async () => {

@@ -1,9 +1,71 @@
 # Supabase migrations
 
-Run the initial schema in one of these ways:
+`migrations/` is the schema source of truth. Files are applied in filename order.
 
-1. **Supabase Dashboard**: Open your project → SQL Editor → paste the contents of `migrations/001_initial_schema.sql` → Run.
+## Validate before deploying (local, disposable)
 
-2. **Supabase CLI**: From this directory run `supabase db push` (or `supabase migration up`) after linking your project with `supabase link`.
+```bash
+bash scripts/db/validate-migrations.sh
+```
 
-After running, ensure your app's `.env.local` has `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
+This starts a throwaway Supabase Postgres container, applies every migration from scratch, replays
+the legacy-row seeds in `tests/upgrade/before_<prefix>_*.sql` immediately before the matching
+migration (so backfills are exercised like an upgrade), then runs `tests/*.test.sql`, including
+two-session concurrency races. It never connects to a real project. CI runs the same script
+(`.github/workflows/ci.yml`).
+
+## Applying to an environment
+
+1. Check what the environment already has. If migrations were applied with the Supabase CLI:
+
+   ```sql
+   select version, name from supabase_migrations.schema_migrations order by version;
+   ```
+
+   If they were applied through the SQL editor, there is no ledger; compare the schema instead
+   (for example, check that the objects created by the newest migration exist).
+2. Apply only the missing files, in filename order, to **staging first**, then production.
+3. Run the post-apply checks below.
+
+### Audit remediation migrations (must precede the matching app deploy)
+
+| File | Adds | App code that depends on it |
+|---|---|---|
+| `032_atomic_holdings_save.sql` | `save_portfolio_holdings` RPC | CSV/manual import (`saveHoldings`) |
+| `033_holding_valuation_contract.sql` | `previous_close`, `fx_rate_to_usd`, `fx_as_of`; `apply_holding_price_updates`; wider `unrealized_gain_percent` | price refresh, snapshots, valuation |
+| `034_news_enrichment_state.sql` | `enrichment_status` backlog columns | enrichment cron, analysis |
+| `035_ai_quota_release.sql` | `release_ai_quota`; quota functions limited to `service_role` | article chat, portfolio copilot |
+| `036_atomic_position_changes.sql` | `holding_transactions` ledger; `apply_holding_transaction` | add/sell shares |
+| `037_notification_delivery_claims.sql` | delivery claim columns; claim/complete RPCs | daily digest delivery |
+
+Deploying the app before these migrations breaks the listed features (missing RPCs/columns).
+
+## Duplicate version prefixes (008, 019, 024)
+
+Three prefixes are used twice:
+
+- `008_extracted_content.sql`, `008_news_full_content.sql`
+- `019_news_detail_open_count.sql`, `019_user_accepted_terms.sql`
+- `024_daily_digest_notifications.sql`, `024_ticker_earnings_reports.sql`
+
+A clean rebuild in filename order works (the validator proves it). The risk is the Supabase CLI
+ledger: it keys migrations by the numeric prefix, so two files with the same prefix collide and
+`supabase db push` may refuse or skip one. **Do not rename these files blindly**: environments that
+already recorded a version would then see "new" migrations and try to re-apply them.
+
+Before choosing a fix, inspect each environment's ledger (query above):
+
+- If no environment uses the CLI ledger, leave the files as they are and keep new prefixes unique.
+- If an environment does use it, pick one explicit plan per environment (for example, record the
+  second file of each pair under a new version with `supabase migration repair`, after confirming
+  its objects already exist) and apply the same renames in the repository in the same change.
+
+New migrations must always use a new, unique prefix.
+
+## Post-apply checks (staging)
+
+- Two-user isolation: as user B, attempt reads/writes of user A's portfolio, holdings, theses and
+  alerts by direct id substitution; every attempt must fail or return no rows.
+- `select has_function_privilege('anon', 'release_ai_quota(uuid,text,timestamptz,text,text)', 'EXECUTE');`
+  must be `false` (same for the other quota and delivery functions).
+- Thesis tracker (`030`/`031`): save and reload a thesis with a test account.

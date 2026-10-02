@@ -25,6 +25,14 @@ type ActionState = {
 
 const ACTIONS: AdminAction[] = [
   {
+    id: "job-health",
+    label: "Job health",
+    description: "Backlog, freshness, failed analyses, stale quotes and failed/uncertain deliveries from stored job state.",
+    method: "GET",
+    path: "/api/admin/job-health",
+    icon: Activity,
+  },
+  {
     id: "health",
     label: "News health",
     description: "Checks the admin-only diagnostics route for current worker and pipeline readiness.",

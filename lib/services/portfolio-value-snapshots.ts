@@ -29,8 +29,16 @@ type SnapshotWrite = {
   day_change_percent: number;
   quote_currency: string;
   positions_count: number;
+  valuation_version: number;
   updated_at: string;
 };
+
+/**
+ * Unit of total_value/cost_basis (review R3). 2 = USD-normalized canonical valuation. Rows from
+ * before migration 041 are NULL: per-holding currency sums that cannot be compared or converted,
+ * so they are never charted next to current rows.
+ */
+export const SNAPSHOT_VALUATION_VERSION = 2;
 
 export type PortfolioValueSnapshotCronResult = {
   ran: true;
@@ -91,6 +99,7 @@ export async function loadPortfolioValueSnapshots(
     .from("portfolio_value_snapshots")
     .select("id, captured_at, bucket_start, total_value, cost_basis, day_change_percent, quote_currency, positions_count")
     .eq("portfolio_id", portfolioId)
+    .eq("valuation_version", SNAPSHOT_VALUATION_VERSION)
     .order("bucket_start", { ascending: false })
     .limit(limit);
 
@@ -246,6 +255,7 @@ export async function recordPortfolioValueSnapshots(options: {
       day_change_percent: roundMoney(valuation.dayChangePercent ?? 0),
       quote_currency: valuation.baseCurrency,
       positions_count: valuation.freshCount + valuation.staleCount,
+      valuation_version: SNAPSHOT_VALUATION_VERSION,
       updated_at: capturedAt,
     });
   }

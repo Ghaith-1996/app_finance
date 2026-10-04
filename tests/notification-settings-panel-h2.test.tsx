@@ -62,6 +62,48 @@ describe("NotificationSettingsPanel phone verification", () => {
     expect(screen.queryByText("Verified for SMS digests.")).toBeNull();
   });
 
+  it("R9: an unconfirmed send keeps the code field usable, without another SMS", async () => {
+    const { onConfirmCode } = renderPanel({
+      onSendCode: vi.fn().mockResolvedValue({
+        ok: false,
+        error: "We could not confirm the code was sent. If it arrives within a few minutes you can still use it.",
+        codeMayArrive: true,
+      }),
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Send code" }));
+    await waitFor(() => expect(screen.getByText(/could not confirm the code was sent/)).toBeTruthy());
+    fireEvent.change(screen.getByLabelText("Verification code"), { target: { value: "123456" } });
+    fireEvent.click(screen.getByRole("button", { name: "Verify" }));
+
+    await waitFor(() => expect(screen.getByText("Verified for SMS digests.")).toBeTruthy());
+    expect(onConfirmCode).toHaveBeenCalledWith("+14165551234", "123456");
+  });
+
+  it("R9: a resend refused during the cooldown (e.g. after a reload) still lets the earlier code be entered", async () => {
+    renderPanel({
+      onSendCode: vi.fn().mockResolvedValue({
+        ok: false,
+        error: "Please wait 42 seconds before requesting another code.",
+        retryAfterSeconds: 42,
+        codeMayArrive: true,
+      }),
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Send code" }));
+    await waitFor(() => expect(screen.getByLabelText("Verification code")).toBeTruthy());
+  });
+
+  it("a definite send failure does not offer the code field", async () => {
+    renderPanel({
+      onSendCode: vi.fn().mockResolvedValue({ ok: false, error: "We could not send a code to that number." }),
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Send code" }));
+    await waitFor(() => expect(screen.getByText(/could not send a code/)).toBeTruthy());
+    expect(screen.queryByLabelText("Verification code")).toBeNull();
+  });
+
   it("treats a changed number as unverified again", () => {
     renderPanel({ initialVerifiedPhoneNumber: "+14165551234" });
     expect(screen.getByText("Verified for SMS digests.")).toBeTruthy();

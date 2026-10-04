@@ -9,6 +9,8 @@ Mirrors lib/security/publisher-url.ts:
 `public_network_only()` binds the check to the connection: while active, every getaddrinfo call in
 this thread (requests/urllib3/newspaper all resolve through it) fails unless every answer is public,
 so a hostname that re-resolves to a private address between a preflight and the request is refused.
+`no_network()` is stricter: every getaddrinfo call in this thread fails, for code (the HTML parser)
+that must not reach the network at all.
 """
 
 from __future__ import annotations
@@ -121,6 +123,8 @@ _installed = False
 
 
 def _guarded_getaddrinfo(host, port, *args, **kwargs):
+    if getattr(_guard, "offline", 0):
+        raise UnsafeDestinationError(f"network_disabled: {host}")
     results = _original_getaddrinfo(host, port, *args, **kwargs)
     if getattr(_guard, "active", 0):
         ok, reason = _addresses_are_public(results)
@@ -146,6 +150,17 @@ def public_network_only() -> Iterator[None]:
         yield
     finally:
         _guard.active -= 1
+
+
+@contextlib.contextmanager
+def no_network() -> Iterator[None]:
+    """Within this block, no connection in this thread can resolve (and so reach) any host."""
+    _install_guard()
+    _guard.offline = getattr(_guard, "offline", 0) + 1
+    try:
+        yield
+    finally:
+        _guard.offline -= 1
 
 
 def resolve_public_hostname(hostname: str, port: int) -> tuple[bool, str | None]:

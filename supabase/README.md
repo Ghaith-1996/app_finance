@@ -40,6 +40,7 @@ two-session concurrency races. It never connects to a real project. CI runs the 
 | `038_sms_phone_verification.sql` | `phone_verification_challenges`, `verified_phone_numbers`; issue/confirm RPCs (service role only) | settings SMS verification; daily digest SMS (unverified numbers stop receiving SMS until verified) |
 | `039_holding_transaction_identity.sql` | `holding_transactions.requested_holding_id`; `apply_holding_transaction` treats an id as a retry only for the same holding and add price | add/sell shares |
 | `040_phone_verification_release.sql` | `release_phone_verification` (service role only) | settings SMS verification (unsent codes no longer consume the cooldown) |
+| `041_snapshot_valuation_version.sql` | `portfolio_value_snapshots.valuation_version`; pre-041 rows stay NULL and are excluded from history | hourly value snapshots; `/portfolio/full` performance history |
 
 Deploying the app before these migrations breaks the listed features (missing RPCs/columns).
 

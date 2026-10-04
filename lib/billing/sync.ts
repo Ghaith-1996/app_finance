@@ -9,7 +9,7 @@ import {
   loadBillingCustomerByUserId,
   loadSubscriptionsForUser,
   upsertBillingCustomer,
-  upsertSubscriptionRow,
+  writeSubscriptionRowIfCurrent,
 } from "@/lib/billing/store";
 import { deriveStripeCustomerName } from "@/lib/billing/subscriptions";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -227,6 +227,8 @@ async function reconcileAgainstStoredSubscription(
   }
 }
 
+const SUBSCRIPTION_WRITE_ATTEMPTS = 3;
+
 export async function syncSubscriptionFromStripeSubscription(
   subscription: Stripe.Subscription,
 ): Promise<void> {
@@ -243,15 +245,27 @@ export async function syncSubscriptionFromStripeSubscription(
   });
 
   // One row per user: an event for a different subscription than the stored one (e.g. a late
-  // cancellation of an old subscription) must not overwrite the current one (audit B7).
-  const stored = (await loadSubscriptionsForUser(serviceSupabase, userId))[0] ?? null;
-  let target: Stripe.Subscription | null = subscription;
-  if (stored?.stripe_subscription_id && stored.stripe_subscription_id !== subscription.id) {
-    target = await reconcileAgainstStoredSubscription(customerId, subscription, stored);
-  }
-  if (!target) return;
+  // cancellation of an old subscription) must not overwrite the current one (audit B7). The write is
+  // conditional on the row read here, so two concurrent events for different subscriptions cannot
+  // overwrite each other's decision (review R2): the loser re-reads and reconciles again.
+  for (let attempt = 0; attempt < SUBSCRIPTION_WRITE_ATTEMPTS; attempt += 1) {
+    const stored = (await loadSubscriptionsForUser(serviceSupabase, userId))[0] ?? null;
+    let target: Stripe.Subscription | null = subscription;
+    if (stored?.stripe_subscription_id && stored.stripe_subscription_id !== subscription.id) {
+      target = await reconcileAgainstStoredSubscription(customerId, subscription, stored);
+    }
+    if (!target) return;
 
-  await upsertSubscriptionRow(serviceSupabase, normalizeSubscription(userId, target));
+    const written = await writeSubscriptionRowIfCurrent(
+      serviceSupabase,
+      normalizeSubscription(userId, target),
+      stored?.stripe_subscription_id ?? null,
+    );
+    if (written) return;
+  }
+
+  // Failing the webhook makes Stripe redeliver it later, when the competing write has settled.
+  throw new Error("Subscription row kept changing during sync; retry later");
 }
 
 export async function syncSubscriptionById(subscriptionId: string): Promise<void> {

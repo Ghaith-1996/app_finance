@@ -42,6 +42,11 @@ export function PortfolioSnapshotPanel({
           </p>
         </div>
       </div>
+      {display.notes.map((note) => (
+        <p key={note} className="text-xs text-amber-300">
+          {note}
+        </p>
+      ))}
       <div className="grid gap-3 sm:grid-cols-2">
         <Metric
           label="Day change"

@@ -70,6 +70,43 @@ describe("loadJobHealth", () => {
     expect(reasons).toMatch(/1 uncertain/);
   });
 
+  it("R12: terminal enrichment failures and failing earnings refreshes degrade health", async () => {
+    let earningsOps: string[] = [];
+    const report = await loadJobHealth(
+      fakeSupabase((table, ops) => {
+        const has = (text: string) => ops.some((op) => op.includes(text));
+        if (table === "news_items" && has('eq:["enrichment_status","failed"]')) return { count: 500 };
+        if (table === "ticker_earnings_reports") {
+          earningsOps = ops;
+          return { count: 20 };
+        }
+        return healthyAnswers(table, ops);
+      }) as never,
+      NOW,
+    );
+
+    expect(report.status).toBe("degraded");
+    expect(report.enrichment.failedLast24h).toBe(500);
+    const reasons = report.reasons.join(" | ");
+    expect(reasons).toMatch(/500 article\(s\) from the last 24 hours failed enrichment/);
+    expect(reasons).toMatch(/20 tracked symbol\(s\) failed their last earnings report refresh/);
+    // Informational notes ("no newer report", "no link found") are not counted as failures.
+    expect(earningsOps.join(" ")).toMatch(/not:\["error","in",.*No newer report found.*No earnings report link found/);
+  });
+
+  it("R12: a few failures stay within the thresholds", async () => {
+    const report = await loadJobHealth(
+      fakeSupabase((table, ops) => {
+        const has = (text: string) => ops.some((op) => op.includes(text));
+        if (table === "news_items" && has('eq:["enrichment_status","failed"]')) return { count: 3 };
+        if (table === "ticker_earnings_reports") return { count: 2 };
+        return healthyAnswers(table, ops);
+      }) as never,
+      NOW,
+    );
+    expect(report.status).toBe("ok");
+  });
+
   it("treats a failed health query as degraded, never as healthy", async () => {
     const report = await loadJobHealth(
       fakeSupabase((table, ops) => (table === "holdings" ? { error: { message: "timeout" } } : healthyAnswers(table, ops))) as never,

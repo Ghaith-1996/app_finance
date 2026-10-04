@@ -1,5 +1,5 @@
 import { cached } from "@/lib/services/cache";
-import { BASE_CURRENCY, normalizeCurrencyCode } from "@/lib/services/valuation";
+import { BASE_CURRENCY, MINOR_UNITS, normalizeCurrencyCode } from "@/lib/services/valuation";
 import { getQuote } from "@/lib/services/yahoo-finance";
 
 /**
@@ -13,13 +13,6 @@ import { getQuote } from "@/lib/services/yahoo-finance";
 export const FX_CACHE_TTL_MS = 15 * 60_000;
 
 export type FxRate = { rateToBase: number; asOf: string };
-
-const MINOR_UNITS: Record<string, { major: string; divisor: number }> = {
-  GBp: { major: "GBP", divisor: 100 },
-  GBX: { major: "GBP", divisor: 100 },
-  ZAc: { major: "ZAR", divisor: 100 },
-  ILA: { major: "ILS", divisor: 100 },
-};
 
 async function fetchMajorRate(major: string): Promise<FxRate | null> {
   const quote = await getQuote(`${major}${BASE_CURRENCY}=X`);

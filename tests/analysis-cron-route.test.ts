@@ -39,10 +39,12 @@ import { GET, POST } from "@/app/api/analysis/cron/route";
 function buildMockSupabase({
   portfolios = [],
   latestRunsByPortfolio = {},
+  latestRunStartsByPortfolio = {},
   newestEnrichedAt = new Date().toISOString(),
 }: {
   portfolios?: Array<{ id: string; user_id: string }>;
   latestRunsByPortfolio?: Record<string, string | null | undefined>;
+  latestRunStartsByPortfolio?: Record<string, string>;
   newestEnrichedAt?: string | null;
 } = {}) {
   return {
@@ -91,7 +93,12 @@ function buildMockSupabase({
                           ? latestRunsByPortfolio[selectedPortfolioId]
                           : null;
                         return Promise.resolve({
-                          data: completedAt ? { completed_at: completedAt } : null,
+                          data: completedAt
+                            ? {
+                                completed_at: completedAt,
+                                started_at: latestRunStartsByPortfolio[selectedPortfolioId!] ?? null,
+                              }
+                            : null,
                           error: null,
                         });
                       },
@@ -217,6 +224,21 @@ describe("GET /api/analysis/cron", () => {
       });
       const body = await (await GET(makeGetRequest("test-secret"))).json();
       expect(body.portfolioIds).toEqual(["p1"]);
+    });
+
+    it("R7: an article enriched while the last run was in progress is analysed next time", async () => {
+      // The run read the pool at its start (60 min ago), the article was enriched 55 min ago and the
+      // run ended 50 min ago: the run never saw the article.
+      const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60 * 1000).toISOString();
+      mockSupabase = buildMockSupabase({
+        portfolios: [{ id: "p1", user_id: "u1" }],
+        latestRunsByPortfolio: { p1: minutesAgo(50) },
+        latestRunStartsByPortfolio: { p1: minutesAgo(60) },
+        newestEnrichedAt: minutesAgo(55),
+      });
+      const body = await (await GET(makeGetRequest("test-secret"))).json();
+      expect(body.portfolioIds).toEqual(["p1"]);
+      expect(body.upToDateCount).toBe(0);
     });
 
     it("always selects portfolios that never produced a usable run", async () => {

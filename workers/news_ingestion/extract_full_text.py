@@ -15,6 +15,7 @@ from urllib.parse import urljoin, urlparse, urlunparse
 from .url_safety import (
     UnsafeDestinationError,
     assert_safe_public_url,
+    no_network,
     public_network_only,
     validate_public_url,
 )
@@ -98,6 +99,8 @@ def _configure_newspaper_article(url: str):
     # newspaper uses requests under the hood; set browser-like headers
     article.config.browser_user_agent = USER_AGENT
     article.config.request_timeout = 12
+    # Text extraction needs no images; newspaper would otherwise download them during parse().
+    article.config.fetch_images = False
     return article
 
 
@@ -187,8 +190,8 @@ def extract_article_text(url: str) -> tuple[str | None, str | None, str | None]:
     """
     Download and parse a single article URL.
     Returns (text, canonical_url_or_none, error_or_none).
-    The HTML is fetched once by fetch_public_html and handed to newspaper, so newspaper never
-    makes its own (unvalidated) request.
+    The HTML is fetched once by fetch_public_html and handed to newspaper. Parsing runs inside
+    no_network(), so nothing the page references (images, ...) can trigger a request.
     """
     final_url, html, fetch_error = fetch_public_html(url)
     if fetch_error or html is None:
@@ -199,8 +202,9 @@ def extract_article_text(url: str) -> tuple[str | None, str | None, str | None]:
         return None, None, "extractor_not_available"
 
     try:
-        article.download(input_html=html)
-        article.parse()
+        with no_network():
+            article.download(input_html=html)
+            article.parse()
         text = (article.text or "").strip()
         canon = getattr(article, "canonical_link", None) or None
         if text and len(text) >= MIN_USEFUL_LENGTH:

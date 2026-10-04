@@ -2,6 +2,8 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { EARNINGS_NO_NEWER_REPORT_NOTE, EARNINGS_NO_REPORT_LINK_NOTE } from "@/lib/services/earnings-reports";
+
 /**
  * Job health from durable state (audit H8). A cron returning HTTP 200 says nothing about whether
  * work actually completed; these signals read what the jobs left behind.
@@ -18,6 +20,10 @@ export const JOB_HEALTH_THRESHOLDS = {
   quoteStaleHours: 24,
   /** Share of stale quotes above which pricing is degraded. */
   staleQuoteShare: 0.25,
+  /** Articles from the last 24h whose enrichment failed for good, above which enrichment is degraded. */
+  enrichmentFailedLast24h: 10,
+  /** Active earnings rows whose last refresh failed (informational notes excluded). */
+  earningsFailedRows: 5,
 } as const;
 
 export type JobHealthReport = {
@@ -25,7 +31,7 @@ export type JobHealthReport = {
   reasons: string[];
   checkedAt: string;
   ingestion: { latestArticleAt: string | null; minutesSinceLatest: number | null };
-  enrichment: { dueBacklog: number; oldestPendingAt: string | null; failed: number };
+  enrichment: { dueBacklog: number; oldestPendingAt: string | null; failedLast24h: number };
   analysis: { failedRunsLast24h: number; latestUsableRunAt: string | null };
   quotes: { holdings: number; stale: number; staleShare: number | null };
   notifications: { failedLast7d: number; uncertainLast7d: number };
@@ -73,7 +79,12 @@ export async function loadJobHealth(supabase: SupabaseClient, now: Date = new Da
       .order("created_at", { ascending: true })
       .limit(1)
       .maybeSingle(),
-    supabase.from("news_items").select("id", head).eq("enrichment_status", "failed") as unknown as Promise<Count>,
+    // Windowed so health recovers once failures stop; the news pool is 24h anyway.
+    supabase
+      .from("news_items")
+      .select("id", head)
+      .eq("enrichment_status", "failed")
+      .gte("created_at", dayAgo) as unknown as Promise<Count>,
     supabase.from("analysis_runs").select("id", head).eq("status", "failed").gte("created_at", dayAgo) as unknown as Promise<Count>,
     supabase
       .from("analysis_runs")
@@ -93,7 +104,8 @@ export async function loadJobHealth(supabase: SupabaseClient, now: Date = new Da
       .from("ticker_earnings_reports")
       .select("symbol", head)
       .eq("is_active", true)
-      .not("error", "is", null) as unknown as Promise<Count>,
+      .not("error", "is", null)
+      .not("error", "in", `("${EARNINGS_NO_NEWER_REPORT_NOTE}","${EARNINGS_NO_REPORT_LINK_NOTE}")`) as unknown as Promise<Count>,
   ]);
 
   const queryErrors = [
@@ -120,7 +132,7 @@ export async function loadJobHealth(supabase: SupabaseClient, now: Date = new Da
     reasons: [],
     checkedAt: nowIso,
     ingestion: { latestArticleAt, minutesSinceLatest: minutesBetween(latestArticleAt, now) },
-    enrichment: { dueBacklog: dueBacklog.count ?? 0, oldestPendingAt, failed: failedEnrichment.count ?? 0 },
+    enrichment: { dueBacklog: dueBacklog.count ?? 0, oldestPendingAt, failedLast24h: failedEnrichment.count ?? 0 },
     analysis: {
       failedRunsLast24h: failedRuns.count ?? 0,
       latestUsableRunAt: (latestUsableRun.data as { completed_at?: string } | null)?.completed_at ?? null,
@@ -138,6 +150,13 @@ export async function loadJobHealth(supabase: SupabaseClient, now: Date = new Da
   const backlogAge = minutesBetween(oldestPendingAt, now);
   if (backlogAge !== null && backlogAge > JOB_HEALTH_THRESHOLDS.enrichmentBacklogStaleMinutes) {
     reasons.push(`Enrichment backlog is not draining (oldest unfinished article ${backlogAge} minutes old).`);
+  }
+  // Review R12: terminal failures leave the backlog, so they need their own signal.
+  if (report.enrichment.failedLast24h > JOB_HEALTH_THRESHOLDS.enrichmentFailedLast24h) {
+    reasons.push(`${report.enrichment.failedLast24h} article(s) from the last 24 hours failed enrichment for good.`);
+  }
+  if (report.earnings.rowsWithErrors > JOB_HEALTH_THRESHOLDS.earningsFailedRows) {
+    reasons.push(`${report.earnings.rowsWithErrors} tracked symbol(s) failed their last earnings report refresh.`);
   }
   const analysisAge = minutesBetween(report.analysis.latestUsableRunAt, now);
   if (analysisAge === null || analysisAge > JOB_HEALTH_THRESHOLDS.analysisStaleHours * 60) {

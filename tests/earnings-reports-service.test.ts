@@ -13,6 +13,9 @@ type MockTables = Record<TableName, Array<Record<string, unknown>>>;
 
 type FailureValue = string | null | undefined;
 
+/** PostgREST-style response cap: a single read never returns more than this many rows. */
+const mockLimits = { maxRows: Number.POSITIVE_INFINITY };
+
 type MockFailures = {
   select?: Partial<Record<TableName, FailureValue | FailureValue[]>>;
   upsert?: Partial<Record<TableName, FailureValue | FailureValue[]>>;
@@ -73,6 +76,7 @@ function createQueryBuilder(
 
       const matched = rows.filter((row) => filters.every((filter) => filter(row)));
       const data = (window ? matched.slice(window[0], window[1] + 1) : matched)
+        .slice(0, mockLimits.maxRows)
         .map((row) => pickColumns(row, columns));
 
       return Promise.resolve({ data, error: null }).then(onfulfilled, onrejected);
@@ -836,5 +840,39 @@ describe("earnings report last-known-good (audit J6)", () => {
 
     expect(result).toMatchObject({ missing: 1, failed: 1, stale: 0 });
     expect(supabase.tables.ticker_earnings_reports[0]).toMatchObject({ symbol: "MSFT", preferred_url: null, error: "SEC down" });
+  });
+
+  it("R8: keeps the cached report of a symbol beyond the first 1,000-row response page", async () => {
+    // 1,001 cached rows; only the last one is still tracked, and both providers fail for it.
+    const others = Array.from({ length: 1_000 }, (_, index) => ({
+      ...cached,
+      symbol: `OLD${String(index).padStart(4, "0")}`,
+    }));
+    const last = { ...cached, symbol: "ZZZZ" };
+    const supabase = createMockSupabase({
+      holdings: [{ symbol: "ZZZZ" }],
+      ticker_earnings_reports: [...others, last],
+    });
+
+    mockLimits.maxRows = 1_000;
+    try {
+      const result = await syncTrackedEarningsReports(supabase as never, {
+        getCompanyWebsiteSeed: async () => null,
+        discoverCompanyEarningsLink: async () => null,
+        resolveLatestSecEarningsReport: async () => {
+          throw new Error("SEC down");
+        },
+      });
+      expect(result).toMatchObject({ failed: 1, stale: 1, missing: 0 });
+    } finally {
+      mockLimits.maxRows = Number.POSITIVE_INFINITY;
+    }
+
+    expect(supabase.tables.ticker_earnings_reports.find((row) => row.symbol === "ZZZZ")).toMatchObject({
+      is_active: true,
+      preferred_url: cached.preferred_url,
+      report_date: cached.report_date,
+      title: cached.title,
+    });
   });
 });

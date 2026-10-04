@@ -69,6 +69,8 @@ export async function sendPhoneVerificationCodeForUser(
           ? `Too many codes requested. Try again in ${waitText(retryAfterSeconds)}.`
           : `Please wait ${waitText(retryAfterSeconds)} before requesting another code.`,
       retryAfterSeconds,
+      // The refusal means an earlier code was issued recently; it can still be entered.
+      codeMayArrive: true,
     };
   }
 
@@ -98,13 +100,13 @@ export async function sendPhoneVerificationCodeForUser(
     });
     if (releaseError) log.error("release_phone_verification failed", { error: releaseError.message });
   }
-  return {
-    ok: false,
-    error:
-      sent.status === "uncertain"
-        ? "We could not confirm the code was sent. If it arrives within a few minutes you can still use it."
-        : "We could not send a code to that number. Check it and try again.",
-  };
+  return sent.status === "uncertain"
+    ? {
+        ok: false,
+        error: "We could not confirm the code was sent. If it arrives within a few minutes you can still use it.",
+        codeMayArrive: true,
+      }
+    : { ok: false, error: "We could not send a code to that number. Check it and try again." };
 }
 
 export async function confirmPhoneVerificationCodeForUser(

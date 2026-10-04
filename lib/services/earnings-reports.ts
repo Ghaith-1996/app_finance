@@ -24,6 +24,10 @@ const SEC_TICKERS_URL = "https://www.sec.gov/files/company_tickers.json";
 const SEC_SUBMISSIONS_BASE_URL = "https://data.sec.gov/submissions";
 const SEC_ARCHIVES_BASE_URL = "https://www.sec.gov/Archives/edgar/data";
 
+/** Informational row notes, not failures; job health ignores them (review R12). */
+export const EARNINGS_NO_NEWER_REPORT_NOTE = "No newer report found; showing the last known report.";
+export const EARNINGS_NO_REPORT_LINK_NOTE = "No earnings report link found.";
+
 const LANDING_KEYWORDS = [
   "investor",
   "investor-relations",
@@ -810,9 +814,15 @@ export async function syncTrackedEarningsReports(
 
   const trackedSymbols = await resolveTrackedSymbolUniverse(supabase);
   const trackedSymbolSet = new Set(trackedSymbols);
-  const existingRowsResult = await supabase
-    .from("ticker_earnings_reports")
-    .select("symbol, is_active, preferred_url, url_source, company_url, sec_url, report_date, filing_form, title");
+  // Paginated like the tracked universe (review R8): a capped read would make a cached symbol beyond
+  // the first page look uncached, and a provider failure would then null its last known report.
+  const existingRowsResult = await fetchAllRows<Record<string, unknown>>((from, to) =>
+    supabase
+      .from("ticker_earnings_reports")
+      .select("symbol, is_active, preferred_url, url_source, company_url, sec_url, report_date, filing_form, title")
+      .order("symbol", { ascending: true })
+      .range(from, to),
+  );
   ensureSupabaseSucceeded(
     "Failed to load existing earnings report rows",
     existingRowsResult,
@@ -872,7 +882,7 @@ export async function syncTrackedEarningsReports(
             last_checked_at: nowIso,
             error: providerFailed
               ? `Refresh failed; showing the last known report. ${errorMessage}`
-              : "No newer report found; showing the last known report.",
+              : EARNINGS_NO_NEWER_REPORT_NOTE,
           },
           { onConflict: "symbol" },
         );
@@ -952,7 +962,7 @@ export async function syncTrackedEarningsReports(
       if (!preferredUrl) {
         await recordWithoutNewReport(
           symbol,
-          providerErrors.join("; ") || "No earnings report link found.",
+          providerErrors.join("; ") || EARNINGS_NO_REPORT_LINK_NOTE,
           providerErrors.length > 0,
         );
         continue;

@@ -95,6 +95,15 @@ export interface DailyDigestCronRunResult {
 
 export type SendPhoneCodeResult =
   | { ok: true }
-  | { ok: false; error: string; retryAfterSeconds?: number };
+  | {
+      ok: false;
+      error: string;
+      retryAfterSeconds?: number;
+      /**
+       * A code issued for this number may still be valid (delivery unconfirmed, or a resend refused
+       * during the cooldown after an earlier code), so the code field must stay usable (review R9).
+       */
+      codeMayArrive?: boolean;
+    };
 
 export type ConfirmPhoneCodeResult = { ok: true } | { ok: false; error: string };

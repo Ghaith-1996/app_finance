@@ -112,7 +112,9 @@ export async function ingestNewsToSupabase(
         enrichment_attempts: attempts,
         enrichment_next_attempt_at: null,
         enrichment_last_error: null,
-        enriched_at: nowIso,
+        // Time of this article's write, not the batch start: the analysis cron compares it with run
+        // start times, and a batch-start stamp could predate a run that never saw the article (R7).
+        enriched_at: new Date().toISOString(),
       };
     } catch (error) {
       if (attempts >= ENRICHMENT_MAX_ATTEMPTS) {

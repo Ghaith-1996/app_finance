@@ -23,7 +23,8 @@ import type { HomeDashboardData } from "@/lib/server/page-loaders";
 import type { PortfolioHealthTone } from "@/lib/services/portfolio-health";
 import { storyHref } from "@/lib/feed/constants";
 import { buildNextActions } from "@/lib/home/next-actions";
-import { categoryLabel, cn, formatCurrency, formatPercent } from "@/lib/utils";
+import { describeOverview } from "@/lib/portfolio/value-display";
+import { categoryLabel, cn } from "@/lib/utils";
 
 function toneClasses(tone: PortfolioHealthTone) {
   switch (tone) {
@@ -81,6 +82,8 @@ export function TodayDashboard({ data }: { data: HomeDashboardData }) {
   } satisfies CSSProperties;
   const digestEnabled =
     data.notifications.emailDigestEnabled || data.notifications.smsDigestEnabled;
+  // Same display contract as every other value surface (review R6): unknown is "—", partial is said.
+  const valueDisplay = describeOverview(data.overview);
 
   if (!data.portfolioId) {
     return (
@@ -152,19 +155,26 @@ export function TodayDashboard({ data }: { data: HomeDashboardData }) {
               <p className="text-sm font-medium text-slate-400">Portfolio value</p>
               <div className="mt-2 flex flex-wrap items-end gap-3">
                 <p className="text-4xl font-bold tracking-tight text-white sm:text-5xl">
-                  {formatCurrency(data.overview.totalValue)}
+                  {valueDisplay.value}
                 </p>
                 <span
                   className={cn(
                     "mb-1 rounded-lg px-2.5 py-1 text-sm font-bold",
-                    data.overview.dayChange >= 0
-                      ? "bg-emerald-400/10 text-emerald-300"
-                      : "bg-red-400/10 text-red-300",
+                    valueDisplay.direction === "unknown"
+                      ? "bg-white/5 text-slate-400"
+                      : valueDisplay.direction === "down"
+                        ? "bg-red-400/10 text-red-300"
+                        : "bg-emerald-400/10 text-emerald-300",
                   )}
                 >
-                  {formatPercent(data.overview.dayChange)}
+                  {valueDisplay.dayChangePercent}
                 </span>
               </div>
+              {valueDisplay.notes.map((note) => (
+                <p key={note} className="mt-2 max-w-md text-xs text-amber-300">
+                  {note}
+                </p>
+              ))}
             </div>
             <div className="flex items-center gap-4">
               <div className="relative flex h-20 w-20 shrink-0 items-center justify-center rounded-full" style={scoreStyle}>

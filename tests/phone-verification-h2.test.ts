@@ -186,6 +186,7 @@ describe("sending a verification code", () => {
       ok: false,
       error: "Please wait 42 seconds before requesting another code.",
       retryAfterSeconds: 42,
+      codeMayArrive: true,
     });
 
     rpcClient([{ outcome: "hourly_limit", retry_after_seconds: 2520 }]);
@@ -202,6 +203,7 @@ describe("sending a verification code", () => {
     const result = await sendPhoneVerificationCodeForUser("user-1", PHONE);
     expect(result.ok).toBe(false);
     expect(result.ok ? "" : result.error).toMatch(/could not confirm/i);
+    expect(result).toMatchObject({ codeMayArrive: true });
   });
 });
 

@@ -9,6 +9,7 @@ const mocked = vi.hoisted(() => ({
   stripeSubscriptions: [] as unknown[],
   listFails: false,
   listCalls: 0,
+  beforeWrite: null as null | ((row: StoredRow) => Promise<void>),
 }));
 
 vi.mock("@/lib/supabase/service", () => ({ createServiceClient: () => ({}) }));
@@ -16,9 +17,14 @@ vi.mock("@/lib/billing/store", () => ({
   loadBillingCustomerByStripeCustomerId: async () => ({ user_id: "user-1", stripe_customer_id: "cus_1" }),
   loadBillingCustomerByUserId: async () => null,
   upsertBillingCustomer: async () => undefined,
-  loadSubscriptionsForUser: async () => mocked.stored,
-  upsertSubscriptionRow: async (_client: unknown, row: StoredRow) => {
+  loadSubscriptionsForUser: async () => mocked.stored.map((row) => ({ ...row })),
+  // Mirrors the conditional UPDATE/INSERT: applies only while the stored row is the one expected.
+  writeSubscriptionRowIfCurrent: async (_client: unknown, row: StoredRow, expected: string | null) => {
+    if (mocked.beforeWrite) await mocked.beforeWrite(row);
+    const current = mocked.stored[0]?.stripe_subscription_id ?? null;
+    if (current !== expected) return false;
     mocked.stored = [row];
+    return true;
   },
 }));
 vi.mock("@/lib/billing/stripe", () => ({
@@ -75,6 +81,50 @@ describe("subscription reconciliation (B7)", () => {
     mocked.stripeSubscriptions = [];
     mocked.listFails = false;
     mocked.listCalls = 0;
+    mocked.beforeWrite = null;
+  });
+
+  it("concurrent: A's cancellation decided from a stale read cannot overwrite B written meanwhile (R2)", async () => {
+    mocked.stored = [{ stripe_subscription_id: "sub_old_A", status: "active", current_period_end: null }];
+    mocked.stripeSubscriptions = [oldA("canceled"), newB("active")];
+
+    // A reads stored A and pauses just before its write; B's activation runs to completion meanwhile.
+    let pausedOnce = false;
+    mocked.beforeWrite = async (row) => {
+      if (row.stripe_subscription_id !== "sub_old_A" || pausedOnce) return;
+      pausedOnce = true;
+      mocked.beforeWrite = null;
+      await syncSubscriptionFromStripeSubscription(newB("active"));
+      expect(mocked.stored[0]).toMatchObject({ stripe_subscription_id: "sub_new_B", status: "active" });
+    };
+
+    await syncSubscriptionFromStripeSubscription(oldA("canceled"));
+
+    expect(pausedOnce).toBe(true);
+    expect(mocked.stored[0]).toMatchObject({ stripe_subscription_id: "sub_new_B", status: "active" });
+  });
+
+  it("first subscription for a user: a concurrent insert makes the loser re-read and reconcile", async () => {
+    mocked.stripeSubscriptions = [oldA("canceled"), newB("active")];
+    let raced = false;
+    mocked.beforeWrite = async (row) => {
+      if (raced || row.stripe_subscription_id !== "sub_old_A") return;
+      raced = true;
+      mocked.stored = [{ stripe_subscription_id: "sub_new_B", status: "active", current_period_end: null }];
+    };
+
+    await syncSubscriptionFromStripeSubscription(oldA("canceled"));
+
+    expect(mocked.stored[0]).toMatchObject({ stripe_subscription_id: "sub_new_B", status: "active" });
+  });
+
+  it("gives up with an error (Stripe will redeliver) when the row keeps changing", async () => {
+    mocked.stored = [{ stripe_subscription_id: "sub_new_B", status: "active", current_period_end: null }];
+    mocked.beforeWrite = async () => {
+      mocked.stored = [{ stripe_subscription_id: `sub_other_${Math.random()}`, status: "active", current_period_end: null }];
+    };
+
+    await expect(syncSubscriptionFromStripeSubscription(newB("canceled"))).rejects.toThrow(/retry later/);
   });
 
   it("a late cancellation of old subscription A does not replace active subscription B", async () => {

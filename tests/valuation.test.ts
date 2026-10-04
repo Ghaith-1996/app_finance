@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { buildHoldingPricingPlan, type PricingHoldingRow } from "@/lib/services/holding-pricing";
-import { valuePortfolio, type ValuationHoldingInput } from "@/lib/services/valuation";
+import { formatQuoteAmount, valuePortfolio, type ValuationHoldingInput } from "@/lib/services/valuation";
 
 const NOW = new Date("2026-10-01T15:00:00.000Z");
 const FRESH = "2026-10-01T14:55:00.000Z";
@@ -207,5 +207,20 @@ describe("buildHoldingPricingPlan — B3 partial quote refresh", () => {
     expect(withoutRate.updates[0]).toMatchObject({ fxRateToUsd: null });
     expect(withoutRate.syncState).toBe("partial");
     expect(withoutRate.valuation.missingFxCurrencies).toEqual(["CAD"]);
+  });
+});
+
+describe("formatQuoteAmount — R4 minor currency units", () => {
+  it("shows pence, cents and agorot in their major currency instead of 100x too high", () => {
+    expect(formatQuoteAmount(100, "GBp")).toBe("£1.00");
+    expect(formatQuoteAmount(12_345, "GBX")).toBe("£123.45");
+    expect(formatQuoteAmount(250, "ZAc").replace(/\s/u, " ")).toBe("ZAR 2.50");
+    expect(formatQuoteAmount(990, "ILA")).toBe("₪9.90");
+  });
+
+  it("leaves major currencies unchanged", () => {
+    expect(formatQuoteAmount(100, "GBP")).toBe("£100.00");
+    expect(formatQuoteAmount(45, "CAD")).toBe("CA$45.00");
+    expect(formatQuoteAmount(45, null)).toBe("$45.00");
   });
 });

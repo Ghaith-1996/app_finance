@@ -81,6 +81,8 @@ export function NotificationSettingsPanel({
       const result = await onSendCode(trimmedPhone);
       if (!result.ok) {
         setVerificationError(result.error);
+        // An unconfirmed or earlier code may still arrive: keep the code field usable (review R9).
+        if (result.codeMayArrive) setCodeSentFor(trimmedPhone);
         return;
       }
       setCodeSentFor(trimmedPhone);

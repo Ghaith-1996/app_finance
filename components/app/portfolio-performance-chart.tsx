@@ -349,17 +349,25 @@ export function PortfolioPerformanceChart({
   const liveAsOfMs = valuation?.newestQuoteAsOf
     ? Date.parse(valuation.newestQuoteAsOf)
     : live.latestQuoteAt;
+  // Stored snapshots are only written for fully valued portfolios, so the live total is comparable
+  // with them only when it covers every position too (review R5): an unavailable total (0) or a
+  // partial subtotal would otherwise plot or report a fictitious loss.
+  const liveStatus = useMemo(
+    () => valuation?.status ?? valueHoldings(holdings).status,
+    [valuation, holdings],
+  );
+  const liveComparable = liveStatus === "complete" && totalValue > 0;
   const data = useMemo(() => {
     if (snapshot.source !== "snapshots") return snapshot.data;
     const lastPoint = snapshot.data[snapshot.data.length - 1];
-    if (!liveAsOfMs || !lastPoint || liveAsOfMs <= lastPoint.date || totalValue <= 0) {
+    if (!liveAsOfMs || !lastPoint || liveAsOfMs <= lastPoint.date || !liveComparable) {
       return snapshot.data;
     }
     return [
       ...snapshot.data,
       { date: liveAsOfMs, label: "Now", value: totalValue, detail: "Current value from the latest quotes" },
     ];
-  }, [snapshot, liveAsOfMs, totalValue]);
+  }, [snapshot, liveAsOfMs, totalValue, liveComparable]);
 
   const hero: OverviewDisplay = valuation
     ? describeOverview({ totalValue, dayChange, valuation })
@@ -374,7 +382,9 @@ export function PortfolioPerformanceChart({
   const heroAsOf = formatAsOf(liveAsOfMs ?? null);
   const historyStart = snapshot.source === "snapshots" ? (snapshot.data[0]?.date ?? null) : null;
   const historyChange =
-    snapshot.source === "snapshots" && snapshot.data.length >= 2 ? totalValue - snapshot.data[0].value : null;
+    snapshot.source === "snapshots" && snapshot.data.length >= 2 && liveComparable
+      ? totalValue - snapshot.data[0].value
+      : null;
 
   const { min: domainMin, max: domainMax, ticks } = useMemo(
     () => computeDomain(data),

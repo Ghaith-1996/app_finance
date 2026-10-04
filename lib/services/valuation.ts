@@ -91,6 +91,17 @@ function finite(value: unknown): number | null {
   return Number.isFinite(next) ? next : null;
 }
 
+/**
+ * Minor-unit quote currencies (Yahoo quotes London lines in GBp pence, etc.). Shared by FX
+ * conversion and display so an amount is never shown or converted as if it were the major unit.
+ */
+export const MINOR_UNITS: Record<string, { major: string; divisor: number }> = {
+  GBp: { major: "GBP", divisor: 100 },
+  GBX: { major: "GBP", divisor: 100 },
+  ZAc: { major: "ZAR", divisor: 100 },
+  ILA: { major: "ILS", divisor: 100 },
+};
+
 export function normalizeCurrencyCode(currency: string | null | undefined): string {
   const code = (currency ?? "").trim();
   return code || BASE_CURRENCY;
@@ -306,9 +317,16 @@ export function valueHoldings(holdings: HoldingLike[], options: { now?: Date } =
   return valuePortfolio(holdings.map(valuationInputFromHolding), options);
 }
 
-/** Formats an amount in its own quote currency (e.g. "CA$45.00"); USD amounts keep "$". */
+/**
+ * Formats an amount in its own quote currency (e.g. "CA$45.00"); USD amounts keep "$". Minor units
+ * are shown in their major currency (100 GBp → "£1.00"): Intl would otherwise read "GBp" as GBP and
+ * print the pence figure as pounds (review R4).
+ */
 export function formatQuoteAmount(amount: number, currency: string | null | undefined): string {
-  const code = normalizeCurrencyCode(currency);
+  const quoteCode = normalizeCurrencyCode(currency);
+  const minor = MINOR_UNITS[quoteCode];
+  const code = minor?.major ?? quoteCode;
+  if (minor) amount /= minor.divisor;
   try {
     return new Intl.NumberFormat("en-US", { style: "currency", currency: code, maximumFractionDigits: 2 }).format(amount);
   } catch {

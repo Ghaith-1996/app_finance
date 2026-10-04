@@ -123,5 +123,54 @@ class TestConnectionBoundGuard(unittest.TestCase):
         resolver.assert_not_called()
 
 
+class TestParserIsOffline(unittest.TestCase):
+    """Review R1: newspaper's parse() used to download images after the guarded fetch had ended."""
+
+    def test_no_network_blocks_every_lookup(self):
+        with patch.object(url_safety, "_original_getaddrinfo", return_value=_answers("93.184.216.34")) as resolver:
+            with url_safety.no_network():
+                with self.assertRaises(UnsafeDestinationError):
+                    socket.getaddrinfo("public.example.com", 443)
+        resolver.assert_not_called()
+
+    def test_real_parser_makes_no_request_for_referenced_images(self):
+        try:
+            import newspaper  # noqa: F401
+        except ImportError:  # pragma: no cover - requirements always include newspaper4k
+            self.skipTest("newspaper4k not installed")
+
+        from workers.news_ingestion import extract_full_text
+
+        paragraph = (
+            "Shares of the company rose after it reported quarterly revenue above expectations, "
+            "and management raised its outlook for the remainder of the fiscal year. "
+        )
+        html = (
+            "<html><head><title>Earnings beat</title>"
+            '<meta property="og:image" content="http://10.0.0.5/og.png"></head><body><article>'
+            '<h1>Earnings beat</h1><img src="http://10.0.0.5/pixel.png" width="800" height="600">'
+            '<img src="http://169.254.169.254/latest/meta-data/x.jpg">'
+            + "".join(f"<p>{paragraph * 3}</p>" for _ in range(6))
+            + "</article></body></html>"
+        )
+        connects: list = []
+
+        def spy_connect(sock, address):
+            connects.append(address)
+            raise ConnectionRefusedError("test transport: no real connections")
+
+        with patch.object(
+            extract_full_text, "fetch_public_html", return_value=("https://news.example.com/a", html, None)
+        ), patch.object(url_safety, "_original_getaddrinfo", return_value=_answers("10.0.0.5")) as resolver, patch.object(
+            socket.socket, "connect", spy_connect
+        ):
+            text, _canonical, error = extract_full_text.extract_article_text("https://news.example.com/a")
+
+        self.assertIsNone(error)
+        self.assertIn("quarterly revenue", text or "")
+        resolver.assert_not_called()
+        self.assertEqual(connects, [])
+
+
 if __name__ == "__main__":
     unittest.main()

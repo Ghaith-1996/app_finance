@@ -64,14 +64,14 @@ async function getLatestCompletedRun(
 ) {
   const { data: latestRun } = await supabase
     .from("analysis_runs")
-    .select("completed_at")
+    .select("completed_at, started_at")
     .eq("portfolio_id", portfolioId)
     .in("status", ["complete", "degraded"])
     .order("completed_at", { ascending: false })
     .limit(1)
     .maybeSingle();
 
-  return latestRun as { completed_at?: string | null } | null;
+  return latestRun as { completed_at?: string | null; started_at?: string | null } | null;
 }
 
 async function getEligiblePortfolioIds(
@@ -95,9 +95,13 @@ async function getEligiblePortfolioIds(
         skippedCount++;
         continue;
       }
+      // Review R7: the run read the news pool after it started, so only articles enriched before
+      // its start are certainly covered. Comparing with its end would treat an article enriched
+      // mid-run (after the pool was read) as already analysed.
+      const coveredUntil = latestRun?.started_at ?? completedAt;
       const hasNewWork =
         !completedAt ||
-        (newestEnrichedAt !== null && Date.parse(newestEnrichedAt) > Date.parse(completedAt));
+        (newestEnrichedAt !== null && Date.parse(newestEnrichedAt) > Date.parse(coveredUntil!));
       if (!hasNewWork) {
         upToDateCount++;
         continue;

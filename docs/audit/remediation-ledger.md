@@ -238,3 +238,10 @@ Decisions: **H2** = possession verification required before SMS; **H12** contact
 Docker re-runs: Python 70/70 (incl. `test_pagination.py`), SQL validator 38 migrations + 7 suites.
 Two committed tests that the other session had deleted locally were found failing on a clean checkout after F16/H2
 and aligned in 335b31e. Final gates and the per-ID table: [`AUDIT_REMEDIATION_REPORT.md`](AUDIT_REMEDIATION_REPORT.md).
+
+## Approved design recommendations (2026-10-04)
+
+The user approved the recommended direction for D01, D02, D06, D09 and D12; all five implemented in e2d1e3b
+(see the report table). Clean-checkout gate: Vitest 140 files / 867 tests pass; typecheck pass; lint 0 errors /
+20 warnings (baseline); build pass (43 pages incl. `/community`). Not browser-verified: `/feed`, `/home`,
+`/community` and `/pricing` need Supabase env, which this workspace does not have.

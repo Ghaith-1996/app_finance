@@ -89,18 +89,18 @@ an external system must still confirm), **partially fixed**, **already fixed** (
 
 | ID | Status | What was done / why not | Commit | Coverage |
 |---|---|---|---|---|
-| D01 | recommendation | feed first-screen density — layout/design decision | — | — |
-| D02 | recommendation | card repetition (match %, generic rationale) — design decision; overlaps D15 | — | — |
+| D01 | fixed (approved 2026-10-04) | three tall summary cards → one compact strip (coverage, last analysis, live value with refresh); filter bar sticky on wide screens | e2d1e3b | `tests/design-recommendations-d01-d12.test.tsx` |
+| D02 | fixed (approved) | card shows the score once and one summary sentence with a repeated headline prefix removed; score drivers stay in the story detail panel | e2d1e3b | `tests/design-recommendations-d01-d12.test.tsx`, `tests/article-score-explanation.test.tsx` |
 | D03 | addressed by F09 | full ticker pills | 5ce5e70 | `tests/feed-phase3.test.tsx` |
 | D04 | partially addressed | measured pass found an objective defect: unlayered `a`/`*`/`img` rules overrode utilities (primary link-buttons ≈2.1:1 in dark theme, border utilities erased) — fixed; public pages re-measured | 2d04b86 | `tests/css-cascade-layers-d04.test.ts` |
 | D05 | fixed | hash-derived "Most exposed theme" bar and label-parsed "Analysis pulse" bar removed | cf9dfce | `tests/design-trust-d05-d10.test.ts` |
-| D06 | recommendation | Home simplification — design decision | — | — |
+| D06 | fixed (approved) | Home = summary + "Do next" (≤3 timely actions) + top 3 stories; health factors, readiness, risk, earnings, freshness, activity, alerts, digest in a collapsed "More portfolio detail"; duplicate changelog/timeline shown once; Community moved to its own protected `/community` route and nav item | e2d1e3b | `tests/design-recommendations-d01-d12.test.tsx`, `tests/today-dashboard.test.tsx` |
 | D07 | partially addressed | As-of times and zone labels (F10/F15/B3); watchlist row vs detail quote still use separate provider snapshots | de1d73e | — |
 | D08 | recommendation (external) | Google OAuth consent branding / custom auth domain — Supabase/Google configuration | — | — |
-| D09 | recommendation | pricing benefit copy and plan wording — public pricing copy is a product decision | — | — |
+| D09 | fixed (approved) | plan cards describe models, limits and what is included instead of vendors; burst limit, failed-request policy, billing currency/interval from Stripe, trial conversion and refund notice stated; CTAs aligned on one baseline | e2d1e3b | `tests/design-recommendations-d01-d12.test.tsx` |
 | D10 | fixed | testimonials presented as "Illustrative scenario" without invented names; build-note copy removed; site description no longer "frontend MVP" | cf9dfce, e42e65f | `tests/design-trust-d05-d10.test.ts` |
 | D11 | fixed | footer: Pricing, Sign in, Terms, Privacy, Contact | e42e65f | `tests/design-navigation-d11-d13-d14.test.tsx` |
-| D12 | recommendation | role-aware upsell — product decision | — | — |
+| D12 | fixed (approved) | `planCardState`: current plan, "Included in your plan", "Included in your account access" (no implementation wording), portal for upgrades, checkout only when it adds access | e2d1e3b | `tests/design-recommendations-d01-d12.test.tsx` |
 | D13 | fixed | comments view shows the original post and a visible "Back to community" | e42e65f | `tests/design-navigation-d11-d13-d14.test.tsx` |
 | D14 | fixed | `%s - Pulsefolio` template; every route has a title (verified in browser for public pages) | e42e65f | `tests/design-navigation-d11-d13-d14.test.tsx` |
 | D15 | investigated – decision needed | see below | — | — |
@@ -123,7 +123,7 @@ and word-boundary matching for critical alerts. A labelled sample of real articl
 
 | Gate | Result |
 |---|---|
-| Vitest | **139 files / 854 tests passed** (working copy with another session's local test deletions: 120 / 692 passed) |
+| Vitest | **140 files / 867 tests passed** after e2d1e3b (139 / 854 at 335b31e) (working copy with another session's local test deletions: 120 / 692 passed) |
 | Typecheck | pass |
 | Lint | 0 errors, 20 warnings (identical to the pre-remediation baseline set) |
 | Build (`next build`) | pass, with **no** environment file present |
@@ -135,7 +135,7 @@ and word-boundary matching for critical alerts. A labelled sample of real articl
 ## Unresolved product decisions
 
 1. D15 relevance/impact/critical-alert semantics (options above).
-2. D01/D02/D06/D09/D12 design and pricing copy.
+2. ~~D01/D02/D06/D09/D12 design and pricing copy~~ — approved and implemented in e2d1e3b.
 3. Whether to backfill duplicate unread alerts created before J4 (not done without approval).
 4. Whether code requests (H2) should also require Turnstile in addition to per-user caps.
 

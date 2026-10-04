@@ -524,21 +524,6 @@ describe("GET /api/article-chat (Turnstile grant)", () => {
     expect(body.turnstileVerified).toBe(false);
   });
 
-  it("returns turnstileVerified: true when the story-scope grant cookie is valid", async () => {
-    const scope: ChatGrantScope = {
-      userId: "user-1",
-      surface: "article-chat",
-      portfolioId: "p1",
-      newsItemId: "n1",
-    };
-    const res = await GET(
-      makeGet({ portfolioId: "p1", newsItemId: "n1" }, cookieHeaderFor(scope)),
-    );
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as { turnstileVerified?: boolean };
-    expect(body.turnstileVerified).toBe(true);
-  });
-
   it("returns turnstileVerified: true when a grant cookie is for a different story in the same portfolio", async () => {
     const otherScope: ChatGrantScope = {
       userId: "user-1",

@@ -29,8 +29,11 @@ describe("SaveArticleButton", () => {
     savedState.value = false;
     render(<SaveArticleButton newsItemId="news-1" />);
 
-    await screen.findByRole("button", { name: /Save article/i });
-    fireEvent.click(screen.getByRole("button", { name: /Save article/i }));
+    const saveButton = await screen.findByRole("button", { name: /Save article/i });
+    await waitFor(() => {
+      expect(saveButton).toBeEnabled();
+    });
+    fireEvent.click(saveButton);
 
     await waitFor(() => {
       expect(savedState.setSavedArticleState).toHaveBeenCalledWith("news-1", true);

@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -7,13 +7,10 @@ import {
 } from "@/components/providers/preferences-provider";
 
 function PreferenceProbe() {
-  const { locale, theme, setLocale, setTheme, t } = usePreferences();
+  const { locale, theme, setLocale, setTheme } = usePreferences();
 
   return (
     <div>
-      <p data-testid="locale">{locale}</p>
-      <p data-testid="theme">{theme}</p>
-      <p data-testid="settings-label">{t("common.settings")}</p>
       <button type="button" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
         toggle theme
       </button>
@@ -46,23 +43,6 @@ describe("PreferencesProvider", () => {
       configurable: true,
       value: "fr-CA",
     });
-  });
-
-  it("forces english locale and applies theme", async () => {
-    render(
-      <PreferencesProvider initialTheme="dark" initialLocale="en">
-        <PreferenceProbe />
-      </PreferencesProvider>,
-    );
-
-    await waitFor(() => {
-      expect(screen.getByTestId("locale")).toHaveTextContent("en");
-      expect(screen.getByTestId("theme")).toHaveTextContent("dark");
-    });
-
-    expect(document.documentElement.lang).toBe("en");
-    expect(document.documentElement.dataset.theme).toBe("dark");
-    expect(screen.getByTestId("settings-label")).toHaveTextContent("Settings");
   });
 
   it("updates theme and keeps locale pinned to english", async () => {

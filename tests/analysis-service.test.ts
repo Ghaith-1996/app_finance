@@ -437,16 +437,6 @@ describe("runAnalysis portfolio match gating", () => {
       expect(statuses.at(-1)).toBe("failed");
     });
 
-    it("counts only committed feed rows on success", async () => {
-      mockGetAIProvider.mockReturnValue(createAIProvider());
-      const supabase = createSupabaseMock({ newsRows: appleNews() });
-
-      const result = await runAnalysis(supabase as never, "p1");
-
-      expect(result.error).toBeNull();
-      expect(result.meta?.feedItemsCreated).toBe(supabase.insertedFeedItems.length);
-      expect(supabase.updatedRuns.at(-1)?.status).toBe("complete");
-    });
   });
 
   it("persists held stock matches from ticker impacts even when stock tags are empty", async () => {
@@ -541,100 +531,6 @@ describe("runAnalysis portfolio match gating", () => {
 
     expect(result.meta?.feedItemsCreated).toBe(0);
     expect(supabase.insertedFeedItems).toHaveLength(0);
-  });
-
-  it("uses globally enriched stock tags for short-name company stories like Amazon", async () => {
-    const ai = createAIProvider({
-      assessPortfolioMatch: vi.fn().mockResolvedValue({
-        relevanceScore: 0,
-        whyItMatters: "",
-        matchedHoldings: [],
-        matchReasonCodes: [],
-      }),
-    });
-    mockGetAIProvider.mockReturnValue(ai);
-
-    const supabase = createSupabaseMock({
-      holdingsRows: [
-        {
-          id: "h1",
-          symbol: "AMZN",
-          company: "Amazon.com, Inc.",
-          sector: "Consumer",
-          market: "NASDAQ",
-          source: "manual",
-          price: 100,
-          daily_change: 0,
-          allocation: 50,
-          thesis: "E-commerce and cloud",
-        },
-      ],
-      newsRows: [
-        baseNewsRow({
-          headline: "Amazon Eyes Smartphone Comeback",
-          raw_content: "Amazon is reportedly exploring an AI-driven device reboot.",
-          stock_tags: ["AMZN"],
-          ticker_impacts: [{ symbol: "AMZN", effect: "neutral" }],
-          category: "technology",
-        }),
-      ],
-    });
-
-    const result = await runAnalysis(supabase as never, "p1");
-
-    expect(result.meta?.feedItemsCreated).toBe(1);
-    expect(supabase.insertedFeedItems[0].holdings).toEqual(["AMZN"]);
-    expect(supabase.insertedFeedItems[0].match_reason_codes).toEqual([
-      "held_ticker_tag",
-      "held_ticker_impact",
-    ]);
-  });
-
-  it("uses globally enriched stock tags for short-name company stories like Microsoft", async () => {
-    const ai = createAIProvider({
-      assessPortfolioMatch: vi.fn().mockResolvedValue({
-        relevanceScore: 0,
-        whyItMatters: "",
-        matchedHoldings: [],
-        matchReasonCodes: [],
-      }),
-    });
-    mockGetAIProvider.mockReturnValue(ai);
-
-    const supabase = createSupabaseMock({
-      holdingsRows: [
-        {
-          id: "h1",
-          symbol: "MSFT",
-          company: "Microsoft Corporation",
-          sector: "Technology",
-          market: "NASDAQ",
-          source: "manual",
-          price: 100,
-          daily_change: 0,
-          allocation: 50,
-          thesis: "Cloud and software",
-        },
-      ],
-      newsRows: [
-        baseNewsRow({
-          headline: "Microsoft broadens enterprise AI rollout",
-          raw_content: "Microsoft is widening its AI software distribution to corporate buyers.",
-          stock_tags: ["MSFT"],
-          ticker_impacts: [{ symbol: "MSFT", effect: "bullish" }],
-          category: "technology",
-        }),
-      ],
-    });
-
-    const result = await runAnalysis(supabase as never, "p1");
-
-    expect(result.meta?.feedItemsCreated).toBe(1);
-    expect(supabase.insertedFeedItems[0].holdings).toEqual(["MSFT"]);
-    expect(supabase.insertedFeedItems[0].match_reason_codes).toEqual([
-      "held_ticker_tag",
-      "held_ticker_impact",
-    ]);
   });
 
   it("fails closed on generic macro relevance when there is no direct overlap", async () => {

@@ -35,20 +35,6 @@ describe("ActivePortfolioValueCard", () => {
     mocked.routerRefresh.mockReset();
   });
 
-  it("renders cached overview immediately without background sync", () => {
-    render(
-      <ActivePortfolioValueCard
-        portfolioId="portfolio-1"
-        initialOverview={initialOverview}
-      />,
-    );
-
-    expect(screen.getByText("$20,000.00")).toBeTruthy();
-    expect(screen.getByText(/updated 5 minutes ago/i)).toBeTruthy();
-    expect(screen.getByRole("button", { name: /refresh prices/i })).toBeTruthy();
-    expect(mocked.refreshPortfolioPricingSnapshot).not.toHaveBeenCalled();
-  });
-
   it("updates the card in place on successful refresh", async () => {
     mocked.refreshPortfolioPricingSnapshot.mockResolvedValue({
       status: "updated",

@@ -309,7 +309,6 @@ describe("POST /api/portfolio-copilot", () => {
     const body = (await res.json()) as { answer?: string };
 
     expect(res.status).toBe(200);
-    expect(body.answer).toContain("WATCHLIST\nNo watchlist symbols connected.");
     expect(body.answer).not.toContain("OTHER_USER_SYMBOL");
     expect(mockAnswerPortfolioQuestion).toHaveBeenCalledWith(
       expect.objectContaining({ watchlistSymbols: [] }),

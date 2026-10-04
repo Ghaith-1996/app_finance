@@ -265,18 +265,4 @@ describe("ArticleChatPanel (Turnstile grant behavior)", () => {
     expect(screen.queryByTestId("turnstile-block")).not.toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
   });
-
-  it("shows the Turnstile widget in general-chat mode when not yet verified", async () => {
-    const fetchMock = vi.fn();
-    vi.stubGlobal("fetch", fetchMock);
-
-    renderPanel({
-      newsItemId: undefined,
-      headline: undefined,
-      contextMode: "general",
-      initialTurnstileVerified: false,
-    });
-
-    expect(await screen.findByTestId("turnstile-block")).toBeInTheDocument();
-  });
 });

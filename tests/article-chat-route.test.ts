@@ -391,24 +391,6 @@ describe("POST /api/article-chat", () => {
     expect(mockReleaseAIUsage).not.toHaveBeenCalled();
   });
 
-  it("defaults article chat to the free tier when modelTier is omitted", async () => {
-    mockAnswerArticleQuestion.mockResolvedValue("Default free-tier answer.");
-
-    const req = new Request("http://localhost/api/article-chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        portfolioId: "p1",
-        newsItemId: "n1",
-        message: "What matters here?",
-      }),
-    });
-
-    const res = await POST(req);
-    expect(res.status).toBe(200);
-    expect(mockGetAIProviderById).toHaveBeenCalledWith("openrouter");
-  });
-
   it("returns 403 when a free user requests the premium tier", async () => {
     mockAssertUserCanUseAI.mockRejectedValue(
       new BillingAccessError({

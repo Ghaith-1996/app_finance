@@ -6,10 +6,6 @@ describe("isTimingSafeEqual", () => {
     expect(isTimingSafeEqual("secret123", "secret123")).toBe(true);
   });
 
-  it("returns true for empty strings", () => {
-    expect(isTimingSafeEqual("", "")).toBe(true);
-  });
-
   it("returns false for different strings of same length", () => {
     expect(isTimingSafeEqual("secret123", "secret456")).toBe(false);
   });

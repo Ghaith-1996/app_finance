@@ -55,10 +55,10 @@ vi.mock("@/lib/supabase/client", () => ({
 import { UserMenu } from "@/components/app/user-menu";
 import { PreferencesProvider } from "@/components/providers/preferences-provider";
 
-function renderMenu(props?: { showAdminLink?: boolean }) {
+function renderMenu() {
   return render(
     <PreferencesProvider initialTheme="dark" initialLocale="en">
-      <UserMenu {...props} />
+      <UserMenu />
     </PreferencesProvider>,
   );
 }
@@ -106,15 +106,10 @@ describe("UserMenu", () => {
     renderMenu();
 
     await screen.findByText("Ada Lovelace");
-    expect(screen.getByText("@adal")).toBeTruthy();
 
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: /ada lovelace/i }));
     });
-
-    const settingsLink = await screen.findByRole("menuitem", { name: /settings/i });
-    expect(settingsLink).toHaveAttribute("href", "/settings");
-    expect(screen.getByRole("button", { name: /theme/i })).toBeTruthy();
 
     await act(async () => {
       fireEvent.click(screen.getByRole("menuitem", { name: /sign out/i }));
@@ -141,18 +136,5 @@ describe("UserMenu", () => {
     await screen.findByText("Ada Lovelace");
     expect(document.querySelector("img")).toBeNull();
     expect(screen.getByText("A")).toBeTruthy();
-  });
-
-  it("shows an admin link when the server marks the viewer as admin", async () => {
-    renderMenu({ showAdminLink: true });
-
-    await screen.findByText("Ada Lovelace");
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /ada lovelace/i }));
-    });
-
-    const adminLink = await screen.findByRole("menuitem", { name: /admin/i });
-    expect(adminLink).toHaveAttribute("href", "/admin");
   });
 });

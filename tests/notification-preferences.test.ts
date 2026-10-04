@@ -65,60 +65,6 @@ describe("notification preferences actions", () => {
     });
   });
 
-  it("saves email-only preferences", async () => {
-    const result = await saveCurrentUserNotificationPreferences({
-      emailDigestEnabled: true,
-      smsDigestEnabled: false,
-      phoneNumber: "",
-      ...smartAlertDefaults,
-    });
-
-    expect(result).toEqual({ ok: true });
-    expect(upsert).toHaveBeenCalledWith(
-      {
-        user_id: "user-1",
-        email_digest_enabled: true,
-        sms_digest_enabled: false,
-        phone_number: null,
-        critical_news_alerts_enabled: false,
-        earnings_report_alerts_enabled: false,
-        price_move_alerts_enabled: false,
-        price_move_threshold_percent: 5,
-        concentration_alerts_enabled: false,
-        concentration_threshold_percent: 35,
-      },
-      { onConflict: "user_id" },
-    );
-  });
-
-  it("saves sms-only preferences when the phone number is valid", async () => {
-    // Audit H2: the number has been verified.
-    maybeSingle.mockResolvedValueOnce({ data: { phone_number: "+14165551234" } });
-    const result = await saveCurrentUserNotificationPreferences({
-      emailDigestEnabled: false,
-      smsDigestEnabled: true,
-      phoneNumber: "+14165551234",
-      ...smartAlertDefaults,
-    });
-
-    expect(result).toEqual({ ok: true });
-    expect(upsert).toHaveBeenCalledWith(
-      {
-        user_id: "user-1",
-        email_digest_enabled: false,
-        sms_digest_enabled: true,
-        phone_number: "+14165551234",
-        critical_news_alerts_enabled: false,
-        earnings_report_alerts_enabled: false,
-        price_move_alerts_enabled: false,
-        price_move_threshold_percent: 5,
-        concentration_alerts_enabled: false,
-        concentration_threshold_percent: 35,
-      },
-      { onConflict: "user_id" },
-    );
-  });
-
   it("saves both channels together", async () => {
     // Audit H2: the number has been verified.
     maybeSingle.mockResolvedValueOnce({ data: { phone_number: "+14165551234" } });

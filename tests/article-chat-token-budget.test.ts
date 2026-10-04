@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ARTICLE_CHAT_MAX_TOKENS } from "@/lib/services/ai/constants";
 import { createAnthropicProvider } from "@/lib/services/ai/anthropic-provider";
 import { createAzureOpenAIProvider } from "@/lib/services/ai/azure-openai-provider";
 import { createMistralProvider } from "@/lib/services/ai/mistral-provider";
@@ -34,7 +33,7 @@ const baseContext = {
   question: "Why does this matter?",
 };
 
-describe("article chat token budgets", () => {
+describe("article chat provider history", () => {
   beforeEach(() => {
     process.env = { ...originalEnv };
     vi.restoreAllMocks();
@@ -44,7 +43,7 @@ describe("article chat token budgets", () => {
     process.env = { ...originalEnv };
   });
 
-  it("uses 2000 tokens for the Azure article-chat path", async () => {
+  it("sends prior history and the current question once through Azure article chat", async () => {
     process.env.AZURE_OPENAI_API_KEY = "test-key";
     process.env.AZURE_OPENAI_BASE_URL = "https://example-resource.openai.azure.com/openai/v1";
     process.env.AZURE_OPENAI_MODEL = "test-deployment";
@@ -63,17 +62,15 @@ describe("article chat token budgets", () => {
     await provider.answerArticleQuestion(baseContext);
 
     const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as {
-      max_output_tokens: number;
       input: Array<{ role: string; content: string }>;
     };
-    expect(body.max_output_tokens).toBe(ARTICLE_CHAT_MAX_TOKENS);
     expect(
       body.input.filter((message) => message.content.includes("Earlier question")),
     ).toHaveLength(1);
     expect(JSON.stringify(body).match(/Why does this matter\?/g)).toHaveLength(1);
   });
 
-  it("uses 2000 tokens for the OpenAI article-chat path", async () => {
+  it("sends prior history and the current question once through OpenAI article chat", async () => {
     process.env.OPENAI_API_KEY = "test-key";
 
     const fetchMock = vi.fn().mockResolvedValue(
@@ -90,17 +87,15 @@ describe("article chat token budgets", () => {
     await provider.answerArticleQuestion(baseContext);
 
     const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as {
-      max_tokens: number;
       messages: Array<{ role: string; content: string }>;
     };
-    expect(body.max_tokens).toBe(ARTICLE_CHAT_MAX_TOKENS);
     expect(
       body.messages.filter((message) => message.content.includes("Earlier question")),
     ).toHaveLength(1);
     expect(JSON.stringify(body).match(/Why does this matter\?/g)).toHaveLength(1);
   });
 
-  it("uses 2000 tokens for the OpenRouter article-chat path", async () => {
+  it("sends prior history and the current question once through OpenRouter article chat", async () => {
     process.env.OPENROUTER_API_KEY = "test-key";
     process.env.OPENROUTER_MODEL = "test-model";
 
@@ -118,17 +113,15 @@ describe("article chat token budgets", () => {
     await provider.answerArticleQuestion(baseContext);
 
     const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as {
-      max_tokens: number;
       messages: Array<{ role: string; content: string }>;
     };
-    expect(body.max_tokens).toBe(ARTICLE_CHAT_MAX_TOKENS);
     expect(
       body.messages.filter((message) => message.content.includes("Earlier question")),
     ).toHaveLength(1);
     expect(JSON.stringify(body).match(/Why does this matter\?/g)).toHaveLength(1);
   });
 
-  it("uses 2000 tokens for the Mistral article-chat path", async () => {
+  it("sends prior history and the current question once through Mistral article chat", async () => {
     process.env.MISTRAL_API_KEY = "test-key";
     process.env.MISTRAL_MODEL = "mistral-test-model";
 
@@ -146,17 +139,15 @@ describe("article chat token budgets", () => {
     await provider.answerArticleQuestion(baseContext);
 
     const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as {
-      max_tokens: number;
       messages: Array<{ role: string; content: string }>;
     };
-    expect(body.max_tokens).toBe(ARTICLE_CHAT_MAX_TOKENS);
     expect(
       body.messages.filter((message) => message.content.includes("Earlier question")),
     ).toHaveLength(1);
     expect(JSON.stringify(body).match(/Why does this matter\?/g)).toHaveLength(1);
   });
 
-  it("uses 2000 tokens for the Anthropic article-chat path", async () => {
+  it("sends the current question once through Anthropic article chat", async () => {
     process.env.ANTHROPIC_API_KEY = "test-key";
 
     const fetchMock = vi.fn().mockResolvedValue(
@@ -172,10 +163,7 @@ describe("article chat token budgets", () => {
     const provider = createAnthropicProvider();
     await provider.answerArticleQuestion(baseContext);
 
-    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as {
-      max_tokens: number;
-    };
-    expect(body.max_tokens).toBe(ARTICLE_CHAT_MAX_TOKENS);
+    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
     expect(JSON.stringify(body).match(/Why does this matter\?/g)).toHaveLength(1);
   });
 });

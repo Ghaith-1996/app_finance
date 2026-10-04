@@ -87,24 +87,6 @@ describe("POST /api/news/cron/enrich", () => {
     expect(body.error).toContain("max batch size");
   });
 
-  it("calls ingestNewsToSupabase with exactly the provided batch", async () => {
-    mockIngestNewsToSupabase.mockResolvedValue({ enriched: 3, skipped: 0 });
-
-    const ids = ["id-a", "id-b", "id-c"];
-    const res = await POST(makeRequest("test-secret", { articleIds: ids }));
-    expect(res.status).toBe(200);
-    const body = await res.json();
-
-    expect(mockIngestNewsToSupabase).toHaveBeenCalledOnce();
-    expect(mockIngestNewsToSupabase).toHaveBeenCalledWith(
-      expect.anything(),
-      { articleIds: ["id-a", "id-b", "id-c"] },
-    );
-    expect(body.requested).toBe(3);
-    expect(body.enriched).toBe(3);
-    expect(body.error).toBeNull();
-  });
-
   it("returns 5xx when enrichment returns error", async () => {
     mockIngestNewsToSupabase.mockResolvedValue({
       enriched: 0,

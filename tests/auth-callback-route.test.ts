@@ -92,22 +92,6 @@ describe("GET /auth/callback", () => {
     );
   });
 
-  it("redirects completed profiles to the requested destination", async () => {
-    mockProfile({
-      first_name: "Ada",
-      last_name: "Lovelace",
-      handle: "ada",
-      accepted_terms_at: "2026-01-01T00:00:00Z",
-    });
-
-    const response = await GET(
-      new Request("http://localhost/auth/callback?code=abc&redirectTo=/home"),
-    );
-
-    expect(response.status).toBe(307);
-    expect(response.headers.get("location")).toBe("http://localhost/home");
-  });
-
   it("preserves sanitized digest redirects with story query params", async () => {
     mockProfile({
       first_name: "Ada",

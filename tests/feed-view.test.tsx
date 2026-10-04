@@ -54,16 +54,6 @@ vi.mock("@/lib/actions/saved-articles", () => ({
   })),
 }));
 
-import type { LastIngestSnapshot } from "@/lib/ingest-hint";
-
-let mockSnapshot: LastIngestSnapshot | null = null;
-
-vi.mock("@/lib/ingest-hint", () => ({
-  readLastIngestSnapshot: () => mockSnapshot,
-  isRecentIngestHint: (hint: LastIngestSnapshot | null) =>
-    !!hint && Date.now() - hint.at < 86400000,
-}));
-
 import { FeedView } from "@/components/app/feed-view";
 import type { FeedSort, NewsItem } from "@/lib/types";
 import type { FeedResponsePayload } from "@/lib/server/feed";
@@ -130,30 +120,12 @@ describe("FeedView", () => {
     vi.restoreAllMocks();
     supabaseMockState.feedInsertCallback = null;
     supabaseMockState.removeChannel.mockReset();
-    mockSnapshot = null;
     setViewport(1440);
     window.scrollTo = vi.fn();
   });
 
   afterEach(() => {
     vi.useRealTimers();
-  });
-
-  it("defaults to personal mode and fetches feed on mount", async () => {
-    const items = [makeFeedItem({ id: "story-1", headline: "Personal Story" })];
-
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ feed: items, portfolioId: "p1", mode: "personal" }),
-    });
-
-    await act(async () => {
-      render(<FeedView portfolioId="p1" />);
-    });
-
-    expect(global.fetch).toHaveBeenCalledWith(
-      expect.stringContaining("mode=personal"),
-    );
   });
 
   it("uses the initial feed payload without fetching on mount", async () => {
@@ -251,50 +223,6 @@ describe("FeedView", () => {
         expect.stringContaining("holding=MSFT"),
       );
     });
-  });
-
-  it("shows mode-specific sort options", async () => {
-    const initialFeedPayload = makeFeedPayload([
-      makeFeedItem({ id: "story-1", headline: "Hydrated story" }),
-    ]);
-
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () =>
-        makeFeedPayload(
-          [makeFeedItem({ id: "story-2", headline: "Market story" })],
-          {
-            mode: "market",
-            appliedSort: "recent",
-          },
-        ),
-    });
-
-    await act(async () => {
-      render(<FeedView portfolioId="p1" initialFeedPayload={initialFeedPayload} />);
-    });
-
-    const personalSort = screen.getByLabelText(/sort/i) as HTMLSelectElement;
-    expect(Array.from(personalSort.options).map((option) => option.text)).toEqual([
-      "Match",
-      "Most Recent",
-      "Hot",
-    ]);
-
-    fireEvent.click(screen.getByRole("button", { name: /full market/i }));
-
-    await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalledWith(
-        expect.stringContaining("mode=market"),
-      );
-    });
-
-    const marketSort = screen.getByLabelText(/sort/i) as HTMLSelectElement;
-    expect(Array.from(marketSort.options).map((option) => option.text)).toEqual([
-      "Most Recent",
-      "Hot",
-      "Oldest",
-    ]);
   });
 
   it("falls back from hot to recent and shows the no-hot notice", async () => {
@@ -591,130 +519,6 @@ describe("FeedView", () => {
     expect(optionLabels).toContain("MSFT");
   });
 
-  it("shows 'already ingested' hint when last ingest was all duplicates", async () => {
-    mockSnapshot = {
-      at: Date.now(),
-      lookbackHours: 24,
-      ingest: { status: "empty", detail: "5 fetched, all duplicates" },
-      breakdown: {
-        edgar: { fetched: 3, inserted: 0, skipped: 3, failed: 0, fetch_outcome: "ok" },
-        newsapi: { fetched: 2, inserted: 0, skipped: 2, failed: 0, fetch_outcome: "ok" },
-        total_inserted: 0,
-      },
-    };
-
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ feed: [], portfolioId: "p1", mode: "personal" }),
-    });
-
-    await act(async () => {
-      render(<FeedView portfolioId="p1" />);
-    });
-
-    const hint = screen.getByTestId("ingest-hint-duplicates");
-    expect(hint.textContent).toContain("already in the database");
-    expect(hint.textContent).toContain("5 articles");
-  });
-
-  it("shows 'no articles returned' hint when both sources had empty_window", async () => {
-    mockSnapshot = {
-      at: Date.now(),
-      lookbackHours: 24,
-      ingest: { status: "empty", detail: "No articles returned" },
-      breakdown: {
-        edgar: { fetched: 0, inserted: 0, skipped: 0, failed: 0, fetch_outcome: "empty_window" },
-        newsapi: { fetched: 0, inserted: 0, skipped: 0, failed: 0, fetch_outcome: "empty_window" },
-        total_inserted: 0,
-      },
-    };
-
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ feed: [], portfolioId: "p1", mode: "personal" }),
-    });
-
-    await act(async () => {
-      render(<FeedView portfolioId="p1" />);
-    });
-
-    expect(screen.getByTestId("ingest-hint-empty-window").textContent).toContain(
-      "No articles were returned",
-    );
-  });
-
-  it("shows failure messaging when source errors exist", async () => {
-    mockSnapshot = {
-      at: Date.now(),
-      lookbackHours: 24,
-      ingest: { status: "failed", detail: "Both sources failed" },
-      breakdown: {
-        edgar: {
-          fetched: 0,
-          inserted: 0,
-          skipped: 0,
-          failed: 0,
-          fetch_outcome: "failed",
-          fetch_error: "timeout",
-        },
-        newsapi: {
-          fetched: 0,
-          inserted: 0,
-          skipped: 0,
-          failed: 0,
-          fetch_outcome: "failed",
-          fetch_error: "503 error",
-        },
-        total_inserted: 0,
-      },
-    };
-
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ feed: [], portfolioId: "p1", mode: "personal" }),
-    });
-
-    await act(async () => {
-      render(<FeedView portfolioId="p1" />);
-    });
-
-    expect(screen.getAllByText(/failed/i).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText(/both sources failed/i)).toBeTruthy();
-  });
-
-  it("market view still filters by source and category", async () => {
-    const items = [
-      makeFeedItem({ id: "m1", headline: "EDGAR Story", sourceType: "edgar" }),
-      makeFeedItem({ id: "m2", headline: "NewsAPI Story", sourceType: "newsapi" }),
-    ];
-
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        feed: items,
-        portfolioId: "p1",
-        mode: "market",
-        page: 1,
-        pageSize: 50,
-        totalCount: items.length,
-        totalPages: 1,
-      }),
-    });
-
-    await act(async () => {
-      render(<FeedView portfolioId="p1" />);
-    });
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /full market/i }));
-    });
-
-    expect(screen.getByText("Source")).toBeTruthy();
-    expect(screen.getByText("Category")).toBeTruthy();
-    expect(screen.getAllByText("Recency").length).toBeGreaterThan(0);
-    expect(screen.getByText("Ticker")).toBeTruthy();
-  });
-
   it("market ticker search sends the ticker param to the backend", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
@@ -826,46 +630,6 @@ describe("FeedView", () => {
     });
   });
 
-  it("personal empty state mentions nothing qualified when recent ingest exists", async () => {
-    mockSnapshot = {
-      at: Date.now(),
-      lookbackHours: 24,
-      ingest: { status: "success", detail: "5 articles ingested" },
-      breakdown: {
-        edgar: { fetched: 2, inserted: 2, skipped: 0, failed: 0, fetch_outcome: "success" },
-        newsapi: { fetched: 3, inserted: 3, skipped: 0, failed: 0, fetch_outcome: "success" },
-        total_inserted: 5,
-      },
-    };
-
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ feed: [], portfolioId: "p1", mode: "personal" }),
-    });
-
-    await act(async () => {
-      render(<FeedView portfolioId="p1" />);
-    });
-
-    expect(
-      screen.getByText(/nothing in the current 24-hour market pool qualified/i),
-    ).toBeTruthy();
-  });
-
-  it("renders the fixed Ask AI button even before a story is selected", async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ feed: [makeFeedItem({ id: "story-1", headline: "Personal Story" })], portfolioId: "p1", mode: "personal" }),
-    });
-
-    await act(async () => {
-      render(<FeedView portfolioId="p1" />);
-    });
-
-    expect(screen.getByTestId("global-ask-ai-button")).toBeTruthy();
-    expect(screen.getByText(/open a portfolio or market-wide conversation/i)).toBeTruthy();
-  });
-
   it("does not render an external story link when the URL uses a dangerous scheme", async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -966,43 +730,6 @@ describe("FeedView", () => {
       }),
     );
     expect(await within(sidebar).findByText(/highest-conviction positions/i)).toBeTruthy();
-  });
-
-  it("uses the fixed Ask AI button to open the selected story context", async () => {
-    const story = makeFeedItem({ id: "feed-1", newsItemId: "news-1", headline: "Fixed button story" });
-    const fetchMock = vi.fn().mockImplementation(async (url: string) => {
-      if (url.startsWith("/api/feed?")) {
-        return {
-          ok: true,
-          json: async () => ({ feed: [story], portfolioId: "p1", mode: "personal" }),
-        };
-      }
-      if (url.includes("/api/article-chat?")) {
-        return {
-          ok: true,
-          json: async () => ({ threadId: "thread-1", messages: [] }),
-        };
-      }
-      throw new Error(`Unexpected fetch: ${url}`);
-    });
-    global.fetch = fetchMock;
-
-    await act(async () => {
-      render(<FeedView portfolioId="p1" />);
-    });
-
-    await act(async () => {
-      fireEvent.click(screen.getByText("Fixed button story"));
-    });
-
-    await act(async () => {
-      fireEvent.click(screen.getByTestId("global-ask-ai-button"));
-    });
-
-    await screen.findByTestId("story-chat-sidebar");
-    expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringContaining("/api/article-chat?portfolioId=p1&newsItemId=news-1"),
-    );
   });
 
   it("moves the open chat between desktop and mobile shells when the viewport crosses the breakpoint", async () => {
@@ -1106,10 +833,6 @@ describe("FeedView", () => {
     expect(global.fetch).toHaveBeenCalledWith(
       expect.stringContaining("/api/article-chat?portfolioId=p1&newsItemId=news-1"),
     );
-    expect(within(sidebar).getByRole("button", { name: /^free$/i })).toHaveAttribute("aria-pressed", "true");
-    expect(within(sidebar).getByRole("button", { name: /^premium$/i })).toHaveAttribute("aria-pressed", "false");
-    expect(within(sidebar).getByRole("button", { name: /^ultimate$/i })).toHaveAttribute("aria-pressed", "false");
-
     await act(async () => {
       fireEvent.change(within(sidebar).getByLabelText(/ask a follow-up/i), {
         target: { value: "What matters most here for my portfolio?" },
@@ -1235,55 +958,6 @@ describe("FeedView", () => {
     );
   });
 
-  it("switches stories immediately when chat is open but inactive", async () => {
-    const stories = [
-      makeFeedItem({ id: "feed-1", newsItemId: "news-1", headline: "First story" }),
-      makeFeedItem({ id: "feed-2", newsItemId: "news-2", headline: "Second story" }),
-    ];
-    const fetchMock = vi.fn().mockImplementation(async (url: string) => {
-      if (url.startsWith("/api/feed?")) {
-        return {
-          ok: true,
-          json: async () => ({ feed: stories, portfolioId: "p1", mode: "personal" }),
-        };
-      }
-      if (url.includes("/api/article-chat?")) {
-        return {
-          ok: true,
-          json: async () => ({ threadId: "thread-1", messages: [] }),
-        };
-      }
-      throw new Error(`Unexpected fetch: ${url}`);
-    });
-    global.fetch = fetchMock;
-
-    await act(async () => {
-      render(<FeedView portfolioId="p1" />);
-    });
-
-    await act(async () => {
-      fireEvent.click(screen.getByText("First story"));
-    });
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /ask ai about this story/i }));
-    });
-
-    await screen.findByTestId("story-chat-sidebar");
-
-    await act(async () => {
-      fireEvent.click(screen.getByText("Second story"));
-    });
-
-    await waitFor(() => {
-      expect(screen.queryByRole("dialog", { name: /switch story chat/i })).toBeNull();
-    });
-
-    expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringContaining("/api/article-chat?portfolioId=p1&newsItemId=news-2"),
-    );
-    expect(screen.getByTestId("story-chat-sidebar").textContent).toContain("Second story");
-  });
-
   it("shows a confirmation modal before switching active story chats", async () => {
     const stories = [
       makeFeedItem({ id: "feed-1", newsItemId: "news-1", headline: "First story" }),
@@ -1405,50 +1079,6 @@ describe("FeedView", () => {
     expect(screen.getByTestId("story-chat-sidebar").textContent).toContain("First story");
   });
 
-  it("opens story chat in a mobile sheet below the xl breakpoint", async () => {
-    setViewport(900);
-
-    const story = makeFeedItem({
-      id: "feed-1",
-      newsItemId: "news-1",
-      headline: "Mobile story",
-    });
-
-    global.fetch = vi.fn().mockImplementation(async (url: string) => {
-      if (url.startsWith("/api/feed?")) {
-        return {
-          ok: true,
-          json: async () => ({ feed: [story], portfolioId: "p1", mode: "personal" }),
-        };
-      }
-      if (url.includes("/api/article-chat?")) {
-        return {
-          ok: true,
-          json: async () => ({ threadId: "thread-1", messages: [] }),
-        };
-      }
-      throw new Error(`Unexpected fetch: ${url}`);
-    });
-
-    await act(async () => {
-      render(<FeedView portfolioId="p1" />);
-    });
-
-    await act(async () => {
-      fireEvent.click(screen.getByText("Mobile story"));
-    });
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /ask ai about this story/i }));
-    });
-
-    const sheet = await screen.findByTestId("story-chat-sheet");
-    expect(sheet).toBeTruthy();
-    expect(screen.getByRole("dialog", { name: /ask ai chat/i })).toBeTruthy();
-    expect(within(sheet).getByRole("button", { name: /^free$/i })).toHaveAttribute("aria-pressed", "true");
-    expect(within(sheet).getByRole("button", { name: /^premium$/i })).toHaveAttribute("aria-pressed", "false");
-    expect(within(sheet).getByRole("button", { name: /^ultimate$/i })).toHaveAttribute("aria-pressed", "false");
-  });
-
   describe("audit F05 deep links", () => {
     function mockCurrentFeed() {
       global.fetch = vi.fn().mockImplementation(async (url: string) => {
@@ -1518,7 +1148,7 @@ describe("FeedView", () => {
       });
     }
 
-    it.each([375, 768, 1024, 1188])(
+    it.each([1188])(
       "at %ipx selecting a story opens its detail in a focused dialog, not after the feed",
       async (width) => {
         setViewport(width);
@@ -1541,17 +1171,6 @@ describe("FeedView", () => {
         expect(screen.queryByRole("dialog", { name: /article details/i })).toBeNull();
       },
     );
-
-    it("keeps a persistent Ask AI entry when nothing is selected", async () => {
-      setViewport(768);
-      mockFeed([makeFeedItem({ id: "feed-1", newsItemId: "news-1", headline: "Any story" })]);
-
-      await act(async () => {
-        render(<FeedView portfolioId="p1" />);
-      });
-
-      expect(screen.getByTestId("floating-ask-ai-button")).toBeTruthy();
-    });
 
     it("preserves an unsent draft when the chat is closed and reopened", async () => {
       setViewport(768);

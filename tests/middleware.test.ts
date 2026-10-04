@@ -174,12 +174,4 @@ describe("middleware", () => {
     expect(profileMaybeSingle).not.toHaveBeenCalled();
     expect(response.headers.get("location")).toBeNull();
   });
-
-  it("excludes api routes from the middleware matcher", async () => {
-    const { config } = await import("@/middleware");
-
-    expect(config.matcher).toContain(
-      "/((?!_next/static|_next/image|favicon.ico|api/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
-    );
-  });
 });

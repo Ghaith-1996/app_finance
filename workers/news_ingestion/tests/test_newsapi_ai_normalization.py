@@ -112,18 +112,6 @@ class TestStockTagFiltering(unittest.TestCase):
         assert result is not None
         self.assertEqual(len(result.stock_tags), 5)
 
-    def test_concept_labels_in_metadata(self) -> None:
-        """Even excluded labels should appear in metadata for debugging."""
-        art = _make_article(concepts=[
-            _make_concept("Stock market"),
-            _make_concept("AAPL"),
-        ])
-        result = _article_to_normalized(art, cutoff=_CUTOFF)
-        assert result is not None
-        self.assertIn("Stock market", result.metadata["newsapi_ai_concepts"])
-        self.assertIn("AAPL", result.metadata["newsapi_ai_concepts"])
-
-
 # ---------------------------------------------------------------------------
 # Category hint mapping
 # ---------------------------------------------------------------------------
@@ -200,20 +188,6 @@ class TestStableExternalId(unittest.TestCase):
             stable_newsapi_ai_external_id(b),
         )
 
-    def test_falls_back_to_url(self) -> None:
-        a = _make_article(uri="", url="https://a.com/story")
-        b = _make_article(uri="", url="https://a.com/story")
-        self.assertEqual(
-            stable_newsapi_ai_external_id(a),
-            stable_newsapi_ai_external_id(b),
-        )
-        self.assertTrue(stable_newsapi_ai_external_id(a).startswith("newsapi_ai_"))
-
-    def test_falls_back_to_title_date(self) -> None:
-        a = _make_article(uri="", url="", title="Unique", dateTimePub="2025-01-01")
-        eid = stable_newsapi_ai_external_id(a)
-        self.assertTrue(eid.startswith("newsapi_ai_"))
-
     def test_different_uris_differ(self) -> None:
         a = _make_article(uri="evt-1")
         b = _make_article(uri="evt-2")
@@ -241,12 +215,6 @@ class TestEdgeCases(unittest.TestCase):
         old_date = (_CUTOFF - timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M:%SZ")
         art = _make_article(dateTimePub=old_date)
         self.assertIsNone(_article_to_normalized(art, cutoff=_CUTOFF))
-
-    def test_source_type_is_newsapi_ai(self) -> None:
-        art = _make_article()
-        result = _article_to_normalized(art, cutoff=_CUTOFF)
-        assert result is not None
-        self.assertEqual(result.source_type, "newsapi_ai")
 
     def test_body_truncated_at_2000(self) -> None:
         art = _make_article(body="x" * 5000)

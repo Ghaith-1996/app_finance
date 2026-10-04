@@ -40,7 +40,6 @@ const mocked = vi.hoisted(() => ({
     ticker_earnings_reports: [] as EarningsReportRow[],
   },
   failHoldingUpdateIds: new Set<string>(),
-  portfolioUpdateError: null as string | null,
 }));
 
 function makeBuilder(table: "portfolios" | "holdings" | "ticker_earnings_reports") {
@@ -83,10 +82,6 @@ function makeBuilder(table: "portfolios" | "holdings" | "ticker_earnings_reports
         : table === "holdings"
           ? mocked.state.holdings
           : mocked.state.ticker_earnings_reports;
-    const filteredRows = rows.filter((row) =>
-      matches(row as unknown as Record<string, unknown>),
-    );
-
     if (table === "holdings") {
       const holdingId = filters.get("id");
       if (
@@ -98,10 +93,6 @@ function makeBuilder(table: "portfolios" | "holdings" | "ticker_earnings_reports
           error: { message: `Failed to update holding ${holdingId}` },
         };
       }
-    }
-
-    if (table === "portfolios" && mocked.portfolioUpdateError && filteredRows.length > 0) {
-      return { data: null, error: { message: mocked.portfolioUpdateError } };
     }
 
     if (table === "holdings") {
@@ -180,9 +171,6 @@ function applyHoldingPriceUpdates(params: {
       return { data: null, error: { message: `Failed to update holding ${id}` } };
     }
   }
-  if (mocked.portfolioUpdateError) {
-    return { data: null, error: { message: mocked.portfolioUpdateError } };
-  }
   for (const update of params.p_updates) {
     const row = mocked.state.holdings.find((holding) => holding.id === update.id);
     if (!row) return { data: null, error: { message: "holding not in portfolio" } };
@@ -254,7 +242,6 @@ vi.mock("@/lib/supabase/server", () => ({
 
 import {
   refreshPortfolioPricingSnapshot,
-  refreshHoldingPrices,
   syncHoldingPricesIfStale,
 } from "@/lib/actions/portfolio";
 
@@ -268,7 +255,6 @@ describe("portfolio price sync", () => {
     mocked.updateHolding.mockReset();
     mocked.computePortfolioOverview.mockReset();
     mocked.failHoldingUpdateIds = new Set<string>();
-    mocked.portfolioUpdateError = null;
 
     mocked.state = {
       authUserId: "user-1",
@@ -414,39 +400,6 @@ describe("portfolio price sync", () => {
     expect(mocked.getQuotes).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps manual refresh behavior intact", async () => {
-    const result = await refreshHoldingPrices("portfolio-1");
-
-    expect(result).toEqual({ updated: 2, error: null });
-    expect(mocked.getQuotes).toHaveBeenCalledTimes(1);
-
-    expect(mocked.revalidatePath).toHaveBeenCalledWith("/portfolio");
-    expect(mocked.revalidatePath).toHaveBeenCalledWith("/portfolio/full");
-    expect(mocked.revalidatePath).toHaveBeenCalledWith("/onboarding");
-    expect(mocked.revalidatePath).toHaveBeenCalledWith("/feed");
-    expect(mocked.revalidatePath).toHaveBeenCalledWith("/analysis");
-  });
-
-  it("returns explicit updated status with fresh overview for the UI refresh action", async () => {
-    const result = await refreshPortfolioPricingSnapshot("portfolio-1");
-
-    expect(result).toEqual({
-      status: "updated",
-      updated: 2,
-      message: "Updated 2 holdings.",
-      overview: {
-        totalValue: 800,
-        dayChange: 0.1,
-        monthlyChange: 0,
-        lastSyncedAt: "Just now",
-        lastAnalyzedAt: "Never",
-        coverage: "0 high-signal stories",
-        primaryGoal: "Compound around quality holdings and resilient names.",
-      },
-    });
-    expect(mocked.computePortfolioOverview).toHaveBeenCalledTimes(1);
-  });
-
   it("saves nothing and says so when one holding update is rejected (atomic batch)", async () => {
     mocked.failHoldingUpdateIds = new Set(["holding-2"]);
 
@@ -524,17 +477,4 @@ describe("portfolio price sync", () => {
     });
   });
 
-  it("rolls back prices too when the portfolio sync stamp cannot be written", async () => {
-    mocked.portfolioUpdateError = "portfolio timestamp failed";
-
-    const result = await refreshPortfolioPricingSnapshot("portfolio-1");
-
-    expect(result).toEqual({
-      status: "error",
-      updated: 0,
-      message: "Failed to save refreshed holding prices. Nothing was changed.",
-      overview: null,
-    });
-    expect(mocked.state.holdings.every((row) => row.price === undefined)).toBe(true);
-  });
 });

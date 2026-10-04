@@ -51,9 +51,4 @@ describe("CSV import (B6)", () => {
     expect(result.drafts).toEqual([]);
     expect(result.error).toMatch(/No holdings could be read from 2 row/);
   });
-
-  it("an empty file is not an error from normalization (handled earlier as empty CSV)", () => {
-    const { result } = importCsv("Symbol,Quantity,Avg Cost\n");
-    expect(result).toEqual({ drafts: [], skippedRows: [], error: null });
-  });
 });

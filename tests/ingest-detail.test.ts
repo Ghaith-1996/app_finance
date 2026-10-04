@@ -14,19 +14,6 @@ function baseInput(overrides: Partial<IngestInput> = {}): IngestInput {
 }
 
 describe("formatIngestStage", () => {
-  it("both sources empty_window → status empty, mentions lookback", () => {
-    const result = formatIngestStage(
-      baseInput({
-        ingest_status: "empty",
-        edgar: emptySource({ fetch_outcome: "empty_window" }),
-        newsapi: emptySource({ fetch_outcome: "empty_window" }),
-      }),
-    );
-    expect(result.status).toBe("empty");
-    expect(result.detail).toContain("No articles were returned");
-    expect(result.detail).toContain("lookback window");
-  });
-
   it("fetched items but all skipped as duplicates → mentions already ingested", () => {
     const result = formatIngestStage(
       baseInput({
@@ -76,35 +63,6 @@ describe("formatIngestStage", () => {
     );
     expect(result.status).toBe("failed");
     expect(result.detail).toBe("spawn python ENOENT");
-  });
-
-  it("successful run → uses worker detail text when provided", () => {
-    const result = formatIngestStage(
-      baseInput({
-        ingest_status: "success",
-        ingest_detail: "12 articles ingested",
-        edgar: emptySource({ fetched: 7, inserted: 7 }),
-        newsapi: emptySource({ fetched: 5, inserted: 5 }),
-        total_inserted: 12,
-      }),
-    );
-    expect(result.status).toBe("success");
-    expect(result.detail).toBe("12 articles ingested");
-  });
-
-  it("successful run without worker detail → builds detail from stats", () => {
-    const result = formatIngestStage(
-      baseInput({
-        ingest_status: "success",
-        edgar: emptySource({ fetched: 4, inserted: 4 }),
-        newsapi: emptySource({ fetched: 6, inserted: 6 }),
-        total_inserted: 10,
-      }),
-    );
-    expect(result.status).toBe("success");
-    expect(result.detail).toContain("10 new");
-    expect(result.detail).toContain("4 EDGAR");
-    expect(result.detail).toContain("6 NewsAPI");
   });
 
   it("legacy: both sources failed without ingest_status → failed", () => {

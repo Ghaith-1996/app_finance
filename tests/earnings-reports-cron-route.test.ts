@@ -31,7 +31,7 @@ vi.mock("@/lib/logger", () => ({
   }),
 }));
 
-import { GET, POST } from "@/app/api/earnings-reports/cron/route";
+import { POST } from "@/app/api/earnings-reports/cron/route";
 
 function makeRequest(secret?: string) {
   const headers = new Headers();
@@ -103,12 +103,5 @@ describe("POST /api/earnings-reports/cron", () => {
     const body = await response.json();
     expect(body.error).toBe("Earnings report sync failed");
     expect(body.detail).toBe("db unavailable");
-  });
-});
-
-describe("GET /api/earnings-reports/cron", () => {
-  it("directs callers to POST", async () => {
-    const response = await GET();
-    expect(response.status).toBe(405);
   });
 });

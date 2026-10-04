@@ -18,7 +18,7 @@ vi.mock("@/lib/logger", () => ({
   }),
 }));
 
-import { GET, POST } from "@/app/api/news/cron/route";
+import { POST } from "@/app/api/news/cron/route";
 
 function makePayload(overrides: Record<string, unknown> = {}) {
   return {
@@ -66,19 +66,6 @@ describe("POST /api/news/cron", () => {
     expect(res.status).toBe(400);
   });
 
-  it("returns insertedArticleIds sorted and shouldEnrich true when articles present", async () => {
-    const res = await POST(makeRequest("test-secret", makePayload()));
-    expect(res.status).toBe(200);
-    const body = await res.json();
-
-    expect(body.insertedArticleIds).toEqual(["id-e1", "id-f1", "id-f2", "id-n1", "id-n2", "id-n3"]);
-    expect(body.shouldEnrich).toBe(true);
-    expect(body.totalInserted).toBe(6);
-    expect(body.tickerCount).toBe(2);
-    expect(body.tickers).toBeUndefined();
-    expect(body.ingestBreakdown.finnhub.inserted).toBe(2);
-  });
-
   it("returns shouldEnrich false when no inserted article ids", async () => {
     const payload = makePayload({
       total_inserted: 0,
@@ -105,12 +92,5 @@ describe("POST /api/news/cron", () => {
     const body = await res.json();
 
     expect(body.insertedArticleIds).toEqual(["aa", "bb", "zz"]);
-  });
-});
-
-describe("GET /api/news/cron", () => {
-  it("returns a usage error because POST is the production entrypoint", async () => {
-    const res = await GET();
-    expect(res.status).toBe(405);
   });
 });

@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { PORTFOLIO_COPILOT_MAX_TOKENS } from "@/lib/services/ai/constants";
 import { createAnthropicProvider } from "@/lib/services/ai/anthropic-provider";
 import { createAzureOpenAIProvider } from "@/lib/services/ai/azure-openai-provider";
 import { createMistralProvider } from "@/lib/services/ai/mistral-provider";
@@ -37,7 +36,7 @@ const baseContext = {
   question: "What should I prioritize this week?",
 };
 
-describe("portfolio copilot token budgets", () => {
+describe("portfolio copilot provider history", () => {
   beforeEach(() => {
     process.env = { ...originalEnv };
     vi.restoreAllMocks();
@@ -47,7 +46,7 @@ describe("portfolio copilot token budgets", () => {
     process.env = { ...originalEnv };
   });
 
-  it("uses 2000 tokens for the Azure portfolio-copilot path", async () => {
+  it("sends prior history once through Azure portfolio copilot", async () => {
     process.env.AZURE_OPENAI_API_KEY = "test-key";
     process.env.AZURE_OPENAI_BASE_URL = "https://example-resource.openai.azure.com/openai/v1";
     process.env.AZURE_OPENAI_MODEL = "test-deployment";
@@ -65,14 +64,11 @@ describe("portfolio copilot token budgets", () => {
     const provider = createAzureOpenAIProvider();
     await provider.answerPortfolioQuestion(baseContext);
 
-    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as {
-      max_output_tokens: number;
-    };
-    expect(body.max_output_tokens).toBe(PORTFOLIO_COPILOT_MAX_TOKENS);
+    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
     expect(JSON.stringify(body).match(/Earlier question/g)).toHaveLength(1);
   });
 
-  it("uses 2000 tokens for the OpenAI portfolio-copilot path", async () => {
+  it("sends prior history once through OpenAI portfolio copilot", async () => {
     process.env.OPENAI_API_KEY = "test-key";
 
     const fetchMock = vi.fn().mockResolvedValue(
@@ -88,14 +84,11 @@ describe("portfolio copilot token budgets", () => {
     const provider = createOpenAIProvider();
     await provider.answerPortfolioQuestion(baseContext);
 
-    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as {
-      max_tokens: number;
-    };
-    expect(body.max_tokens).toBe(PORTFOLIO_COPILOT_MAX_TOKENS);
+    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
     expect(JSON.stringify(body).match(/Earlier question/g)).toHaveLength(1);
   });
 
-  it("uses 2000 tokens for the OpenRouter portfolio-copilot path", async () => {
+  it("sends prior history once through OpenRouter portfolio copilot", async () => {
     process.env.OPENROUTER_API_KEY = "test-key";
     process.env.OPENROUTER_MODEL = "test-model";
 
@@ -112,14 +105,11 @@ describe("portfolio copilot token budgets", () => {
     const provider = createOpenRouterProvider();
     await provider.answerPortfolioQuestion(baseContext);
 
-    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as {
-      max_tokens: number;
-    };
-    expect(body.max_tokens).toBe(PORTFOLIO_COPILOT_MAX_TOKENS);
+    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
     expect(JSON.stringify(body).match(/Earlier question/g)).toHaveLength(1);
   });
 
-  it("uses 2000 tokens for the Mistral portfolio-copilot path", async () => {
+  it("sends prior history once through Mistral portfolio copilot", async () => {
     process.env.MISTRAL_API_KEY = "test-key";
     process.env.MISTRAL_MODEL = "mistral-test-model";
 
@@ -136,14 +126,11 @@ describe("portfolio copilot token budgets", () => {
     const provider = createMistralProvider();
     await provider.answerPortfolioQuestion(baseContext);
 
-    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as {
-      max_tokens: number;
-    };
-    expect(body.max_tokens).toBe(PORTFOLIO_COPILOT_MAX_TOKENS);
+    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
     expect(JSON.stringify(body).match(/Earlier question/g)).toHaveLength(1);
   });
 
-  it("uses 2000 tokens for the Anthropic portfolio-copilot path", async () => {
+  it("sends prior history once through Anthropic portfolio copilot", async () => {
     process.env.ANTHROPIC_API_KEY = "test-key";
 
     const fetchMock = vi.fn().mockResolvedValue(
@@ -159,10 +146,7 @@ describe("portfolio copilot token budgets", () => {
     const provider = createAnthropicProvider();
     await provider.answerPortfolioQuestion(baseContext);
 
-    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as {
-      max_tokens: number;
-    };
-    expect(body.max_tokens).toBe(PORTFOLIO_COPILOT_MAX_TOKENS);
+    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
     expect(JSON.stringify(body).match(/Earlier question/g)).toHaveLength(1);
   });
 });

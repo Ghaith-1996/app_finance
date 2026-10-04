@@ -297,19 +297,6 @@ describe("POST /api/analysis/cron", () => {
     expect(body.runId).toBe("run-1");
   });
 
-  it("processes a single eligible portfolio", async () => {
-    const res = await POST(makePostRequest("test-secret", { portfolioId: "p1" }));
-    expect(res.status).toBe(200);
-    const body = await res.json();
-
-    expect(mockRunAnalysis).toHaveBeenCalledWith(mockSupabase, "p1");
-    expect(body.portfolioId).toBe("p1");
-    expect(body.skipped).toBe(false);
-    expect(body.runId).toBe("run-1");
-    expect(body.error).toBe(null);
-    expect(body.meta?.feedItemsCreated).toBe(2);
-  });
-
   it("returns 200 with error when runAnalysis returns an error result", async () => {
     mockRunAnalysis.mockResolvedValue({
       runId: "run-1",

@@ -1,6 +1,6 @@
 import type { FeedMode, MatchSource, NewsItem } from "@/lib/types";
 
-import { buildScoreExplanation } from "@/lib/feed/score-explanation";
+import { cardSummary } from "@/lib/feed/card-summary";
 import { cn, effectLabel, impactTone } from "@/lib/utils";
 
 import { Badge } from "@/components/ui/badge";
@@ -47,7 +47,7 @@ export function NewsFeedCard({
   const isHeadline =
     isMarketHeadlineSource(story.sourceType) && story.sourceType !== "edgar";
   const chips = holdingChips(story, mode);
-  const scoreExplanation = buildScoreExplanation(story, mode);
+  const summary = cardSummary(story);
   const meta = `${story.source.toUpperCase()} · ${formatFeedTimeAgo(story.publishedMinutesAgo)}`;
 
   return (
@@ -126,37 +126,10 @@ export function NewsFeedCard({
         {story.headline}
       </h3>
 
-      <p className="mt-3 line-clamp-3 text-sm leading-relaxed text-slate-400">
-        {story.globalSummary || story.aiSummary || ""}
-      </p>
-
-      {scoreExplanation.factors.length > 0 ? (
-        <div className="mt-5 border-t border-white/[0.06] pt-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-600">
-              {scoreExplanation.title}
-            </p>
-            {scoreExplanation.scoreLabel ? (
-              <span className="text-xs font-semibold uppercase tracking-[0.14em] text-brand">
-                {scoreExplanation.scoreLabel}
-              </span>
-            ) : null}
-          </div>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {scoreExplanation.factors.slice(0, 4).map((factor) => (
-              <Badge
-                key={factor.id}
-                tone={factor.tone}
-                className="max-w-full text-[10px]"
-              >
-                {factor.label}
-              </Badge>
-            ))}
-          </div>
-          <p className="mt-3 line-clamp-2 text-xs leading-5 text-slate-500">
-            {scoreExplanation.summary}
-          </p>
-        </div>
+      {/* Audit D02: one score (the badge above) and one sentence; the score drivers are shown
+          in the story detail panel when the card is opened. */}
+      {summary ? (
+        <p className="mt-3 line-clamp-2 text-sm leading-relaxed text-slate-400">{summary}</p>
       ) : null}
 
       {(story.thesisMatches ?? []).length > 0 ? (

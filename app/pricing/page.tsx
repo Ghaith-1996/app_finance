@@ -4,45 +4,58 @@ import { AppShell } from "@/components/app/app-shell";
 import { BillingActionButton } from "@/components/app/billing-action-button";
 import { Badge } from "@/components/ui/badge";
 import { Panel } from "@/components/ui/panel";
-import { PLAN_LABELS } from "@/lib/billing/plans";
+import { PLAN_LABELS, type PlanKey } from "@/lib/billing/plans";
+import { planCardState, type PlanCardState } from "@/lib/billing/pricing-view";
 import { getStripe } from "@/lib/billing/stripe";
 import { getBillingSummaryForUser } from "@/lib/billing/subscriptions";
+import { LEGAL_REFUND_NOTICE } from "@/lib/legal/constants";
 import { isAdminUser } from "@/lib/security/admin";
 import { loadOnboardingNavState } from "@/lib/server/page-loaders";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata = { title: "Pricing" };
 
-type PaidPlanCard = {
-  key: "premium" | "ultimate";
+// Audit D09: describe what each plan changes for the user, not which vendor serves it.
+type PlanCard = {
+  key: PlanKey;
   headline: string;
   features: string[];
 };
 
-const PAID_PLANS: PaidPlanCard[] = [
+const PLAN_CARDS: PlanCard[] = [
+  {
+    key: "free",
+    headline: "For trying Pulsefolio and light daily use.",
+    features: [
+      "Free AI model in story chat, Ask AI and the portfolio copilot",
+      "100 AI requests per day, resetting at midnight Eastern",
+      "Portfolio tracking, personalized feed, alerts and morning digest",
+    ],
+  },
   {
     key: "premium",
-    headline: "Free + premium model access",
+    headline: "For regular research with a stronger AI model.",
     features: [
-      "Access to free and premium model tiers",
+      "Free and Premium AI models",
       "5,000 AI requests per month",
-      "Premium responses routed to Mistral",
-      "Billing changes managed in Stripe's customer portal",
+      "Everything in Free",
     ],
   },
   {
     key: "ultimate",
-    headline: "All models, including ultimate",
+    headline: "For heavy use with our most capable reasoning model.",
     features: [
-      "Access to free, premium, and ultimate model tiers",
+      "Free, Premium and Ultimate AI models",
       "20,000 AI requests per month",
-      "Ultimate responses routed to Azure",
-      "Best fit when you want the top reasoning tier everywhere in the app",
+      "Everything in Premium",
     ],
   },
 ];
 
-async function loadPriceLabel(plan: "premium" | "ultimate"): Promise<string> {
+type PriceInfo = { label: string; currency: string | null; interval: string | null };
+
+async function loadPrice(plan: "premium" | "ultimate"): Promise<PriceInfo> {
+  const fallback: PriceInfo = { label: "Monthly billing", currency: null, interval: null };
   const priceId =
     plan === "premium"
       ? process.env.STRIPE_PREMIUM_PRICE_ID?.trim()
@@ -50,17 +63,17 @@ async function loadPriceLabel(plan: "premium" | "ultimate"): Promise<string> {
   const secret = process.env.STRIPE_SECRET_KEY?.trim();
 
   if (!priceId || !secret) {
-    return "Monthly billing";
+    return fallback;
   }
 
   try {
     const stripe = getStripe();
     const price = await stripe.prices.retrieve(priceId);
     const amount = price.unit_amount;
-    const interval = price.recurring?.interval;
+    const interval = price.recurring?.interval ?? null;
 
     if (amount == null) {
-      return "Monthly billing";
+      return fallback;
     }
 
     const currency = (price.currency ?? "usd").toUpperCase();
@@ -69,13 +82,46 @@ async function loadPriceLabel(plan: "premium" | "ultimate"): Promise<string> {
       currency,
     }).format(amount / 100);
 
-    if (!interval) {
-      return formatted;
-    }
-
-    return `${formatted} / ${interval}`;
+    return { label: interval ? `${formatted} / ${interval}` : formatted, currency, interval };
   } catch {
-    return "Monthly billing";
+    return fallback;
+  }
+}
+
+function billingTerms(prices: PriceInfo[]): string {
+  const currencies = [...new Set(prices.map((price) => price.currency).filter(Boolean))];
+  const intervals = [...new Set(prices.map((price) => price.interval).filter(Boolean))];
+  if (currencies.length === 1 && intervals.length === 1) {
+    return `Paid plans are billed in ${currencies[0]} every ${intervals[0]} through Stripe and renew automatically until you cancel.`;
+  }
+  return "Paid plans are billed through Stripe and renew automatically until you cancel. The price, currency, taxes and billing interval are shown at checkout.";
+}
+
+function CardAction({ plan, state }: { plan: PlanKey; state: PlanCardState }) {
+  switch (state.kind) {
+    case "baseline":
+      return <Badge tone="neutral">No card required</Badge>;
+    case "current":
+      return <Badge tone="brand">Your current plan</Badge>;
+    case "included":
+      return (
+        <Badge tone="neutral">
+          {state.reason === "account" ? "Included in your account access" : "Included in your plan"}
+        </Badge>
+      );
+    case "portal":
+      return (
+        <BillingActionButton mode="portal" variant={plan === "ultimate" ? "primary" : "secondary"}>
+          Change plan in billing
+        </BillingActionButton>
+      );
+    case "checkout":
+      if (plan === "free") return null;
+      return (
+        <BillingActionButton mode="checkout" plan={plan} variant={plan === "ultimate" ? "primary" : "secondary"}>
+          Start {PLAN_LABELS[plan]}
+        </BillingActionButton>
+      );
   }
 }
 
@@ -92,19 +138,18 @@ export default async function PricingPage({
   const showOnboardingNav = await loadOnboardingNavState();
   const showAdminLink = isAdminUser(user);
   const billingSummary = user ? await getBillingSummaryForUser(user.id, user.email) : null;
-  const [premiumPriceLabel, ultimatePriceLabel] = await Promise.all([
-    loadPriceLabel("premium"),
-    loadPriceLabel("ultimate"),
-  ]);
+  const [premiumPrice, ultimatePrice] = await Promise.all([loadPrice("premium"), loadPrice("ultimate")]);
   const sp = searchParams ? await searchParams : {};
   const billingMessage =
     typeof sp.billing === "string" ? sp.billing : Array.isArray(sp.billing) ? sp.billing[0] : null;
+  const trialAvailable = !billingSummary?.hasUsedTrial;
+  const accountAccess = !!billingSummary?.hasAdminModelAccess && !billingSummary.hasPaidAccess;
 
   return (
     <AppShell
       eyebrow=""
       title="Pricing"
-      description="Stripe Checkout starts new subscriptions. Stripe Customer Portal handles upgrades, downgrades, cancellation, and payment method updates."
+      description="Every plan includes portfolio tracking, the personalized feed, alerts and the morning digest. Plans differ in which AI models you can use and how many AI requests you get."
       activePath="/pricing"
       backHref={user ? "/settings" : "/"}
       backLabel={user ? "Back to settings" : "Back to landing"}
@@ -134,79 +179,71 @@ export default async function PricingPage({
           </Badge>
         ) : null}
 
-        <div className="grid gap-6 lg:grid-cols-3">
-          <Panel className="space-y-5 rounded-[2rem] p-6">
-            <div className="space-y-2">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
-                Free
-              </p>
-              <h2 className="text-3xl font-semibold tracking-tight text-white">$0</h2>
-              <p className="text-sm leading-7 text-slate-400">
-                Access to the free model tier only, with 100 AI requests per day.
-              </p>
-            </div>
-
-            <div className="space-y-2 text-sm text-slate-300">
-              <p>OpenRouter free model access</p>
-              <p>Feed, article chat, and portfolio copilot included</p>
-              <p>Upgrade when you need premium or ultimate responses</p>
-            </div>
-
-            {billingSummary?.planKey === "free" || !billingSummary ? (
-              <Badge tone="neutral">Current baseline</Badge>
-            ) : (
-              <BillingActionButton mode="portal" variant="secondary">
-                Manage billing
-              </BillingActionButton>
-            )}
+        {accountAccess ? (
+          <Panel className="rounded-2xl p-5">
+            <p className="text-sm leading-6 text-slate-300">
+              Your account already includes every AI model. You do not need a subscription to use them.
+            </p>
           </Panel>
+        ) : null}
 
-          {PAID_PLANS.map((plan) => {
-            const isCurrentPlan = billingSummary?.planKey === plan.key && billingSummary.hasPaidAccess;
-            const requiresPortal = !!billingSummary?.hasPaidAccess && !isCurrentPlan;
-            const priceLabel = plan.key === "premium" ? premiumPriceLabel : ultimatePriceLabel;
+        <div className="grid gap-6 lg:grid-cols-3">
+          {PLAN_CARDS.map((plan) => {
+            const state = planCardState(plan.key, billingSummary);
+            const priceLabel =
+              plan.key === "free" ? "$0" : plan.key === "premium" ? premiumPrice.label : ultimatePrice.label;
 
             return (
-              <Panel key={plan.key} className="space-y-5 rounded-[2rem] p-6">
+              // flex column + mt-auto keeps every card's action on the same baseline.
+              <Panel key={plan.key} className="flex flex-col gap-5 rounded-[2rem] p-6">
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
-                      {PLAN_LABELS[plan.key]}
-                    </p>
-                    {isCurrentPlan ? <Badge tone="brand">Current plan</Badge> : null}
-                  </div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
+                    {PLAN_LABELS[plan.key]}
+                  </p>
                   <h2 className="text-3xl font-semibold tracking-tight text-white">{priceLabel}</h2>
                   <p className="text-sm leading-7 text-slate-400">{plan.headline}</p>
                 </div>
 
-                <div className="space-y-2 text-sm text-slate-300">
+                <ul className="space-y-2 text-sm text-slate-300">
                   {plan.features.map((feature) => (
-                    <p key={feature}>{feature}</p>
+                    <li key={feature}>{feature}</li>
                   ))}
-                  {!billingSummary?.hasUsedTrial ? (
-                    <p className="text-brand">Includes a 7-day trial on the first paid subscription.</p>
+                  {plan.key !== "free" && trialAvailable && state.kind === "checkout" ? (
+                    <li className="text-brand">7-day free trial on your first paid subscription.</li>
+                  ) : null}
+                </ul>
+
+                <div className="mt-auto flex flex-wrap items-center gap-3 pt-2">
+                  <CardAction plan={plan.key} state={state} />
+                  {state.kind === "included" && state.reason === "plan" && billingSummary?.hasPaidAccess ? (
+                    <BillingActionButton mode="portal" variant="ghost">
+                      Manage billing
+                    </BillingActionButton>
                   ) : null}
                 </div>
-
-                {isCurrentPlan ? (
-                  <Badge tone="brand">Already active</Badge>
-                ) : requiresPortal ? (
-                  <BillingActionButton mode="portal" variant={plan.key === "ultimate" ? "primary" : "secondary"}>
-                    Manage billing
-                  </BillingActionButton>
-                ) : (
-                  <BillingActionButton
-                    mode="checkout"
-                    plan={plan.key}
-                    variant={plan.key === "ultimate" ? "primary" : "secondary"}
-                  >
-                    Start {PLAN_LABELS[plan.key]}
-                  </BillingActionButton>
-                )}
               </Panel>
             );
           })}
         </div>
+
+        <Panel className="space-y-2 rounded-2xl p-5 text-sm leading-6 text-slate-400">
+          <p>
+            All plans allow up to 10 AI requests per minute. Failed AI requests do not count toward
+            your daily or monthly limit.
+          </p>
+          <p>{billingTerms([premiumPrice, ultimatePrice])}</p>
+          {trialAvailable ? (
+            <p>
+              A trial converts to the paid plan when it ends unless you cancel before then.
+            </p>
+          ) : null}
+          <p>
+            {LEGAL_REFUND_NOTICE}{" "}
+            <Link href="/terms" className="text-brand hover:text-brand-strong">
+              Terms of Service
+            </Link>
+          </p>
+        </Panel>
       </div>
     </AppShell>
   );

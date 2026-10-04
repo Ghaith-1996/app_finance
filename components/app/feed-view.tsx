@@ -802,7 +802,8 @@ export function FeedView({
         )}
       >
       <div className="space-y-6">
-        <div className="rounded-2xl border border-white/[0.06] bg-surface-raised p-5 shadow-sm">
+        {/* Audit D01: filters stay reachable while reading on wide screens. */}
+        <div className="rounded-2xl border border-white/[0.06] bg-surface-raised p-5 shadow-sm lg:sticky lg:top-4 lg:z-20">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
             <ModeToggle mode={mode} onChange={handleModeChange} />
             {mode === "personal" ? (

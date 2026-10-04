@@ -172,8 +172,12 @@ describe("TodayDashboard", () => {
     expect(screen.getByText("Smart alerts")).toBeInTheDocument();
     expect(screen.getByText("3 armed")).toBeInTheDocument();
     expect(screen.getByText("What changed today")).toBeInTheDocument();
-    expect(screen.getByText("Portfolio changelog")).toBeInTheDocument();
-    expect(screen.getByText("Portfolio timeline")).toBeInTheDocument();
+    // D06: activity and timeline were the same list; it is shown once.
+    expect(screen.getByText("Recent activity")).toBeInTheDocument();
+    expect(screen.queryByText("Portfolio timeline")).toBeNull();
+    expect(screen.getByText("Do next")).toBeInTheDocument();
+    expect(screen.getByText("Top stories")).toBeInTheDocument();
+    expect(screen.getByText("More portfolio detail")).toBeInTheDocument();
     expect(screen.getByText("Data freshness")).toBeInTheDocument();
     expect(screen.getByText("Risk radar")).toBeInTheDocument();
     expect(screen.getAllByText("AAPL news risk").length).toBeGreaterThan(0);

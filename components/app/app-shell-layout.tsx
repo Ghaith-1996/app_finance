@@ -15,6 +15,7 @@ import {
   Globe,
   Home,
   LayoutDashboard,
+  MessagesSquare,
   Newspaper,
   PanelLeftClose,
   PanelLeft,
@@ -74,6 +75,7 @@ export function AppShellLayout({
 
   const mainNav = [
     { href: "/home", label: t("shell.home"), icon: Home },
+    { href: "/community", label: t("shell.community"), icon: MessagesSquare },
     { href: "/alerts", label: t("shell.alerts"), icon: Bell },
     { href: "/search", label: t("shell.search"), icon: Search },
     { href: "/onboarding", label: t("shell.onboarding"), icon: Upload },

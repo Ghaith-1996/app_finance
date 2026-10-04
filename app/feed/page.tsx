@@ -93,42 +93,39 @@ export default async function FeedPage({
         </Link>
       }
     >
-      <div className="space-y-8">
-        <div className="grid gap-4 md:grid-cols-3">
-          <Panel className="space-y-3 rounded-2xl p-6">
+      <div className="space-y-5">
+        {/* Audit D01: one compact strip instead of three tall cards, so the first stories sit
+            above the fold. */}
+        <Panel className="grid gap-4 rounded-2xl p-4 sm:grid-cols-3 sm:gap-6 sm:px-6">
+          <div className="min-w-0 space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
               Intelligence coverage
             </p>
-            <p className="text-3xl font-semibold tracking-tight text-white">
-              {marketStoryCount24h}
-            </p>
-            <p className="text-sm text-slate-500">market stories in the last 24 hours</p>
-            <div className="pt-1">
-              <span className="inline-flex items-center gap-2 rounded-lg border border-brand/25 bg-brand/10 px-3 py-1 text-xs font-semibold text-brand">
-                <span className="h-2 w-2 rounded-full bg-brand" />
-                Feed ready
+            <p className="flex flex-wrap items-baseline gap-x-2">
+              <span className="text-xl font-semibold tracking-tight text-white">
+                {marketStoryCount24h}
               </span>
-            </div>
-            <p className="text-sm text-slate-400">
-              {matchedStoryCount24h} matched to your portfolio
+              <span className="text-sm text-slate-500">market stories in the last 24 hours</span>
             </p>
-          </Panel>
+            <p className="text-xs text-slate-400">{matchedStoryCount24h} matched to your portfolio</p>
+          </div>
+
+          <div className="min-w-0 space-y-1">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
+              Last analysis
+            </p>
+            <p className="text-xl font-semibold tracking-tight text-white">
+              {portfolioOverview.lastAnalyzedAt}
+            </p>
+            <p className="text-xs text-slate-500">Auto-updated every 20 min</p>
+          </div>
 
           <ActivePortfolioValueCard
             portfolioId={portfolioId}
             initialOverview={portfolioOverview}
+            compact
           />
-
-          <Panel className="space-y-3 rounded-2xl p-6">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
-              Analysis pulse
-            </p>
-            <p className="text-3xl font-semibold tracking-tight text-white">
-              {portfolioOverview.lastAnalyzedAt}
-            </p>
-            <p className="text-sm text-slate-500">Auto-updated every 20 min</p>
-          </Panel>
-        </div>
+        </Panel>
 
         <FeedView
           portfolioId={portfolioId}

@@ -23,7 +23,7 @@ const baseItem: NewsItem = {
 };
 
 describe("article score explanation", () => {
-  it("renders personal score drivers on feed cards", () => {
+  it("shows one score and no driver block on personal feed cards (D02)", () => {
     render(
       <NewsFeedCard
         story={{
@@ -38,14 +38,13 @@ describe("article score explanation", () => {
       />,
     );
 
-    expect(screen.getByText("Score drivers")).toBeInTheDocument();
-    expect(screen.getAllByText("94% match")).toHaveLength(2);
-    expect(screen.getByText("Held ticker")).toBeInTheDocument();
-    expect(screen.getByText("Connected symbols")).toBeInTheDocument();
-    expect(screen.getByText(/driven by held ticker/i)).toBeInTheDocument();
+    // Drivers are shown in the story detail panel; the card keeps one score and one sentence.
+    expect(screen.getAllByText("94% match")).toHaveLength(1);
+    expect(screen.queryByText("Score drivers")).toBeNull();
+    expect(screen.getByText("Supplier commentary points to stronger demand.")).toBeInTheDocument();
   });
 
-  it("renders market drivers for tracked market stories", () => {
+  it("keeps market cards free of the driver block (D02)", () => {
     render(
       <NewsFeedCard
         story={{
@@ -57,9 +56,8 @@ describe("article score explanation", () => {
       />,
     );
 
-    expect(screen.getByText("Market drivers")).toBeInTheDocument();
-    expect(screen.getByText("Portfolio overlap")).toBeInTheDocument();
-    expect(screen.getByText("Ticker overlap")).toBeInTheDocument();
+    expect(screen.getByText("In portfolio")).toBeInTheDocument();
+    expect(screen.queryByText("Market drivers")).toBeNull();
   });
 
   it("renders thesis tracker matches on feed cards", () => {

@@ -9,6 +9,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const currentService = vi.hoisted(() => ({ value: null as unknown }));
 const sendDigestSmsMock = vi.hoisted(() => vi.fn());
 const sendTwilioSmsMock = vi.hoisted(() => vi.fn());
+const twilioConfigured = vi.hoisted(() => ({ value: true }));
 const userSession = vi.hoisted(() => ({
   verifiedPhone: null as string | null,
   upsert: vi.fn(),
@@ -20,6 +21,7 @@ vi.mock("@/lib/notifications/delivery", () => ({
   sendDigestEmail: vi.fn(),
   sendDigestSms: (...args: unknown[]) => sendDigestSmsMock(...args),
   sendTwilioSms: (...args: unknown[]) => sendTwilioSmsMock(...args),
+  isTwilioConfigured: () => twilioConfigured.value,
 }));
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
@@ -70,6 +72,7 @@ function rpcClient(answer: unknown) {
 beforeEach(() => {
   sendDigestSmsMock.mockReset();
   sendTwilioSmsMock.mockReset();
+  twilioConfigured.value = true;
   userSession.upsert.mockReset().mockResolvedValue({ error: null });
   userSession.verifiedPhone = null;
 });
@@ -227,5 +230,50 @@ describe("confirming a verification code", () => {
       p_phone: PHONE,
       p_code_hash: createHash("sha256").update(`user-1:${PHONE}:123456`).digest("hex"),
     });
+  });
+});
+
+// PR review: a code that was never sent must not consume the cooldown or hourly allowance.
+describe("unsent verification codes", () => {
+  const issued = [{ outcome: "issued", retry_after_seconds: 0 }];
+  const hashFor = (code: string) => createHash("sha256").update(`user-1:${PHONE}:${code}`).digest("hex");
+
+  it("does not issue a code at all when Twilio is not configured", async () => {
+    const rpc = rpcClient(issued);
+    twilioConfigured.value = false;
+
+    const result = await sendPhoneVerificationCodeForUser("user-1", PHONE);
+
+    expect(result).toMatchObject({ ok: false, error: expect.stringMatching(/unavailable/i) });
+    expect(rpc).not.toHaveBeenCalled();
+    expect(sendTwilioSmsMock).not.toHaveBeenCalled();
+  });
+
+  it("returns a controlled error and releases the attempt when sending throws", async () => {
+    const rpc = rpcClient(issued);
+    sendTwilioSmsMock.mockRejectedValue(new Error("Missing TWILIO_AUTH_TOKEN"));
+
+    const result = await sendPhoneVerificationCodeForUser("user-1", PHONE, { generateCode: () => "111111" });
+
+    expect(result.ok).toBe(false);
+    expect(rpc).toHaveBeenCalledWith("release_phone_verification", { p_user_id: "user-1", p_code_hash: hashFor("111111") });
+  });
+
+  it("releases the attempt when Twilio definitively rejects the message", async () => {
+    const rpc = rpcClient(issued);
+    sendTwilioSmsMock.mockResolvedValue({ status: "failed", providerMessageId: null, errorText: "invalid number" });
+
+    await sendPhoneVerificationCodeForUser("user-1", PHONE, { generateCode: () => "222222" });
+
+    expect(rpc).toHaveBeenCalledWith("release_phone_verification", { p_user_id: "user-1", p_code_hash: hashFor("222222") });
+  });
+
+  it("keeps the attempt when delivery is uncertain", async () => {
+    const rpc = rpcClient(issued);
+    sendTwilioSmsMock.mockResolvedValue({ status: "uncertain", providerMessageId: null, errorText: "timeout" });
+
+    await sendPhoneVerificationCodeForUser("user-1", PHONE);
+
+    expect(rpc.mock.calls.map(([name]) => name)).toEqual(["issue_phone_verification"]);
   });
 });

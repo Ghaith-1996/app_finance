@@ -4,7 +4,7 @@ import { createHash, randomInt } from "node:crypto";
 
 import { createLogger } from "@/lib/logger";
 import type { ConfirmPhoneCodeResult, SendPhoneCodeResult } from "@/lib/notifications/types";
-import { sendTwilioSms } from "@/lib/notifications/delivery";
+import { isTwilioConfigured, sendTwilioSms, type TwilioSendResult } from "@/lib/notifications/delivery";
 import { createServiceClient } from "@/lib/supabase/service";
 
 /**
@@ -37,13 +37,20 @@ export async function sendPhoneVerificationCodeForUser(
   phoneNumber: string,
   deps: { generateCode?: () => string } = {},
 ): Promise<SendCodeResult> {
+  // A missing SMS configuration must not use up the user's cooldown or hourly allowance.
+  if (!isTwilioConfigured()) {
+    log.error("verification SMS unavailable: Twilio is not configured");
+    return { ok: false, error: "Text messages are unavailable right now. Please try again later." };
+  }
+
   const code = (deps.generateCode ?? generateVerificationCode)();
+  const codeHash = hashVerificationCode(userId, phoneNumber, code);
   const supabase = createServiceClient();
 
   const { data, error } = await supabase.rpc("issue_phone_verification", {
     p_user_id: userId,
     p_phone: phoneNumber,
-    p_code_hash: hashVerificationCode(userId, phoneNumber, code),
+    p_code_hash: codeHash,
   });
   if (error) {
     log.error("issue_phone_verification failed", { error: error.message });
@@ -65,13 +72,32 @@ export async function sendPhoneVerificationCodeForUser(
     };
   }
 
-  const sent = await sendTwilioSms(
-    phoneNumber,
-    `Your Pulsefolio verification code is ${code}. It expires in 10 minutes. Reply STOP to opt out.`,
-  );
+  let sent: TwilioSendResult;
+  try {
+    sent = await sendTwilioSms(
+      phoneNumber,
+      `Your Pulsefolio verification code is ${code}. It expires in 10 minutes. Reply STOP to opt out.`,
+    );
+  } catch (sendError) {
+    // Thrown before any request reached Twilio: nothing was sent.
+    sent = {
+      status: "failed",
+      providerMessageId: null,
+      errorText: sendError instanceof Error ? sendError.message : String(sendError),
+    };
+  }
   if (sent.status === "sent") return { ok: true };
 
   log.warn("verification SMS not confirmed", { status: sent.status, error: sent.errorText });
+  if (sent.status === "failed") {
+    // Definitely not delivered: void this code and refund the send. An uncertain result keeps the
+    // attempt, because the message may still arrive.
+    const { error: releaseError } = await supabase.rpc("release_phone_verification", {
+      p_user_id: userId,
+      p_code_hash: codeHash,
+    });
+    if (releaseError) log.error("release_phone_verification failed", { error: releaseError.message });
+  }
   return {
     ok: false,
     error:

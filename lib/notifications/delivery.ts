@@ -133,6 +133,13 @@ export type TwilioSendResult = {
   errorText: string | null;
 };
 
+/** True when every Twilio setting needed to send an SMS is present. */
+export function isTwilioConfigured(): boolean {
+  return ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_MESSAGING_SERVICE_SID"].every((name) =>
+    Boolean(process.env[name]?.trim()),
+  );
+}
+
 /** One Twilio Messages call, shared by digest SMS and phone verification codes. */
 export async function sendTwilioSms(to: string, text: string): Promise<TwilioSendResult> {
   const accountSid = requireTwilioAccountSid();

@@ -38,6 +38,8 @@ two-session concurrency races. It never connects to a real project. CI runs the 
 | `036_atomic_position_changes.sql` | `holding_transactions` ledger; `apply_holding_transaction` | add/sell shares |
 | `037_notification_delivery_claims.sql` | delivery claim columns; claim/complete RPCs | daily digest delivery |
 | `038_sms_phone_verification.sql` | `phone_verification_challenges`, `verified_phone_numbers`; issue/confirm RPCs (service role only) | settings SMS verification; daily digest SMS (unverified numbers stop receiving SMS until verified) |
+| `039_holding_transaction_identity.sql` | `holding_transactions.requested_holding_id`; `apply_holding_transaction` treats an id as a retry only for the same holding and add price | add/sell shares |
+| `040_phone_verification_release.sql` | `release_phone_verification` (service role only) | settings SMS verification (unsent codes no longer consume the cooldown) |
 
 Deploying the app before these migrations breaks the listed features (missing RPCs/columns).
 

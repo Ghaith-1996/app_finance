@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { InlineRefreshPricesButton } from "@/components/app/inline-refresh-prices-button";
+import { RefreshPricesButton } from "@/components/app/refresh-prices-button";
 import { describeOverview, refreshedOverview } from "@/lib/portfolio/value-display";
 import type { PortfolioOverview, PortfolioPricingRefreshResult } from "@/lib/types";
 
@@ -49,7 +49,8 @@ export function PortfolioValueCard({
       </div>
       <div className="flex flex-wrap items-center gap-2 text-[13px] text-slate-600">
         <span>{overview.lastSyncedAt ? `Updated ${overview.lastSyncedAt}` : "Not synced yet"}</span>
-        <InlineRefreshPricesButton
+        <RefreshPricesButton
+          presentation="inline"
           portfolioId={portfolioId}
           onRefreshed={handleRefreshed}
         />

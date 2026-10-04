@@ -105,6 +105,9 @@ export type SmartAlertsCronResult = {
 };
 
 const log = createLogger("smart-alerts");
+/** New critical-news alerts per portfolio per cron run. */
+const CRITICAL_NEWS_ALERT_LIMIT = 5;
+const CRITICAL_NEWS_PAGE_SIZE = 10;
 const CRITICAL_NEWS_CATEGORIES = new Set([
   "earnings",
   "geopolitics",
@@ -238,60 +241,74 @@ async function buildCriticalNewsAlerts(input: {
   const latestRun = await loadLatestAnalysisRun(input.supabase, input.portfolio.id);
   if (!latestRun) return [];
 
-  const { data, error } = await input.supabase
-    .from("feed_items")
-    .select(`
-      id,
-      relevance_score,
-      why_it_matters,
-      ai_summary,
-      holdings,
-      news_items!inner (
+  const newsIdOf = (row: CriticalNewsRow) =>
+    (Array.isArray(row.news_items) ? row.news_items[0] : row.news_items)?.id;
+
+  // The cap applies to new alerts, after deduplication: when the highest-ranked critical stories
+  // were already alerted by an earlier run, lower-ranked new ones still get their turn. Candidates
+  // are read in relevance order, one page at a time, until the cap is reached or the run's feed
+  // rows are exhausted.
+  const selected: CriticalNewsRow[] = [];
+  const selectedNewsIds = new Set<string>();
+  for (let from = 0; selected.length < CRITICAL_NEWS_ALERT_LIMIT; from += CRITICAL_NEWS_PAGE_SIZE) {
+    const { data, error } = await input.supabase
+      .from("feed_items")
+      .select(`
         id,
-        headline,
-        source,
-        published_at,
-        category
-      )
-    `)
-    .eq("analysis_run_id", latestRun.id)
-    .eq("portfolio_id", input.portfolio.id)
-    .gte("news_items.published_at", publishedSince(input.now, 24))
-    .order("relevance_score", { ascending: false })
-    .limit(10);
-
-  if (error) throw new Error(error.message);
-
-  const criticalRows = ((data ?? []) as unknown as CriticalNewsRow[])
-    .filter(isCriticalNews)
-    .slice(0, 5);
-
-  // Audit J4: an alert's identity is the article, not the per-run feed row. Articles that already
-  // have an alert for this portfolio (including ones keyed before this change) are not re-alerted,
-  // so reanalysis keeps one alert and its read state.
-  const newsIds = criticalRows
-    .map((row) => (Array.isArray(row.news_items) ? row.news_items[0] : row.news_items)?.id)
-    .filter((id): id is string => Boolean(id));
-  const alreadyAlerted = new Set<string>();
-  if (newsIds.length > 0) {
-    const { data: existing, error: existingError } = await input.supabase
-      .from("notification_alerts")
-      .select("payload")
-      .eq("user_id", input.preference.user_id)
+        relevance_score,
+        why_it_matters,
+        ai_summary,
+        holdings,
+        news_items!inner (
+          id,
+          headline,
+          source,
+          published_at,
+          category
+        )
+      `)
+      .eq("analysis_run_id", latestRun.id)
       .eq("portfolio_id", input.portfolio.id)
-      .eq("alert_type", "critical_news")
-      .in("payload->>newsItemId", newsIds);
-    if (existingError) throw new Error(existingError.message);
-    for (const row of (existing ?? []) as Array<{ payload: { newsItemId?: string } | null }>) {
-      if (row.payload?.newsItemId) alreadyAlerted.add(row.payload.newsItemId);
+      .gte("news_items.published_at", publishedSince(input.now, 24))
+      .order("relevance_score", { ascending: false })
+      .order("id", { ascending: true })
+      .range(from, from + CRITICAL_NEWS_PAGE_SIZE - 1);
+
+    if (error) throw new Error(error.message);
+    const page = (data ?? []) as unknown as CriticalNewsRow[];
+    const criticalRows = page.filter(isCriticalNews);
+
+    // Audit J4: an alert's identity is the article, not the per-run feed row. Articles that already
+    // have an alert for this portfolio (including ones keyed before this change) are not re-alerted,
+    // so reanalysis keeps one alert and its read state.
+    const newsIds = criticalRows.map(newsIdOf).filter((id): id is string => Boolean(id));
+    const alreadyAlerted = new Set<string>();
+    if (newsIds.length > 0) {
+      const { data: existing, error: existingError } = await input.supabase
+        .from("notification_alerts")
+        .select("payload")
+        .eq("user_id", input.preference.user_id)
+        .eq("portfolio_id", input.portfolio.id)
+        .eq("alert_type", "critical_news")
+        .in("payload->>newsItemId", newsIds);
+      if (existingError) throw new Error(existingError.message);
+      for (const row of (existing ?? []) as Array<{ payload: { newsItemId?: string } | null }>) {
+        if (row.payload?.newsItemId) alreadyAlerted.add(row.payload.newsItemId);
+      }
     }
+
+    for (const row of criticalRows) {
+      if (selected.length >= CRITICAL_NEWS_ALERT_LIMIT) break;
+      const newsId = newsIdOf(row);
+      if (newsId && (alreadyAlerted.has(newsId) || selectedNewsIds.has(newsId))) continue;
+      if (newsId) selectedNewsIds.add(newsId);
+      selected.push(row);
+    }
+
+    if (page.length < CRITICAL_NEWS_PAGE_SIZE) break;
   }
 
-  return criticalRows
-    .filter((row) => {
-      const newsId = (Array.isArray(row.news_items) ? row.news_items[0] : row.news_items)?.id;
-      return !newsId || !alreadyAlerted.has(newsId);
-    })
+  return selected
     .map((row) => {
       const news = Array.isArray(row.news_items) ? row.news_items[0] : row.news_items;
       const newsItemId = news?.id ?? "";

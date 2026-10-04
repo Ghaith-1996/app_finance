@@ -7,8 +7,8 @@ import { describe, expect, it, vi } from "vitest";
 // Approved design recommendations: D01 compact feed summary + sticky filters, D02 one score and
 // one sentence per card, D06 focused Home, D09 benefit-led pricing, D12 plan-aware pricing.
 
-vi.mock("@/components/app/inline-refresh-prices-button", () => ({
-  InlineRefreshPricesButton: () => <button type="button">Refresh prices</button>,
+vi.mock("@/components/app/refresh-prices-button", () => ({
+  RefreshPricesButton: () => <button type="button">Refresh prices</button>,
 }));
 
 import { ActivePortfolioValueCard } from "@/components/app/active-portfolio-value-card";

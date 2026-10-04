@@ -1,8 +1,7 @@
 # Pulsefolio audit remediation report
 
 Branch `fix/fixing-frontand-backend` (from `main`), final commit `335b31e`, 2026-10-02.
-Nothing was pushed, merged or opened as a PR. Detailed per-phase evidence is in
-[`remediation-ledger.md`](remediation-ledger.md).
+Nothing was pushed, merged or opened as a PR. Unique ledger constraints are consolidated below.
 
 Status vocabulary: **fixed** (code + regression evidence), **fixed – staging check open** (code verified locally;
 an external system must still confirm), **partially fixed**, **already fixed** (before this work),
@@ -139,14 +138,40 @@ and word-boundary matching for critical alerts. A labelled sample of real articl
 3. Whether to backfill duplicate unread alerts created before J4 (not done without approval).
 4. Whether code requests (H2) should also require Turnstile in addition to per-user caps.
 
+## Provenance and constraints retained from the ledger
+
+This report describes the October 2 remediation and October 4 approved design work, not validation of the current refactor checkout.
+The initial remediation baseline was `0334ee3` (audit `c466f0b`); it had 575 passing Vitest cases and reproduced the portfolio/security/job defects.
+The later audit snapshot `11e4162` and final planning snapshot `88d8e1` are separate states; no earlier count proves either checkout.
+The final gates above mix explicitly identified `335b31e`, `e2d1e3b` and concurrent working-copy results; they are historical evidence only.
+Regression filenames in these historical tables may have since been removed or consolidated; consult TEST_AUDIT and the current tree.
+
+- Atomic holdings save locks ownership and commits replace/merge together; quote enrichment happens after the save commit.
+- USD FX conversion handles minor units (GBp/ZAc/ILA); missing FX is unavailable. Wider NUMERIC in 033 prevents very large gains from aborting price writes.
+- A partial refresh remains stale and leaves the successful-sync timestamp unchanged; last-known-good prices are not a complete fresh quote set.
+- Position operation IDs denote identical retries only; migration 039 additionally binds them to the requested holding/add price.
+- Enrichment retries use bounded backoff and compare-and-set attempt ownership; fallback text on terminal failure is never treated as succeeded enrichment.
+- Publish succeeds only when the run status update affected its row; prior successful analysis remains visible on failure.
+- Delivery claims use attempt tokens: stale email can be reclaimed; stale/ambiguous SMS is uncertain and is never automatically replayed.
+- Twilio 5xx/ambiguous failures are uncertain; definite 4xx failures remain retryable within the claim attempt cap. Mocks do not establish real provider delivery.
+- Failed AI answers refund the exact charged quota bucket, including reset boundaries, with a zero floor; burst counts remain by design.
+- Runtime body validation is a deliberate 400; quota infrastructure failure is 503. Trusted admin email confirmation excludes user-writable metadata.
+- SSRF defenses bind DNS checks to connection and cap time/size; Python parses already-fetched HTML, avoiding an unchecked second fetch.
+- Per-user pagination must advance by actual rows returned despite PostgREST caps. Hash-pinned Python dependencies are the supported reproducible environment.
+
+### Current-code qualifications (source review, October 4, 2026)
+
+The historical H2 row describes the original 038 deployment. The current code retains possession verification and adds 040:
+definitely-unsent codes release their send/cooldown; uncertain delivery keeps the pending code so a possibly received code stays valid.
+Current implementation also uses 039 for transaction retry identity and 041 to exclude pre-versioned valuation snapshots.
+These source observations do not prove the migrations were applied to any environment or that a real SMS was sent.
+Legal values remain canonical in `lib/legal/constants.ts` and the public legal pages; SECURITY.md remains the reporting policy.
+The provided mailing address is still a postal code/province, as recorded; this consolidation does not decide new legal obligations.
+D15, legacy duplicate-alert backfill and CAPTCHA on SMS code requests remain undecided; approved D01/D02/D06/D09/D12 retain their dated provenance above.
+
 ## Production / staging verification still required
 
-1. Apply migrations 032–038 in order in each environment before deploying (see `supabase/README.md`); confirm 030/031 (F04).
-2. Run the news workflow once against staging (J1) and the first CI run on a PR (H6); make CI a required check.
-3. Stripe sandbox: deliver old/new subscription events in both orders (B7).
-4. Confirm deploy egress controls (S1) and that each OAuth provider sets `email_confirmed_at` (S2).
-5. Twilio test credentials: send and confirm a verification code end to end (H2).
-6. Signed-in browser pass of feed, portfolio, watchlist, settings, analysis at 375/768/1024/1280 in both themes,
-   including a measured contrast pass (F01–F03, F10, D04).
-7. GitHub repository homepage → https://pulsefolio.app (F18).
-8. Optional: align `eslint-config-next` with `next` 16.3.x (S3 housekeeping).
+The operational acceptance criteria are consolidated in [README.md](../../README.md#staging-checks-still-requiring-evidence).
+Follow [supabase/README.md](../../supabase/README.md) for deployment dependencies through 041, ledger collisions and real isolation/RPC checks.
+OAuth, deployed egress, signed-in/browser contrast, scheduled GitHub runs, Stripe sandbox ordering and authorized Twilio verification remain external checks.
+CI required-check settings and the GitHub homepage are owner-controlled configuration. No check is closed by this document edit.

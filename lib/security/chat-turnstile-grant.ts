@@ -11,8 +11,9 @@
  * Server-only - never import from client components.
  */
 
-import { createHmac, timingSafeEqual } from "crypto";
+import { createHmac } from "crypto";
 
+import { isTimingSafeEqual } from "@/lib/security/timing";
 import { createLogger } from "@/lib/logger";
 
 const log = createLogger("chat-turnstile-grant");
@@ -94,17 +95,6 @@ function signScope(
   const mac = createHmac("sha256", key);
   mac.update(`${normalizedScopeKey(scope)}|${issuedAtMs}`);
   return base64UrlEncode(mac.digest());
-}
-
-function safeEqual(a: string, b: string): boolean {
-  const aBuf = Buffer.from(a);
-  const bBuf = Buffer.from(b);
-  if (aBuf.length !== bBuf.length) return false;
-  try {
-    return timingSafeEqual(aBuf, bBuf);
-  } catch {
-    return false;
-  }
 }
 
 function scopeHash(scope: ChatGrantScope): string {
@@ -194,7 +184,7 @@ export function hasValidChatGrantValue(
   if (ageMs < 0 || ageMs > CHAT_GRANT_TTL_SECONDS * 1000) return false;
 
   const expected = signScope(scope, key, issuedAtMs);
-  return safeEqual(signature, expected);
+  return isTimingSafeEqual(signature, expected);
 }
 
 /**

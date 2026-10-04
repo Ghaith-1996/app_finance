@@ -73,3 +73,14 @@ New migrations must always use a new, unique prefix.
 - `select has_function_privilege('anon', 'release_ai_quota(uuid,text,timestamptz,text,text)', 'EXECUTE');`
   must be `false` (same for the other quota and delivery functions).
 - Thesis tracker (`030`/`031`): save and reload a thesis with a test account.
+
+## Additional deployment prerequisites
+
+- The validator requires Bash and Docker with a disposable local Supabase Postgres container; never point checks at a real project.
+- Check the complete filename-ordered history, including 006 article chat, 020–023 quotas/concurrency/heartbeat,
+  024 digest and earnings, 025 snapshots, 027/028 alerts and 030/031 theses; do not rely on an old checklist's maximum prefix.
+- Confirm private billing/usage/rate-limit tables are inaccessible through anon/authenticated direct access; review deployed linter findings explicitly.
+- Verify persisted CSV/manual import, add/sell retries, FX price updates, delivery claims and SMS verification against the target schema.
+- SMS possession checks require 038 and release of definitely-unsent codes requires 040; ambiguous provider outcomes keep the pending code/cooldown.
+- Confirm migration 039 retry identity and 041 snapshot valuation exclusions before deploying their consumers.
+- Record the applied filenames/schema checks per environment; a local rebuild does not prove that staging or production has them.

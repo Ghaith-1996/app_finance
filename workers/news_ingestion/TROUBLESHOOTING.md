@@ -1,45 +1,52 @@
 # News ingestion worker troubleshooting
 
-The worker lives at `workers/news_ingestion/` and is spawned by Next.js routes (`/api/news/refresh`, `/api/news/cron`, `/api/news/ingest`). It writes to `news_items` using the Supabase **service role** key.
+Scheduled ingestion runs Python on GitHub Actions: `cron_runner` for current, `cron_runner_v2` for candidate.
+The runners upsert raw news with service-role access and emit the payload posted to the deployed ingestion route.
+Next.js admin/debug refresh/ingest routes can still launch a local Python process; the scheduled cron route consumes the runner payload.
+TypeScript enrichment/analysis and Python full-text extraction are later stages. See [the scheduler guide](../../README.md#schedulers).
 
 ## Python environment
 
-- Install deps: `pip install --require-hashes -r requirements.lock` (from the app repo root; the same pinned set the scheduled workflows use). `requirements.txt` holds the editable ranges the lock is compiled from.
-- Ensure `python` or `python3` is on `PATH` when the Next.js server runs.
+- From the app root: `python -m pip install --require-hashes -r requirements.lock` (same lock as CI/workflows).
+- `requirements.txt` contains editable ranges used to compile the lock; use the lock for installation, including GNews.
+- Local Next.js worker launches require `python` or `python3` on the server PATH; GitHub Actions supplies its own interpreter.
 
-## EDGAR / edgartools
+## Sources and EDGAR cache
 
-- Set **`EDGAR_IDENTITY`** to `Full Name email@example.com` (SEC fair-access policy).
-- **`EDGAR_LOCAL_DATA_DIR`** defaults to `<project>/.edgar_data` and must be writable.
+- Current worker set: EDGAR, NewsAPI and GNews; `cron_runner` additionally fetches targeted Finnhub company news.
+- Candidate set: EDGAR, NewsAPI.ai, GNews and NewsCatcher; `cron_runner_v2` has no targeted Finnhub stage.
+- `EDGAR_IDENTITY` must identify `Full Name email@example.com` for SEC fair access.
+- `EDGAR_LOCAL_DATA_DIR` defaults to `<project>/.edgar_data`; configure a writable cache before EDGAR import.
+- Current NewsAPI uses `NEWSAPI_KEY`; the market/business `everything` results are filtered by lookback after fetch.
+- Candidate NewsAPI.ai uses `NEWSAPI_AI_API_KEY`; `NEWSCATCHER_API_KEY` is optional/warning-only in candidate preflight.
+- NewsCatcher degradation is best-effort and does not on its own block candidate cron; inspect its result separately.
+- Finnhub needs `FINNHUB_API_KEY`; GNews needs no API key.
+- GNews fetches default, 3-hour and 1-hour top stories plus refresh-only targeted holding queries.
+- `gnews import failed`: check the interpreter actually used by the runner/server and reinstall the locked dependencies.
+- NewsAPI errors: inspect quota, plan and key validity without logging the key. Candidate credentials are separate from current credentials.
 
-## NewsAPI
+## Supabase and pipeline credentials
 
-- Set **`NEWSAPI_KEY`** (from [newsapi.org](https://newsapi.org)).
-- Global headlines use the `everything` endpoint with a market/business-oriented query; articles are filtered to the configured lookback window after fetch.
-- If you see `NewsAPI error` in logs, check quota, plan limits, and that the key is valid.
-
-## GNews
-
-- Install the **`gnews`** package via `pip install -r requirements.txt`.
-- No API key is required. The worker uses the package to read Google News feeds.
-- The source fetches default top stories, 3-hour top stories, 1-hour top stories, and refresh-only targeted holding queries.
-- If you see `gnews import failed`, verify the Python environment used by Next.js has the package installed.
-
-## Supabase
-
-- **`SUPABASE_SERVICE_ROLE_KEY`** is required so inserts bypass RLS.
-- **`NEXT_PUBLIC_SUPABASE_URL`** must match your project.
+- `NEXT_PUBLIC_SUPABASE_URL` identifies the project; `SUPABASE_SERVICE_ROLE_KEY` permits privileged writes and stays server/runner-only.
+- Current ingestion posts to `/api/news/cron` with `CRON_SECRET`; candidate posts to `/api/news/cron/v2` with `NEWS_V2_CRON_SECRET`.
+- Candidate's later enrichment/analysis reuse the current `CRON_ENDPOINT` and `CRON_SECRET`; keep the two ingestion paths distinct.
+- Running either cron runner is a remote fetch/write operation, not a harmless preflight.
 
 ## Diagnostics JSON
 
-Successful runs print JSON on stdout with `edgar`, `newsapi`, and `gnews` objects including `fetch_outcome`, `fetch_error`, and article counts. Logs go to stderr.
+Worker stdout is JSON; diagnostic logs go to stderr. Inspect source `fetch_outcome`, `fetch_error` and article counts.
+Source objects depend on the selected set; current runner also reports Finnhub, candidate reports NewsAPI.ai/NewsCatcher.
+Keep stderr separate when capturing payloads; workflows check JSON before POSTing it.
+Inspect ingestion, full-text extraction, enrichment backlog and analysis status separately; inserted count alone is not end-to-end health.
+Do not include secret values, reusable cookies or real user data in diagnostic artifacts.
 
-## Preflight
-
-Run:
+## Preflight (from repository root)
 
 ```bash
 python -m workers.news_ingestion.main --check
+python -m workers.news_ingestion.main --check --provider-set candidate
 ```
 
-This validates imports, env vars, and writable EDGAR paths.
+These check imports, environment and writable EDGAR paths, not remote source availability, ingestion writes or deployed cron authorization.
+A warning-only candidate NewsCatcher check can coexist with an overall successful preflight.
+For regressions use `python -B -m unittest discover -s workers/news_ingestion/tests -t .`; this does not execute a real ingestion pipeline.

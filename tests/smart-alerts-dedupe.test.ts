@@ -159,6 +159,61 @@ describe("critical news alert identity (J4)", () => {
     expect(supabase.db.notification_alerts).toHaveLength(1);
   });
 
+  describe("alert cap is applied after deduplication (PR review)", () => {
+    /** `count` distinct critical articles, inserted in descending relevance (the mock keeps insertion order). */
+    function criticalFeed(count: number): Row[] {
+      return Array.from({ length: count }, (_, index) => ({
+        ...feedRow(`feed-${index + 1}`, "run-1"),
+        relevance_score: 99 - index,
+        news_items: { ...article, id: `news-${index + 1}`, headline: `Regulatory risk ${index + 1}` },
+      }));
+    }
+    const alertedNewsIds = (db: Record<string, Row[]>) =>
+      db.notification_alerts.map((row) => (row.payload as { newsItemId: string }).newsItemId);
+
+    it("when the top five were alerted earlier, lower-ranked new stories are alerted next", async () => {
+      const db = baseDb();
+      db.feed_items = criticalFeed(7);
+      const supabase = makeSupabase(db);
+
+      await runSmartAlertsCron({ supabase: supabase as never, now });
+      expect(alertedNewsIds(supabase.db)).toEqual(["news-1", "news-2", "news-3", "news-4", "news-5"]);
+
+      await runSmartAlertsCron({ supabase: supabase as never, now });
+      expect(alertedNewsIds(supabase.db)).toEqual([
+        "news-1", "news-2", "news-3", "news-4", "news-5", "news-6", "news-7",
+      ]);
+    });
+
+    it("reaches new stories ranked below the first page of candidates", async () => {
+      const db = baseDb();
+      db.feed_items = criticalFeed(12);
+      db.notification_alerts = Array.from({ length: 10 }, (_, index) => ({
+        user_id: "user-1",
+        portfolio_id: "portfolio-1",
+        alert_type: "critical_news",
+        dedupe_key: `portfolio-1:news:news-${index + 1}`,
+        payload: { newsItemId: `news-${index + 1}` },
+        read_at: null,
+      }));
+      const supabase = makeSupabase(db);
+
+      await runSmartAlertsCron({ supabase: supabase as never, now });
+
+      expect(alertedNewsIds(supabase.db).slice(10)).toEqual(["news-11", "news-12"]);
+    });
+
+    it("still creates at most five new alerts per run", async () => {
+      const db = baseDb();
+      db.feed_items = criticalFeed(25);
+      const supabase = makeSupabase(db);
+
+      await runSmartAlertsCron({ supabase: supabase as never, now });
+
+      expect(alertedNewsIds(supabase.db)).toEqual(["news-1", "news-2", "news-3", "news-4", "news-5"]);
+    });
+  });
+
   it("still alerts a different article", async () => {
     const supabase = makeSupabase(baseDb());
     await runSmartAlertsCron({ supabase: supabase as never, now });

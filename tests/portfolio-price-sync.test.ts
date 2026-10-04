@@ -232,7 +232,8 @@ vi.mock("@/lib/services/yahoo-finance", () => ({
   searchSymbol: vi.fn(),
 }));
 
-vi.mock("@/lib/services/portfolio", () => ({
+vi.mock("@/lib/services/portfolio", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/services/portfolio")>(),
   computePortfolioOverview: mocked.computePortfolioOverview,
 }));
 

@@ -14,7 +14,7 @@ import {
   getAIProviderById,
   toArticleChatError,
 } from "@/lib/services/ai";
-import type { AIChatErrorCode } from "@/lib/services/ai";
+import { userFacingChatErrorMessage } from "@/lib/services/ai/ai-chat-errors";
 import { computePortfolioOverview } from "@/lib/services/portfolio";
 import { loadInvestmentThesesForSymbols } from "@/lib/server/investment-theses";
 import { createClient } from "@/lib/supabase/server";
@@ -52,24 +52,6 @@ function respondWithGrant(body: unknown, status: number, scope: ChatGrantScope) 
     // asked to complete Turnstile again on the next request rather than
     // receiving a 500.
     return json(body, status);
-  }
-}
-
-function userFacingMessage(code: AIChatErrorCode): string {
-  switch (code) {
-    case "provider_auth":
-      return "AI provider credentials are invalid or missing. An admin needs to check the API key and deployment configuration.";
-    case "provider_timeout":
-      return "The AI provider took too long to respond. Please try again in a moment.";
-    case "provider_rate_limited":
-      return "The selected AI provider is busy or rate-limited. Please try again shortly.";
-    case "provider_context_limit":
-      return "This conversation contains too much context for the AI provider. Please try again with a shorter question.";
-    case "provider_bad_response":
-      return "The AI provider returned an unusable response. Please try again or rephrase your question.";
-    case "provider_unavailable":
-    default:
-      return "Portfolio copilot is temporarily unavailable. Please try again later.";
   }
 }
 
@@ -357,7 +339,7 @@ export async function POST(request: Request) {
       const aiErr = error instanceof AIChatError ? error : toArticleChatError(error);
       return respondForChat(
         {
-          error: userFacingMessage(aiErr.code),
+          error: userFacingChatErrorMessage(aiErr.code, "portfolio-copilot"),
           code: aiErr.code,
         },
         503,

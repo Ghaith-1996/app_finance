@@ -2,60 +2,16 @@
 
 Audited on October 2, 2026 after the request to remove unit tests without distinct regression value. Three parallel subagents reviewed UI, auth/AI/billing, and background pipelines; the coordinating agent reviewed portfolio calculations, shared utilities, and Python workers.
 
-## Coverage evidence and decision rule
+## Périmètre de cette campagne
 
-The checkout has no browser E2E suite, E2E runner/configuration, E2E package script, or E2E CI job. The existing AGENTS.md also documents this gap. Provider smoke scripts do not exercise a complete user workflow. No external E2E location was supplied during this audit, so none of these deletions claims an E2E replacement.
+Les décisions par cas ci-dessous appartiennent à la campagne datée en introduction.
+Cette campagne ne revendiquait aucune couverture E2E de remplacement.
+Le cas publisher-url est remplacé par outbound-url-guard pour les risques de schéma, IP, DNS, rebinding, redirects et limites réseau.
+La politique actuelle et les commandes de vérification sont dans AGENTS.md et README.md.
 
-Every test in the original 117 Vitest files and eight Python test modules was reviewed. Removed cases pin constants, wording, static markup, source text, mock return values, or duplicate behavior already exercised by a retained case. Cases remain when they demonstrate a concrete application failure, adversarial input, state transition, data calculation, or provider contract with no demonstrated E2E equivalent.
-
-Mocks are not themselves a deletion criterion. A mocked RPC can verify validation, quota accounting, or truthful failure reporting in application code; it cannot prove database locking, rollback, RLS, or SQL atomicity. Existing executable SQL integration tests and upgrade fixtures were preserved and were not run by this cleanup.
-
-One explicit duplicate coverage mapping: publisher-url.test.ts was deleted because outbound-url-guard.test.ts covers the same scheme, credential, literal-IP and DNS checks, plus mixed DNS answers, canonical IP encodings, connection-time rebinding, unsafe redirects, timeouts, and response limits.
-
-## Result
-
-| Suite present at intake | Before | Retained | Removed |
-|---|---:|---:|---:|
-| Vitest files | 117 | 98 | 19 |
-| Vitest cases | 732 | 570 | 162 |
-| Python test modules | 8 | 8 | 0 |
-| Python cases | 80 | 68 | 12 |
-
-Removed 174 cases in total. Some retained cases also shed constant/copy assertions without changing their case count.
-
-The baseline Vitest run passed 731 of 732 cases. SaveArticleButton matched its label while still disabled by its initial load; the test now waits for the button to be enabled before clicking. Its save interaction was retained.
-
-Concurrent work added 13 cases in digest-delivery-claims.test.ts, portfolio-position-changes.test.ts, and twilio-response-classification.test.ts, and changed notification services and the shared Supabase helper. Those changes were preserved. The final current-tree run therefore includes 101 Vitest files and 583 cases, rather than only the original 98 retained files/570 cases.
-
-## Verification
-
-- Final Vitest: 583/583 pass, zero failures, using two workers.
-- Python: 68/68 pass, zero failures or skips. The bundled Python needed requests installed into a temporary folder outside the Git checkout.
-- TypeScript: npm run typecheck passes.
-- ESLint: npm run lint passes with existing warnings and zero errors.
-- git diff --check passes.
-
-The first verification run overlapped unfinished notification service/helper edits and an import timeout while lint and typecheck ran concurrently. Verification was repeated against the completed current tree with fewer Vitest workers; no failing test was removed to make verification pass.
-
-Repeat from the app root:
-
-```powershell
-npm run test -- --maxWorkers=2
-npm run typecheck
-npm run lint
-python -B -m unittest discover -s workers/news_ingestion/tests -v
-git diff --check
-```
-
-For the exact local Python runtime used here:
-
-```powershell
-$env:PYTHONPATH = 'C:\Users\ghait\Downloads\pulsefolio\unit-cleanup-python-deps'
-& 'C:\Users\ghait\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe' -B -m unittest discover -s workers/news_ingestion/tests -v
-```
-
-The restricted shell could not read the package installed by the dependency download; that Python verification was run with approved access to the same temporary package directory.
-
+- Campagne du 2 octobre : intake 732 Vitest/80 Python ; retrait 162/12 cas, 174 au total ; concurrence ajouta 13 cas et porta le run final à 583 Vitest/68 Python.
+- Résultats datés : 583/583 et 68/68 réussis ; ils ne valident pas le HEAD du présent refactor. Le défaut de timing SaveArticleButton fut corrigé en gardant son interaction.
+- Les mocks ne prouvaient pas locking/rollback/RLS/atomicité SQL ; les SQL et fixtures conservés ne furent pas exécutés par cette campagne.
 ## Vitest decisions
 
 Filenames are relative to tests/. Counts compare the intake suite with the retained suite; renamed cases retain their count.

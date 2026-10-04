@@ -4,7 +4,7 @@ import { useState } from "react";
 import type { ReactNode } from "react";
 import { Activity } from "lucide-react";
 
-import { InlineRefreshPricesButton } from "@/components/app/inline-refresh-prices-button";
+import { RefreshPricesButton } from "@/components/app/refresh-prices-button";
 import { Panel } from "@/components/ui/panel";
 import { describeOverview, refreshedOverview, UNKNOWN_VALUE } from "@/lib/portfolio/value-display";
 import type { PortfolioOverview, PortfolioPricingRefreshResult } from "@/lib/types";
@@ -60,7 +60,8 @@ export function PortfolioSnapshotPanel({
             <div className="flex flex-wrap items-center gap-2">
               <span>{overview.lastSyncedAt || "Not synced yet"}</span>
               {portfolioId ? (
-                <InlineRefreshPricesButton
+                <RefreshPricesButton
+                  presentation="inline"
                   portfolioId={portfolioId}
                   className="h-6 px-1.5 text-[10px]"
                   onRefreshed={handleRefreshed}

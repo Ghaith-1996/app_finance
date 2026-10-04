@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { TrendingDown, TrendingUp } from "lucide-react";
 
-import { InlineRefreshPricesButton } from "@/components/app/inline-refresh-prices-button";
+import { RefreshPricesButton } from "@/components/app/refresh-prices-button";
 import { describeOverview, refreshedOverview } from "@/lib/portfolio/value-display";
 import type { PortfolioOverview, PortfolioPricingRefreshResult } from "@/lib/types";
 
@@ -54,7 +54,7 @@ export function ActivePortfolioValueCard({
         <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
           <span>{overview.lastSyncedAt ? `Updated ${overview.lastSyncedAt}` : "Not synced yet"}</span>
           {portfolioId ? (
-            <InlineRefreshPricesButton portfolioId={portfolioId} onRefreshed={handleRefreshed} />
+            <RefreshPricesButton presentation="inline" portfolioId={portfolioId} onRefreshed={handleRefreshed} />
           ) : null}
         </div>
       </div>
@@ -99,7 +99,8 @@ export function ActivePortfolioValueCard({
       <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
         <span>{overview.lastSyncedAt ? `Updated ${overview.lastSyncedAt}` : "Not synced yet"}</span>
         {portfolioId ? (
-          <InlineRefreshPricesButton
+          <RefreshPricesButton
+            presentation="inline"
             portfolioId={portfolioId}
             onRefreshed={handleRefreshed}
           />

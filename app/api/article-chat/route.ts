@@ -1,7 +1,7 @@
 import { parseChatRequestBody } from "@/lib/security/chat-request";
 import { NextResponse } from "next/server";
 
-import { PLAN_LABELS } from "@/lib/billing/plans";
+import { PLAN_LABELS, parseModelTier, providerIdForTier, type TieredProviderId } from "@/lib/billing/plans";
 import {
   BillingAccessError,
 } from "@/lib/billing/subscriptions";
@@ -14,7 +14,7 @@ import {
   getAIProviderById,
   toArticleChatError,
 } from "@/lib/services/ai";
-import type { AIChatErrorCode } from "@/lib/services/ai";
+import { userFacingChatErrorMessage } from "@/lib/services/ai/ai-chat-errors";
 import { createLogger } from "@/lib/logger";
 import {
   AIUsageAccessError,
@@ -30,24 +30,16 @@ import {
 import { verifyTurnstileToken, getClientIp } from "@/lib/security/turnstile";
 import type {
   ArticleChatMessage,
-  ArticleChatModelTier,
   NewsCategory,
   TickerImpact,
 } from "@/lib/types";
 
 const log = createLogger("article-chat");
 
-type ArticleChatProviderId = "azure" | "openrouter" | "mistral";
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 type ChatHistoryItem = Pick<ArticleChatMessage, "role" | "content">;
 
-function providerIdForTier(tier: ArticleChatModelTier): ArticleChatProviderId {
-  if (tier === "ultimate") return "azure";
-  if (tier === "premium") return "mistral";
-  return "openrouter";
-}
-
-function deploymentLabelForLogs(id: ArticleChatProviderId): string {
+function deploymentLabelForLogs(id: TieredProviderId): string {
   if (id === "azure") {
     return (
       process.env.AZURE_OPENAI_MODEL?.trim() ||
@@ -59,16 +51,6 @@ function deploymentLabelForLogs(id: ArticleChatProviderId): string {
     return process.env.MISTRAL_MODEL?.trim() || "mistral-large-latest";
   }
   return process.env.OPENROUTER_MODEL?.trim() || "openrouter-default";
-}
-
-function parseModelTier(value: unknown): ArticleChatModelTier | null {
-  if (value == null) return "free";
-  if (typeof value !== "string") return null;
-  const normalized = value.trim().toLowerCase();
-  if (normalized === "free" || normalized === "premium" || normalized === "ultimate") {
-    return normalized;
-  }
-  return null;
 }
 
 function parseHistory(value: unknown): ChatHistoryItem[] {
@@ -89,24 +71,6 @@ function parseHistory(value: unknown): ChatHistoryItem[] {
       role: item.role,
       content: item.content.trim().slice(0, 4000),
     }));
-}
-
-function userFacingMessage(code: AIChatErrorCode): string {
-  switch (code) {
-    case "provider_auth":
-      return "AI provider credentials are invalid or missing. An admin needs to check the API key and deployment configuration.";
-    case "provider_timeout":
-      return "The AI provider took too long to respond. Please try again in a moment.";
-    case "provider_rate_limited":
-      return "The selected AI provider is busy or rate-limited. Please try again shortly.";
-    case "provider_context_limit":
-      return "This conversation contains too much context for the AI provider. Please try again with a shorter question.";
-    case "provider_bad_response":
-      return "The AI provider returned an unusable response. Please try again or rephrase your question.";
-    case "provider_unavailable":
-    default:
-      return "Article chat is temporarily unavailable. Please try again later.";
-  }
 }
 
 function buildEphemeralMessages(
@@ -751,7 +715,7 @@ export async function POST(request: Request) {
         });
         return respondForChat(
           {
-            error: userFacingMessage(aiErr.code),
+            error: userFacingChatErrorMessage(aiErr.code, "article-chat"),
             code: aiErr.code,
           },
           503,
@@ -788,7 +752,7 @@ export async function POST(request: Request) {
       });
       return respondForChat(
         {
-          error: userFacingMessage(aiErr.code),
+          error: userFacingChatErrorMessage(aiErr.code, "article-chat"),
           code: aiErr.code,
         },
         503,

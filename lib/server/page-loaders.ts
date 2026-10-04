@@ -1,5 +1,7 @@
 import "server-only";
 
+import { mapHoldingFromDb, type PortfolioHoldingRow } from "@/lib/services/portfolio";
+
 import {
   attachLatestEarningsReportFields,
   loadActiveEarningsReportsBySymbols,
@@ -132,31 +134,6 @@ export type HomeDashboardData = {
   matchedStoryCount24h: number;
 };
 
-type HoldingRow = {
-  id: string;
-  symbol: string;
-  company: string;
-  sector: string;
-  market: string;
-  source: string;
-  price: number | null;
-  daily_change: number | null;
-  allocation: number | null;
-  thesis: string | null;
-  quantity: number | null;
-  average_cost: number | null;
-  cost_basis: number | null;
-  current_price: number | null;
-  current_value: number | null;
-  unrealized_gain_amount: number | null;
-  unrealized_gain_percent: number | null;
-  quote_currency: string | null;
-  quote_as_of: string | null;
-  import_source: string | null;
-  previous_close?: number | string | null;
-  fx_rate_to_usd?: number | string | null;
-};
-
 type AuthenticatedPageContext = {
   supabase: ServerSupabase;
   userId: string | null;
@@ -245,36 +222,6 @@ function formatTimeAgo(iso: string | null | undefined): string {
   return formatRelativeTime(iso, new Date(), "-");
 }
 
-function mapHoldingFromRow(row: HoldingRow): Holding {
-  return {
-    id: row.id,
-    symbol: row.symbol,
-    company: row.company,
-    sector: row.sector,
-    market: row.market,
-    source: row.source,
-    price: Number(row.price ?? 0),
-    dailyChange: Number(row.daily_change ?? 0),
-    allocation: Number(row.allocation ?? 0),
-    thesis: row.thesis ?? "",
-    quantity: Number(row.quantity ?? 0),
-    averageCost: Number(row.average_cost ?? 0),
-    costBasis: Number(row.cost_basis ?? 0),
-    currentPrice: Number(row.current_price ?? 0),
-    currentValue: Number(row.current_value ?? 0),
-    unrealizedGainAmount: Number(row.unrealized_gain_amount ?? 0),
-    unrealizedGainPercent: Number(row.unrealized_gain_percent ?? 0),
-    quoteCurrency: row.quote_currency ?? "USD",
-    quoteAsOf: row.quote_as_of ?? null,
-    importSource: row.import_source ?? "manual",
-    previousClose: row.previous_close == null ? null : Number(row.previous_close),
-    fxRateToUsd: row.fx_rate_to_usd == null ? null : Number(row.fx_rate_to_usd),
-    latestEarningsReportUrl: null,
-    latestEarningsReportSource: null,
-    latestEarningsReportDate: null,
-  };
-}
-
 async function resolveAuthenticatedPageContext(
   label: string,
 ): Promise<AuthenticatedPageContext> {
@@ -328,14 +275,14 @@ async function resolveAuthenticatedPageContext(
 async function loadHoldingRows(
   supabase: ServerSupabase,
   portfolioId: string,
-): Promise<HoldingRow[]> {
+): Promise<PortfolioHoldingRow[]> {
   const { data } = await supabase
     .from("holdings")
     .select("*")
     .eq("portfolio_id", portfolioId)
     .order("created_at", { ascending: true });
 
-  return (data ?? []) as HoldingRow[];
+  return (data ?? []) as PortfolioHoldingRow[];
 }
 
 async function loadLatestAnalysisRun(
@@ -1127,7 +1074,7 @@ export async function loadHomeDashboardData(): Promise<{
   timer.mark("dashboard signals");
 
   const holdings = attachLatestEarningsReportFields(
-    holdingRows.map(mapHoldingFromRow),
+    holdingRows.map(mapHoldingFromDb),
     reportsBySymbol,
   );
   const overview = buildPortfolioOverview(holdings, {
@@ -1269,7 +1216,7 @@ export async function loadFeedPageData(): Promise<{
   ]);
   timer.mark("overview/feed context");
 
-  const holdings = holdingRows.map(mapHoldingFromRow);
+  const holdings = holdingRows.map(mapHoldingFromDb);
   const portfolioSymbols = [
     ...new Set(holdingRows.map((row) => String(row.symbol ?? "").toUpperCase()).filter(Boolean)),
   ];
@@ -1366,7 +1313,7 @@ export async function loadPortfolioPageData(): Promise<{
   timer.mark("feed highlights");
 
   const holdings = attachLatestEarningsReportFields(
-    holdingRows.map(mapHoldingFromRow),
+    holdingRows.map(mapHoldingFromDb),
     reportsBySymbol,
   );
   timer.done();
@@ -1431,7 +1378,7 @@ export async function loadAnalysisPageData(
   );
   timer.mark("insights");
 
-  const holdings = holdingRows.map(mapHoldingFromRow);
+  const holdings = holdingRows.map(mapHoldingFromDb);
   timer.done();
 
   return {
@@ -1517,7 +1464,7 @@ export async function loadFullPortfolioPageData(): Promise<{
   timer.mark("insights/highlights");
 
   const holdings = attachLatestEarningsReportFields(
-    holdingRows.map(mapHoldingFromRow),
+    holdingRows.map(mapHoldingFromDb),
     reportsBySymbol,
   );
   timer.done();

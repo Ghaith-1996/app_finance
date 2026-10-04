@@ -10,6 +10,8 @@ import type { MatchSource, NewsCategory, StockEffect, TickerImpact } from "@/lib
 import { sendDigestEmail, sendDigestSms } from "@/lib/notifications/delivery";
 import {
   DAILY_DIGEST_TIME_ZONE,
+  mapDigestRow,
+  type DailyDigestRow,
   type DailyDigestBuildResult,
   type DailyDigestCronRunResult,
   type DailyDigestDeliveryResult,
@@ -90,23 +92,6 @@ type WatchlistNewsRow = {
   ticker_impacts: TickerImpact[] | null;
   overall_effect: string | null;
   global_summary: string | null;
-};
-
-type DigestRow = {
-  id: string;
-  user_id: string;
-  digest_date: string;
-  time_zone: string;
-  window_start: string;
-  window_end: string;
-  source_mode: DigestSourceMode;
-  portfolio_id: string | null;
-  portfolio_name: string | null;
-  summary_line: string;
-  bullish_symbols: string[] | null;
-  bearish_symbols: string[] | null;
-  top_stories: unknown;
-  created_at: string;
 };
 
 type DeliveryRow = {
@@ -297,27 +282,6 @@ function mapWatchlistStory(
   };
 }
 
-function mapDigestRow(row: DigestRow): DailyDigestSnapshot {
-  return {
-    id: row.id,
-    userId: row.user_id,
-    digestDate: row.digest_date,
-    timeZone: row.time_zone,
-    windowStart: row.window_start,
-    windowEnd: row.window_end,
-    sourceMode: row.source_mode,
-    portfolioId: row.portfolio_id,
-    portfolioName: row.portfolio_name,
-    summaryLine: row.summary_line,
-    bullishSymbols: row.bullish_symbols ?? [],
-    bearishSymbols: row.bearish_symbols ?? [],
-    topStories: Array.isArray(row.top_stories)
-      ? (row.top_stories as DigestSnapshotStory[])
-      : [],
-    createdAt: row.created_at,
-  };
-}
-
 async function loadDigestRecipients(supabase: ServiceClient): Promise<DigestRecipient[]> {
   // Audit H1: filter in the database and read every page, so opted-in users beyond the
   // response row cap are not silently skipped.
@@ -382,7 +346,7 @@ async function loadExistingDigest(
     throw new Error(error.message);
   }
 
-  return data ? mapDigestRow(data as DigestRow) : null;
+  return data ? mapDigestRow(data as DailyDigestRow) : null;
 }
 
 async function loadUserPortfolios(
@@ -539,7 +503,7 @@ async function insertDigestSnapshot(
     throw new Error(error.message);
   }
 
-  return mapDigestRow(data as DigestRow);
+  return mapDigestRow(data as DailyDigestRow);
 }
 
 export async function buildDailyDigestSnapshotForUser(input: {

@@ -5,52 +5,14 @@ import { Badge } from "@/components/ui/badge";
 import { Panel } from "@/components/ui/panel";
 import { sanitizeExternalUrl } from "@/lib/security/external-url";
 import { formatEtWindowLabel } from "@/lib/notifications/timezone";
-import type {
-  DailyDigestSnapshot,
-  DigestSnapshotStory,
+import {
+  mapDigestRow,
+  type DailyDigestRow,
 } from "@/lib/notifications/types";
 import { loadShellChromeState } from "@/lib/server/page-loaders";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata = { title: "Daily digest" };
-
-type DigestRow = {
-  id: string;
-  user_id: string;
-  digest_date: string;
-  time_zone: string;
-  window_start: string;
-  window_end: string;
-  source_mode: "portfolio" | "watchlist";
-  portfolio_id: string | null;
-  portfolio_name: string | null;
-  summary_line: string;
-  bullish_symbols: string[] | null;
-  bearish_symbols: string[] | null;
-  top_stories: unknown;
-  created_at: string;
-};
-
-function mapDigestRow(row: DigestRow): DailyDigestSnapshot {
-  return {
-    id: row.id,
-    userId: row.user_id,
-    digestDate: row.digest_date,
-    timeZone: row.time_zone,
-    windowStart: row.window_start,
-    windowEnd: row.window_end,
-    sourceMode: row.source_mode,
-    portfolioId: row.portfolio_id,
-    portfolioName: row.portfolio_name,
-    summaryLine: row.summary_line,
-    bullishSymbols: row.bullish_symbols ?? [],
-    bearishSymbols: row.bearish_symbols ?? [],
-    topStories: Array.isArray(row.top_stories)
-      ? (row.top_stories as DigestSnapshotStory[])
-      : [],
-    createdAt: row.created_at,
-  };
-}
 
 function formatPublishedAt(value: string): string {
   return new Intl.DateTimeFormat("en-US", {
@@ -119,7 +81,7 @@ export default async function DigestPage({
     notFound();
   }
 
-  const digest = mapDigestRow(data as DigestRow);
+  const digest = mapDigestRow(data as DailyDigestRow);
   const storyParam = resolvedSearchParams.story;
   const activeStoryId =
     typeof storyParam === "string"

@@ -23,7 +23,7 @@ vi.mock("@/lib/actions/saved-articles", () => ({
 
 import { NewsFeedCard } from "@/components/app/news-feed-card";
 import { FEED_PAGE_SIZE, storyHref } from "@/lib/feed/constants";
-import { DEFAULT_FEED_PAGE_SIZE, parseFeedPageSize } from "@/lib/server/feed";
+import { parseFeedPageSize } from "@/lib/server/feed";
 import { calculatePortfolioHealth } from "@/lib/services/portfolio-health";
 import type { NewsItem } from "@/lib/types";
 
@@ -65,7 +65,6 @@ describe("F09 ticker identity", () => {
 
 describe("F07 page-size contract", () => {
   it("server default and client requests use the same page size", () => {
-    expect(DEFAULT_FEED_PAGE_SIZE).toBe(FEED_PAGE_SIZE);
     expect(parseFeedPageSize(null)).toBe(FEED_PAGE_SIZE);
   });
 });

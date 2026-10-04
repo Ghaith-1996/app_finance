@@ -6,11 +6,12 @@ import { loadJobHealth } from "@/lib/services/job-health";
 
 type Answer = { data?: unknown; count?: number; error?: { message: string } | null };
 
-/** Returns a canned answer per table + filter signature. */
+/** Returns a canned answer per table + filter signature; list answers honour .range() pages. */
 function fakeSupabase(answers: (table: string, ops: string[]) => Answer) {
   return {
     from(table: string) {
       const ops: string[] = [];
+      let window: [number, number] | null = null;
       const builder: Record<string, unknown> = {};
       for (const method of ["select", "order", "limit", "in", "or", "eq", "gte", "not"]) {
         builder[method] = (...args: unknown[]) => {
@@ -18,9 +19,17 @@ function fakeSupabase(answers: (table: string, ops: string[]) => Answer) {
           return builder;
         };
       }
-      builder.maybeSingle = async () => ({ error: null, ...answers(table, ops) });
-      builder.then = (resolve: (value: Answer) => unknown) =>
-        Promise.resolve({ error: null, ...answers(table, ops) }).then(resolve);
+      builder.range = (from: number, to: number) => {
+        window = [from, to];
+        return builder;
+      };
+      const answer = () => {
+        const result = { error: null, ...answers(table, ops) };
+        if (window && Array.isArray(result.data)) result.data = result.data.slice(window[0], window[1] + 1);
+        return result;
+      };
+      builder.maybeSingle = async () => answer();
+      builder.then = (resolve: (value: Answer) => unknown) => Promise.resolve(answer()).then(resolve);
       return builder;
     },
   };
@@ -34,9 +43,28 @@ function healthyAnswers(table: string, ops: string[]): Answer {
   if (table === "news_items" && has("order:[\"created_at\"") && !has("enrichment_status")) {
     return { data: { created_at: minutesAgo(10) } };
   }
-  if (table === "analysis_runs" && has("completed_at")) return { data: { completed_at: minutesAgo(30) } };
+  if (table === "news_items" && has("enriched_at")) return { data: { enriched_at: minutesAgo(15) } };
+  if (table === "portfolios") return { data: [{ id: "p1", created_at: minutesAgo(30 * 24 * 60) }] };
+  if (table === "analysis_runs" && has("portfolio_id")) {
+    return { data: [{ id: "r1", portfolio_id: "p1", started_at: minutesAgo(32), completed_at: minutesAgo(30) }] };
+  }
   if (table === "holdings" && !has("or:")) return { count: 10 };
   return { data: null, count: 0 };
+}
+
+/** Healthy answers with these portfolios and usable runs. */
+function withAnalysis(
+  portfolios: Array<{ id: string; created_at: string }>,
+  runs: Array<{ id: string; portfolio_id: string; started_at: string; completed_at: string }>,
+  newestEnrichedAt = minutesAgo(15),
+) {
+  return (table: string, ops: string[]): Answer => {
+    const has = (text: string) => ops.some((op) => op.includes(text));
+    if (table === "portfolios") return { data: portfolios };
+    if (table === "analysis_runs" && has("portfolio_id")) return { data: runs };
+    if (table === "news_items" && has("enriched_at")) return { data: { enriched_at: newestEnrichedAt } };
+    return healthyAnswers(table, ops);
+  };
 }
 
 describe("loadJobHealth", () => {
@@ -105,6 +133,83 @@ describe("loadJobHealth", () => {
       NOW,
     );
     expect(report.status).toBe("ok");
+  });
+
+  describe("analysis freshness is evaluated per portfolio (PR review)", () => {
+    const old = minutesAgo(30 * 24 * 60);
+    const recentRun = (portfolioId: string) => ({
+      id: `run-${portfolioId}`,
+      portfolio_id: portfolioId,
+      started_at: minutesAgo(32),
+      completed_at: minutesAgo(30),
+    });
+    const staleRun = (portfolioId: string) => ({
+      id: `run-${portfolioId}`,
+      portfolio_id: portfolioId,
+      started_at: minutesAgo(10 * 60),
+      completed_at: minutesAgo(9 * 60 + 50),
+    });
+
+    it("one recently analysed portfolio does not hide others that fell behind or never ran", async () => {
+      const report = await loadJobHealth(
+        fakeSupabase(
+          withAnalysis(
+            [
+              { id: "fresh", created_at: old },
+              { id: "behind", created_at: old },
+              { id: "never", created_at: old },
+            ],
+            [recentRun("fresh"), staleRun("behind")],
+          ),
+        ) as never,
+        NOW,
+      );
+
+      expect(report.status).toBe("degraded");
+      expect(report.analysis).toMatchObject({ portfolios: 3, portfoliosBehind: 1, portfoliosNeverAnalyzed: 1 });
+      expect(report.analysis.latestUsableRunAt).toBe(minutesAgo(30));
+      const reasons = report.reasons.join(" | ");
+      expect(reasons).toMatch(/1 of 3 portfolio\(s\) have unanalysed news/);
+      expect(reasons).toMatch(/1 of 3 portfolio\(s\) have never completed an analysis run/);
+    });
+
+    it("uses each portfolio's newest usable run, wherever it appears in the list", async () => {
+      const report = await loadJobHealth(
+        fakeSupabase(
+          withAnalysis(
+            [{ id: "p1", created_at: old }],
+            [recentRun("p1"), { ...staleRun("p1"), id: "run-p1-older" }],
+          ),
+        ) as never,
+        NOW,
+      );
+      expect(report.analysis.portfoliosBehind).toBe(0);
+      expect(report.status).toBe("ok");
+    });
+
+    it("an old run is not behind when nothing was enriched since it started (quiet period)", async () => {
+      const report = await loadJobHealth(
+        fakeSupabase(withAnalysis([{ id: "p1", created_at: old }], [staleRun("p1")], minutesAgo(11 * 60))) as never,
+        NOW,
+      );
+      expect(report.analysis.portfoliosBehind).toBe(0);
+    });
+
+    it("a portfolio created within the threshold is not yet counted as never analysed", async () => {
+      const report = await loadJobHealth(
+        fakeSupabase(withAnalysis([{ id: "p1", created_at: old }, { id: "new", created_at: minutesAgo(20) }], [recentRun("p1")])) as never,
+        NOW,
+      );
+      expect(report.analysis.portfoliosNeverAnalyzed).toBe(0);
+      expect(report.status).toBe("ok");
+    });
+
+    it("reads every page of portfolios and runs", async () => {
+      const portfolios = Array.from({ length: 2_500 }, (_, index) => ({ id: `p${index}`, created_at: old }));
+      const runs = portfolios.slice(0, 2_499).map((portfolio) => recentRun(portfolio.id));
+      const report = await loadJobHealth(fakeSupabase(withAnalysis(portfolios, runs)) as never, NOW);
+      expect(report.analysis).toMatchObject({ portfolios: 2_500, portfoliosNeverAnalyzed: 1, portfoliosBehind: 0 });
+    });
   });
 
   it("treats a failed health query as degraded, never as healthy", async () => {

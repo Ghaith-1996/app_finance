@@ -6,7 +6,7 @@ import {
   attachLatestEarningsReportFields,
   loadActiveEarningsReportsBySymbols,
 } from "@/lib/services/earnings-reports";
-import { computePortfolioOverview } from "@/lib/services/portfolio";
+import { computePortfolioOverview, mapHoldingFromDb } from "@/lib/services/portfolio";
 import {
   parseCSV,
   detectColumnMapping,
@@ -58,37 +58,6 @@ export type SaveHoldingsInput = {
     importSource: string;
   }>;
 };
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapHoldingFromDb(row: any) {
-  return {
-    id: row.id as string,
-    symbol: row.symbol as string,
-    company: row.company as string,
-    sector: row.sector as string,
-    market: row.market as string,
-    source: row.source as string,
-    price: Number(row.price ?? 0),
-    dailyChange: Number(row.daily_change ?? 0),
-    allocation: Number(row.allocation ?? 0),
-    thesis: (row.thesis as string) ?? "",
-    quantity: Number(row.quantity ?? 0),
-    averageCost: Number(row.average_cost ?? 0),
-    costBasis: Number(row.cost_basis ?? 0),
-    currentPrice: Number(row.current_price ?? 0),
-    currentValue: Number(row.current_value ?? 0),
-    unrealizedGainAmount: Number(row.unrealized_gain_amount ?? 0),
-    unrealizedGainPercent: Number(row.unrealized_gain_percent ?? 0),
-    quoteCurrency: (row.quote_currency as string) ?? "USD",
-    quoteAsOf: (row.quote_as_of as string) ?? null,
-    importSource: (row.import_source as string) ?? "manual",
-    previousClose: row.previous_close == null ? null : Number(row.previous_close),
-    fxRateToUsd: row.fx_rate_to_usd == null ? null : Number(row.fx_rate_to_usd),
-    latestEarningsReportUrl: null,
-    latestEarningsReportSource: null,
-    latestEarningsReportDate: null,
-  };
-}
 
 async function getOwnedPortfolioContext<T extends string>(
   portfolioId: string,
@@ -151,6 +120,35 @@ function revalidateAll() {
 
 // ─── CSV preview ────────────────────────────────────────────────────────────
 
+async function resolveCsvDraftSymbols(drafts: HoldingDraft[]): Promise<void> {
+  for (const draft of drafts) {
+    if (!draft.symbol) continue;
+    try {
+      const candidates = await searchSymbol(draft.symbol);
+      if (candidates.length > 0) {
+        const exact = candidates.find(
+          (c) => c.symbol.toUpperCase() === draft.symbol.toUpperCase(),
+        );
+        if (exact) {
+          draft.company = draft.company || exact.name;
+          draft.exchange = exact.exchange;
+          draft.market = draft.market || exact.exchange;
+          if (draft.issues.length === 0) draft.status = "confirmed";
+        } else {
+          draft.candidates = candidates;
+          draft.status = "unresolved";
+          draft.issues.push({
+            field: "symbol",
+            message: `"${draft.symbol}" not found exactly. Choose from candidates.`,
+          });
+        }
+      }
+    } catch {
+      // Yahoo unavailable; leave as-is
+    }
+  }
+}
+
 export async function previewCSVImport(csvText: string) {
   const supabase = await createClient();
   const {
@@ -191,32 +189,7 @@ export async function previewCSVImport(csvText: string) {
   }
   const drafts = normalized.drafts;
 
-  for (const draft of drafts) {
-    if (!draft.symbol) continue;
-    try {
-      const candidates = await searchSymbol(draft.symbol);
-      if (candidates.length > 0) {
-        const exact = candidates.find(
-          (c) => c.symbol.toUpperCase() === draft.symbol.toUpperCase(),
-        );
-        if (exact) {
-          draft.company = draft.company || exact.name;
-          draft.exchange = exact.exchange;
-          draft.market = draft.market || exact.exchange;
-          if (draft.issues.length === 0) draft.status = "confirmed";
-        } else {
-          draft.candidates = candidates;
-          draft.status = "unresolved";
-          draft.issues.push({
-            field: "symbol",
-            message: `"${draft.symbol}" not found exactly. Choose from candidates.`,
-          });
-        }
-      }
-    } catch {
-      // Yahoo unavailable; leave as-is
-    }
-  }
+  await resolveCsvDraftSymbols(drafts);
 
   return { drafts, needsMapping: false, headers, suggestedMapping: colResult.mapping as Record<string, number>, error: null };
 }
@@ -242,32 +215,7 @@ export async function previewCSVWithMapping(
   }
   const drafts = normalized.drafts;
 
-  for (const draft of drafts) {
-    if (!draft.symbol) continue;
-    try {
-      const candidates = await searchSymbol(draft.symbol);
-      if (candidates.length > 0) {
-        const exact = candidates.find(
-          (c) => c.symbol.toUpperCase() === draft.symbol.toUpperCase(),
-        );
-        if (exact) {
-          draft.company = draft.company || exact.name;
-          draft.exchange = exact.exchange;
-          draft.market = draft.market || exact.exchange;
-          if (draft.issues.length === 0) draft.status = "confirmed";
-        } else {
-          draft.candidates = candidates;
-          draft.status = "unresolved";
-          draft.issues.push({
-            field: "symbol",
-            message: `"${draft.symbol}" not found exactly. Choose from candidates.`,
-          });
-        }
-      }
-    } catch {
-      // Yahoo unavailable
-    }
-  }
+  await resolveCsvDraftSymbols(drafts);
 
   return { drafts, error: null };
 }

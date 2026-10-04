@@ -1,134 +1,207 @@
 # Pulsefolio
 
-Next.js app for portfolio monitoring, market/news ingestion, and AI-assisted article analysis.
+Pulsefolio monitors portfolios and watchlists, ingests market news and provides AI-assisted article and portfolio analysis.
+It uses Next.js App Router, React, TypeScript, Tailwind, Supabase Auth/Postgres and a Python ingestion worker.
+CSV import and manual entry persist holdings; there is no live brokerage connection or trade execution.
+The public `/demo` is an interactive, scripted sample. Its allocations and stories are not a user's live account.
 
-## Local run
+## Architecture and user journeys
+
+Browser components provide interaction; server pages/actions use the authenticated Supabase session.
+The browser client, session server client and server-only service-role client have different privileges.
+Service-role credentials and server environment variables must never enter browser bundles.
+Ownership, RLS, runtime validation, billing rights, quotas and Turnstile checks remain required at their respective boundaries.
+
+Python fetches, normalizes and upserts raw articles into the global `news_items` pool.
+TypeScript enriches the durable backlog and analyzes it for portfolios, producing personalized `feed_items` and insights.
+The scheduled Python runner runs on GitHub Actions, then posts its JSON payload to the deployed cron route.
+The workflow subsequently drains enrichment/extraction and portfolio analysis. A successful ingest is not proof that later stages succeeded.
+Current and candidate ingestion share later enrichment/analysis endpoints but have distinct ingestion secrets and source sets.
+
+- `/onboarding`: CSV/manual import, preview and persisted replace/merge operations.
+- `/portfolio` and `/portfolio/full`: stored holdings, USD valuation, explicit quote freshness and hourly history.
+- `/watchlist`: saved symbols, Finnhub search/quotes and Twelve Data detail information.
+- `/feed`: personal/market feeds, article detail, saved stories and article chat; `/feed?story=<id>` selects a story.
+- `/analysis`: automatic run status and results; the UI does not expose a public manual news-refresh operation.
+- `/home`: portfolio summary and timely next actions. `/community`: protected social posts and comments.
+- `/settings`: profile, preferences, subscriptions, notifications and SMS possession verification.
+
+Deprecated `/api/news/refresh` and `/api/news/ingest` remain admin/debug tools.
+Admin job health is exposed at `GET /api/admin/job-health`; authorization is mandatory.
+Read task instructions in [AGENTS.md](AGENTS.md) before modifying the repository.
+
+## Local startup
+
+From the repository root:
 
 ```bash
-npm install
+npm ci
 npm run dev
 ```
 
-The app reads runtime configuration from `.env.example`. Create `.env.local` or `.env` from that file before starting the dev server.
+Create local configuration from [`.env.example`](.env.example); never commit or print secret values.
+The minimum auth configuration is `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
+Server data/jobs additionally need `SUPABASE_SERVICE_ROLE_KEY`; missing configuration is not an authenticated working product.
+Use a separate development Supabase project with the required migrations and Auth redirect URLs configured.
+OAuth requires the corresponding provider configuration; local installation does not verify an OAuth round trip.
+`npm run build` builds production assets; `npm run start` serves those assets.
+Provider configuration is needed for the features below, not just for startup.
 
-Minimum local env required to boot the app:
+## AI providers and transports
 
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+`AI_PROVIDER` selects general enrichment/analysis through [lib/services/ai/index.ts](lib/services/ai/index.ts).
+Unrecognized or absent values use the public OpenAI implementation.
+Five provider paths are maintained:
 
-If either is missing, the app will now fail with a repo-specific `[env] Missing required environment variable` message instead of the generic Supabase runtime error.
+| ID | Transport | Configuration names |
+|---|---|---|
+| `azure` | Azure OpenAI Responses | `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_BASE_URL`, `AZURE_OPENAI_MODEL` (or `AZURE_OPENAI_DEPLOYMENT`), optional `AZURE_OPENAI_REASONING_EFFORT` |
+| `openrouter` | OpenRouter chat completions; StepFun default | `OPENROUTER_API_KEY`, optional `OPENROUTER_MODEL`, `OPENROUTER_HTTP_REFERER`, `OPENROUTER_APP_NAME` |
+| `mistral` | Mistral chat completions | `MISTRAL_API_KEY`, optional `MISTRAL_MODEL` |
+| `openai` | Public OpenAI chat completions | `OPENAI_API_KEY` |
+| `anthropic` | Anthropic Messages | `ANTHROPIC_API_KEY` |
 
-## AI providers
+Azure's base URL accepts the resource root or `/openai/v1/`; the model identifies the deployed Azure deployment.
+An Azure AI Foundry agent endpoint is not an Azure OpenAI Responses endpoint.
+OpenRouter defaults to `stepfun/step-3.5-flash:free`; retain this path unless explicitly authorized to remove it.
+Defaults and validation live in the provider modules and [lib/env.ts](lib/env.ts), not in an independently maintained model catalog.
+Article chat and portfolio copilot select by model tier: `free` → OpenRouter, `premium` → Mistral, `ultimate` → Azure.
+[lib/billing/plans.ts](lib/billing/plans.ts) defines tier rights; [lib/security/ai-access.ts](lib/security/ai-access.ts) enforces billing, burst and durable quota checks.
+Failed answer requests release the charged quota bucket on a best-effort basis; failed requests still count against burst limits.
+`AI_PROVIDER` does not override this tier routing.
 
-Select the active provider with `AI_PROVIDER`.
-
-- `azure`: Azure OpenAI Responses API. Configure `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_BASE_URL`, and `AZURE_OPENAI_MODEL` with your GPT-5.2 deployment name.
-- `openrouter`: Keeps the existing StepFun setup via `OPENROUTER_API_KEY` and `OPENROUTER_MODEL`.
-- `openai`: Public OpenAI API using `OPENAI_API_KEY`.
-- `anthropic`: Anthropic API using `ANTHROPIC_API_KEY`.
-
-For Azure GPT-5.2, set:
-
-```env
-AI_PROVIDER=azure
-AZURE_OPENAI_API_KEY=...
-AZURE_OPENAI_BASE_URL=https://your-resource.openai.azure.com
-AZURE_OPENAI_MODEL=gpt-5.2
-AZURE_OPENAI_REASONING_EFFORT=medium
-```
-
-`AZURE_OPENAI_BASE_URL` can be either the resource root or the full `/openai/v1/` base URL. `AZURE_OPENAI_MODEL` should match the Azure deployment name, not just the model family.
-
-## Smoke tests
+Provider smoke scripts make external requests and require explicit authorization, even when a model is labelled free:
 
 ```bash
-node --env-file=.env scripts/test-azure-openai.mjs
 node --env-file=.env scripts/test-openrouter.mjs
+node --env-file=.env scripts/test-azure-openai.mjs
 ```
 
-## GitHub Actions news scheduler
+These scripts verify a provider path, not a complete user workflow. They were not run by the documentation consolidation.
 
-Production news ingestion and analysis are driven by `app/api/news/cron/route.ts`, but the scheduler now lives in `.github/workflows/news-cron.yml`.
+## Data and worker prerequisites
 
-The workflow:
+Apply required migrations before deploying dependent code. Follow [supabase/README.md](supabase/README.md).
+Historical duplicate prefixes require checking each environment's ledger; do not blindly rename or replay migrations.
+Docker, Bash and a disposable local Supabase Postgres container are prerequisites for the SQL validator.
+It builds a fresh schema, replays upgrade seeds and exercises real SQL/concurrency tests; it does not validate a deployed project's state.
 
-- runs every 20 minutes at `7,27,47` minutes past the hour in UTC
-- also supports manual `workflow_dispatch`
-- runs `python -m workers.news_ingestion.cron_runner` on the GitHub runner to build the ingest payload
-- `POST`s that JSON payload to the deployed production `/api/news/cron` endpoint with `Authorization: Bearer <CRON_SECRET>`
+From the repository root, install the Python dependencies locked by CI:
 
-Required GitHub repository secrets:
+```bash
+python -m pip install --require-hashes -r requirements.lock
+python -m workers.news_ingestion.main --check
+```
 
-- `CRON_ENDPOINT` - full production URL for the cron route, for example `https://your-app.vercel.app/api/news/cron`
-- `CRON_SECRET`
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `SUPABASE_SERVICE_ROLE_KEY`
-- `NEWSAPI_KEY` - if NewsAPI ingestion is enabled
-- `EDGAR_IDENTITY` - if EDGAR ingestion is enabled
-- `FINNHUB_API_KEY` - if Finnhub ingestion is enabled
+See [worker troubleshooting](workers/news_ingestion/TROUBLESHOOTING.md) for sources, candidate preflight and diagnostics.
+The preflight validates configuration/imports/cache paths, not remote ingestion or provider availability.
+A local Next.js admin/debug worker launch needs Python on the server PATH; scheduled ingestion uses Python on the GitHub runner.
+Do not run a real cron runner as an ordinary local check: it fetches external sources and writes through service-role access.
 
-Required Vercel production env vars for the route itself:
+## Verification commands and evidence
 
-- `CRON_SECRET`
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-- `SUPABASE_SERVICE_ROLE_KEY`
-- AI provider envs used by enrichment (`AI_PROVIDER` plus the matching provider credentials)
+These commands exist in the current scripts/workflow sources; their presence is not a successful execution record:
 
-## GitHub Actions daily digest scheduler
+```bash
+npm run typecheck
+npm run lint
+npm run test
+npm run build
+python -B -m unittest discover -s workers/news_ingestion/tests -t .
+bash scripts/db/validate-migrations.sh
+```
 
-Morning digest notifications are driven by `app/api/notifications/daily-digest/cron/route.ts` and scheduled from `.github/workflows/daily-digest.yml`.
+`npm run test:watch` supports local Vitest iteration. There is no `npm run db:validate` script.
+Keep results tied to a commit/working-tree state, command, runtime, initial data and real versus simulated layers.
+Mocks can verify application failure handling; they cannot prove database locking, rollback, RLS or atomic quotas.
+SQL execution cannot by itself prove OAuth, browser behavior, a real news source or live AI operation.
+[TEST_AUDIT.md](TEST_AUDIT.md) records the dated test cleanup decisions; its counters are historical.
+The proposed full-stack E2E transition is not yet a verified procedure here; add commands only after the runner and scenarios actually exist and execute.
+Provider smoke scripts are not E2E coverage. Current quality-gate results belong to the implementation reports, not inherited claims in this guide.
+Ordinary deterministic checks must avoid real paid generations, emails, SMS and payments.
 
-The workflow:
+## Schedulers
 
-- runs at `0,15,30,45 13,14 * * *` in UTC
-- also supports manual `workflow_dispatch`
-- `POST`s the deployed production `/api/notifications/daily-digest/cron` endpoint with `Authorization: Bearer <DIGEST_CRON_SECRET>`
-- relies on the route to gate execution to the real `9:00 AM America/New_York` hour so DST stays correct without hard-coding DST rules in GitHub Actions
+GitHub scheduled jobs use UTC and the default branch. Verify workflow presence, Actions enablement and secrets in the target repository.
+Schedules can be delayed or dropped; inspect actual runs and durable state rather than assuming the nominal cadence.
+A manual dispatch and a scheduled run against staging remain deployment checks, not proofs supplied by these YAML files.
 
-Required GitHub repository secrets:
+| Job / workflow | UTC schedule | POST endpoint | GitHub endpoint / bearer secret |
+|---|---|---|---|
+| Current news: [news-cron.yml](.github/workflows/news-cron.yml) | `7,27,47 * * * *` | `/api/news/cron` | `CRON_ENDPOINT` / `CRON_SECRET` |
+| Candidate news: [news-cron-v2.yml](.github/workflows/news-cron-v2.yml) | Manual dispatch only | `/api/news/cron/v2` | `NEWS_V2_CRON_ENDPOINT` / `NEWS_V2_CRON_SECRET` |
+| Daily digest: [daily-digest.yml](.github/workflows/daily-digest.yml) | `0,15,30,45 13,14 * * *` | `/api/notifications/daily-digest/cron` | `DIGEST_CRON_ENDPOINT` / `DIGEST_CRON_SECRET` |
+| Value snapshots: [portfolio-value-snapshots.yml](.github/workflows/portfolio-value-snapshots.yml) | `5 * * * *` | `/api/portfolio/value-snapshots/cron` | Base derived from `CRON_ENDPOINT` / `CRON_SECRET` |
+| Earnings: [earnings-report-sync.yml](.github/workflows/earnings-report-sync.yml) | `17 9 * * *` | `/api/earnings-reports/cron` | `EARNINGS_REPORTS_CRON_ENDPOINT` / `CRON_SECRET` |
+| Smart alerts: [smart-alerts.yml](.github/workflows/smart-alerts.yml) | `*/15 * * * *` | `/api/notifications/smart-alerts/cron` | `SMART_ALERTS_CRON_ENDPOINT` / `SMART_ALERTS_CRON_SECRET` or `CRON_SECRET` |
 
-- `DIGEST_CRON_ENDPOINT` - full production URL for the digest route, for example `https://your-app.vercel.app/api/notifications/daily-digest/cron`
-- `DIGEST_CRON_SECRET`
+All endpoints require their configured bearer token; the GitHub endpoint must include the full deployed route path.
+News workflows require `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` on the runner.
+Current uses `python -m workers.news_ingestion.cron_runner`: EDGAR, NewsAPI, GNews and targeted Finnhub.
+Configure `EDGAR_IDENTITY`, `NEWSAPI_KEY` and `FINNHUB_API_KEY` for enabled current sources.
+Candidate uses `python -m workers.news_ingestion.cron_runner_v2`: EDGAR, NewsAPI.ai, GNews and best-effort NewsCatcher.
+Configure `EDGAR_IDENTITY`, `NEWSAPI_AI_API_KEY` and optional `NEWSCATCHER_API_KEY`; degraded NewsCatcher does not alone block candidate ingestion.
+Candidate later enrichment and analysis reuse `CRON_ENDPOINT`/`CRON_SECRET`; do not replace its distinct ingestion credentials with these.
+News extraction uses `workers.news_ingestion.extract_full_text`, including the current queued backlog drain.
+The deployed enrich/analysis routes need Supabase server credentials and the configured general AI provider.
+Inspect ingestion results, extraction, enrichment backlog and analysis runs separately; zero inserted articles does not mean later recovery work should be skipped.
 
-Required production env vars for digest delivery:
+Digest execution is gated by the actual 9 AM `America/New_York` hour, preserving DST independently of UTC schedule.
+Delivery needs `RESEND_API_KEY`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_MESSAGING_SERVICE_SID` and verified SMS numbers.
+`APP_BASE_URL` is the preferred canonical link origin; `NEXT_PUBLIC_APP_URL`/`NEXT_PUBLIC_SITE_URL` are lower-priority fallbacks.
+Digest/page/channel uniqueness and delivery claims prevent duplicates; stale or ambiguous SMS delivery is `uncertain` and must not be blindly resent.
+Snapshots upsert one bucket per portfolio/UTC hour, refresh Yahoo quotes and require migration 041 for trustworthy history.
+The deployed snapshot route also accepts `PORTFOLIO_SNAPSHOT_CRON_SECRET`; this workflow sends `CRON_SECRET`, so align route/runtime configuration.
+Earnings scans tracked holdings/watchlist symbols, prefers company report URLs and uses SEC fallback (`EDGAR_IDENTITY`); failures preserve last-known-good links.
+Smart alerts persist deduplicated in-app rows; email/SMS delivery of these alert rows is not wired.
+Digest, snapshots, earnings and alerts require Supabase URL and service-role access in the deployed app.
 
-- `DIGEST_CRON_SECRET`
-- `RESEND_API_KEY`
-- `TWILIO_ACCOUNT_SID`
-- `TWILIO_AUTH_TOKEN`
-- `TWILIO_MESSAGING_SERVICE_SID`
-- `APP_BASE_URL` - canonical public app origin used in digest email and SMS links
-- optional `NEXT_PUBLIC_SITE_URL` or `NEXT_PUBLIC_APP_URL` as lower-priority fallbacks when `APP_BASE_URL` is not set
+For diagnosis inspect workflow HTTP status/stage JSON, then admin job health and persisted rows.
+Health includes freshness, enrichment backlog, failed runs, stale quotes and failed/uncertain deliveries; failed health reads report degraded.
+It does not yet fully report billing reconciliation drift or per-portfolio analysis age.
 
-Notes:
+## Staging checks still requiring evidence
 
-- Scheduled GitHub Actions workflows run on the latest commit of the default branch only.
-- Schedule times are interpreted in UTC.
-- GitHub can delay or drop scheduled workflows during high-load periods, especially near the top of the hour, which is why the workflow uses an offset schedule instead of `0,20,40`.
-- Public repositories can have scheduled workflows disabled automatically after 60 days of inactivity.
-- Digest links now prefer the configured canonical app URL and only fall back to a trusted runtime request origin when no app URL env is configured.
-- Before relying on the schedule, run the workflow once with `workflow_dispatch` and confirm GitHub Actions can execute `python -m workers.news_ingestion.cron_runner` and the deployed route accepts the `POST` payload.
+These are open acceptance criteria; no success checkbox or deployment status is inherited from older sessions.
+Use owned test accounts/data. Real-provider and sandbox checks are a separately authorized activity.
 
-## GitHub Actions smart alerts scheduler
+- Verify OAuth round trips and confirmed email ownership, redirect handling, terms/profile gates and two-user data isolation.
+- Confirm migrations/RPCs and service-role-only grants before deploying; confirm thesis migrations 030/031 and all dependencies through 041.
+- Import CSV and manual positions, reload from DB, exercise merge/replace and add/sell/idempotent retry without losing holdings.
+- Check USD/FX totals, missing/stale quotes, manual price refresh, history exclusions and the nonblocking full-portfolio load.
+- Persist watchlist additions, verify Finnhub search and Twelve Data detail, and inspect provider quotas/cache behavior.
+- Verify personal/market feed, deep links, article thread persistence and authenticated chat with authorized providers.
+- Verify real Turnstile widgets on chat/copilot/community/comment; missing or invalid challenges must fail clearly.
+- Run current and candidate pipelines independently; inspect ingest → extract/enrich → analyze, including retry/degraded recovery.
+- Confirm manual and scheduled Actions runs reach deployed routes and have the correct source and endpoint secrets.
+- With authorized Resend/Twilio test facilities, verify one digest/page/email/SMS, code send/confirm, deduplication and uncertain-delivery handling.
+- Verify snapshot, earnings and smart-alert rows and admin health from durable state; do not treat a 200 response as sufficient evidence.
+- Stripe sandbox: test both old/new subscription event orders, entitlement preservation during outage, webhook retries and duplicate claims.
+- Measure signed-in feed/home/community/portfolio/watchlist/settings/analysis/pricing at 375/768/1024/1280 px in both themes, including contrast, focus and overflow.
+- Verify deploy egress controls, production Turnstile keys, Actions/required CI settings and repository homepage `https://pulsefolio.app`.
 
-Smart alert events are generated by `app/api/notifications/smart-alerts/cron/route.ts` and scheduled from `.github/workflows/smart-alerts.yml`.
+[The audit report](docs/audit/AUDIT_REMEDIATION_REPORT.md) preserves dated decisions and unresolved D15 semantics, alert backfill and SMS CAPTCHA choices.
+The operational checks above include its remaining staging obligations; older test counts do not close them.
 
-The workflow:
+## Rollback and limits
 
-- runs every 15 minutes
-- also supports manual `workflow_dispatch`
-- `POST`s the deployed production `/api/notifications/smart-alerts/cron` endpoint with `Authorization: Bearer <SMART_ALERTS_CRON_SECRET>` or falls back to `CRON_SECRET`
-- writes deduplicated alert rows into `notification_alerts`; delivery channels can be layered on later without changing the alert history model
+Restore a previously reviewed app deployment when necessary; code rollback does not automatically roll back database writes or schema.
+Inspect migration history and dependencies per environment. Prefer a reviewed fix forward; do not invent destructive rollback SQL or assume every migration is additive.
+Provider outages may preserve stored prices/reports and yield partial/stale/degraded states; they do not guarantee a complete successful analysis.
+Ambiguous delivery remains uncertain. Missing schema can make a feature unavailable rather than silently successful.
 
-Required GitHub repository secrets:
+Portfolio values use USD with recorded FX; unavailable positions are excluded explicitly and FX movement is not separately attributed in daily change.
+History uses compatible `valuation_version` snapshots; pre-041 snapshots are excluded. The 30-day move remains unknown when uncomputed, not an invented zero.
+The portfolio chart uses compatible hourly history where available and a holdings-derived fallback; this is not live WebSocket price streaming.
+A personal feed may legitimately be empty; new holdings/watchlist symbols affect analysis/report links on subsequent jobs.
+Themes support light/dark and persist in cookies/storage. Locale types include `en`/`fr`, but the current preference provider forces English; do not claim a complete French UI.
+Demo material and illustrative scenarios remain distinct from real account guarantees; publisher labels may represent aggregator-sourced articles.
 
-- `SMART_ALERTS_CRON_ENDPOINT` - full production URL for the smart alerts route, for example `https://your-app.vercel.app/api/notifications/smart-alerts/cron`
-- `SMART_ALERTS_CRON_SECRET` or `CRON_SECRET`
+## Canonical references
 
-Required production env vars:
-
-- `SMART_ALERTS_CRON_SECRET` or `CRON_SECRET`
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `SUPABASE_SERVICE_ROLE_KEY`
-
+- [AGENTS.md](AGENTS.md) and [CLAUDE.md](CLAUDE.md): agent entry points; AGENTS holds the complete stable rules.
+- [Supabase guide](supabase/README.md): deployment ordering, ledgers, SQL validation and isolation checks.
+- [Worker troubleshooting](workers/news_ingestion/TROUBLESHOOTING.md): locked environment, sources and diagnostic boundaries.
+- [Security policy](SECURITY.md): reporting and testing restrictions; deployed branch status is a policy statement, not locally verified deployment evidence.
+- [Audit remediation report](docs/audit/AUDIT_REMEDIATION_REPORT.md) and [test audit](TEST_AUDIT.md): decisions and evidence dated by campaign/commit.
+- [Legal constants](lib/legal/constants.ts), [terms](app/terms/page.tsx) and [privacy](app/privacy/page.tsx): canonical operator details and public obligations.

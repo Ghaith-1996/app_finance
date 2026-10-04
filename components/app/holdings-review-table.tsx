@@ -1,5 +1,7 @@
 "use client";
 
+import type { Dispatch, SetStateAction } from "react";
+
 import type { HoldingDraft, HoldingResolutionCandidate } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Panel } from "@/components/ui/panel";
@@ -7,15 +9,47 @@ import { formatPrice } from "@/lib/utils";
 
 interface HoldingsReviewTableProps {
   drafts: HoldingDraft[];
-  onToggleStatus: (tempId: string) => void;
-  onSelectCandidate: (tempId: string, candidate: HoldingResolutionCandidate) => void;
+  onDraftsChange: Dispatch<SetStateAction<HoldingDraft[]>>;
 }
 
 export function HoldingsReviewTable({
   drafts,
-  onToggleStatus,
-  onSelectCandidate,
+  onDraftsChange,
 }: HoldingsReviewTableProps) {
+  function toggleStatus(tempId: string) {
+    onDraftsChange((prev) =>
+      prev.map((d) => {
+        if (d.tempId !== tempId) return d;
+        if (d.status === "skipped") {
+          return {
+            ...d,
+            status: d.issues.length > 0 ? ("unresolved" as const) : ("confirmed" as const),
+          };
+        }
+        return { ...d, status: "skipped" as const };
+      }),
+    );
+  }
+
+  function selectCandidate(tempId: string, candidate: HoldingResolutionCandidate) {
+    onDraftsChange((prev) =>
+      prev.map((d) => {
+        if (d.tempId !== tempId) return d;
+        const newIssues = d.issues.filter((i) => i.field !== "symbol");
+        return {
+          ...d,
+          symbol: candidate.symbol,
+          company: candidate.name,
+          market: candidate.exchange,
+          exchange: candidate.exchange,
+          candidates: [],
+          issues: newIssues,
+          status: newIssues.length > 0 ? ("unresolved" as const) : ("confirmed" as const),
+        };
+      }),
+    );
+  }
+
   if (drafts.length === 0) {
     return (
       <Panel className="p-8 text-center">
@@ -90,7 +124,7 @@ export function HoldingsReviewTable({
                           <button
                             key={c.symbol}
                             type="button"
-                            onClick={() => onSelectCandidate(draft.tempId, c)}
+                            onClick={() => selectCandidate(draft.tempId, c)}
                             className="block w-full rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-1.5 text-left text-xs transition hover:border-brand/30 hover:bg-brand/5"
                           >
                             <span className="font-semibold text-white">{c.symbol}</span>{" "}
@@ -101,7 +135,7 @@ export function HoldingsReviewTable({
                     )}
                     <button
                       type="button"
-                      onClick={() => onToggleStatus(draft.tempId)}
+                      onClick={() => toggleStatus(draft.tempId)}
                       className="text-xs text-slate-500 underline underline-offset-2 transition hover:text-slate-300"
                     >
                       {draft.status === "skipped" ? "Include" : "Skip"}

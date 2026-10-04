@@ -1,3 +1,4 @@
+import { NEWS_CATEGORIES } from "@/lib/types";
 import type {
   ArticleChatMessage,
   InvestmentThesisMatch,
@@ -32,6 +33,32 @@ export interface ArticleAnalysis {
   overallEffect: StockEffect;
   stockTags: string[];
   tickerImpacts: TickerImpact[];
+}
+
+export function parseArticleAnalysis(
+  raw: string,
+  headline: string,
+  hintTickers: string[] | undefined,
+  options: { dropEmptyStockTags: boolean },
+): ArticleAnalysis {
+  const parsed = JSON.parse(raw.replace(/```json?\s*|\s*```/g, "").trim());
+  const stockTags = Array.isArray(parsed.stockTags)
+    ? parsed.stockTags.map((tag: unknown) => String(tag).toUpperCase())
+    : (hintTickers ?? []);
+  return {
+    category: NEWS_CATEGORIES.includes(parsed.category) ? parsed.category : "other",
+    globalSummary: parsed.globalSummary || headline,
+    overallEffect: ["bullish", "bearish", "neutral"].includes(parsed.overallEffect) ? parsed.overallEffect : "neutral",
+    stockTags: options.dropEmptyStockTags && Array.isArray(parsed.stockTags) ? stockTags.filter(Boolean) : stockTags,
+    tickerImpacts: Array.isArray(parsed.tickerImpacts)
+      ? parsed.tickerImpacts
+          .filter((impact: { symbol?: string; effect?: string }) => impact.symbol && impact.effect)
+          .map((impact: { symbol: string; effect: string }) => ({
+            symbol: impact.symbol.toUpperCase(),
+            effect: ["bullish", "bearish", "neutral"].includes(impact.effect) ? impact.effect : "neutral",
+          }))
+      : [],
+  } as ArticleAnalysis;
 }
 
 export interface PortfolioMatchAssessment {

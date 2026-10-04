@@ -171,14 +171,6 @@ export function normalizeRowsWithReport(
   return { drafts, skippedRows, error };
 }
 
-export function normalizeRows(
-  rows: string[][],
-  mapping: Partial<Record<FieldKey, number>>,
-  isTransactionFile: boolean,
-): HoldingDraft[] {
-  return normalizeRowsWithReport(rows, mapping, isTransactionFile).drafts;
-}
-
 function normalizePositionRows(
   dataRows: Array<{ row: string[]; rowNumber: number }>,
   mapping: Partial<Record<FieldKey, number>>,

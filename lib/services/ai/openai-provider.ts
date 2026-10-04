@@ -1,5 +1,5 @@
 import type { PortfolioInsight } from "@/lib/types";
-import { NEWS_CATEGORIES } from "@/lib/types";
+import { parseArticleAnalysis } from "./provider";
 import type {
   ArticleAnalysis,
   ArticleChatContext,
@@ -111,21 +111,7 @@ export function createOpenAIProvider(): IAIProvider {
         const p = articleEnrichmentPrompt(headline, content, hintTickers);
         const raw = await chat(key, [{ role: "system", content: p.system }, { role: "user", content: p.user }], 500);
         if (raw) {
-          const parsed = JSON.parse(raw.replace(/```json?\s*|\s*```/g, "").trim());
-          return {
-            category: NEWS_CATEGORIES.includes(parsed.category) ? parsed.category : "other",
-            globalSummary: parsed.globalSummary || headline,
-            overallEffect: ["bullish", "bearish", "neutral"].includes(parsed.overallEffect) ? parsed.overallEffect : "neutral",
-            stockTags: Array.isArray(parsed.stockTags) ? parsed.stockTags.map((t: string) => String(t).toUpperCase()) : (hintTickers ?? []),
-            tickerImpacts: Array.isArray(parsed.tickerImpacts)
-              ? parsed.tickerImpacts
-                  .filter((i: { symbol?: string; effect?: string }) => i.symbol && i.effect)
-                  .map((i: { symbol: string; effect: string }) => ({
-                    symbol: i.symbol.toUpperCase(),
-                    effect: ["bullish", "bearish", "neutral"].includes(i.effect) ? i.effect : "neutral",
-                  }))
-              : [],
-          } as ArticleAnalysis;
+          return parseArticleAnalysis(raw, headline, hintTickers, { dropEmptyStockTags: false });
         }
       } catch { /* fallback */ }
       return stubAIProvider.analyzeArticle(headline, content, hintTickers);

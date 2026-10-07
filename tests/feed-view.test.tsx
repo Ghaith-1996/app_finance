@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, act, within, waitFor } from "@testing-library/react";
+import { hydrateRoot } from "react-dom/client";
+import { renderToString } from "react-dom/server";
 
 const supabaseMockState = vi.hoisted(() => ({
   feedInsertCallback: null as null | (() => void),
@@ -127,6 +129,46 @@ describe("FeedView", () => {
   afterEach(() => {
     vi.useRealTimers();
   });
+
+  it.each([375, 768, 1024, 1279, 1280, 1440])(
+    "hydrates server markup without replacing the feed at %i px",
+    async (width) => {
+      const view = <FeedView portfolioId="p1" initialFeedPayload={makeFeedPayload([])} />;
+      const container = document.createElement("div");
+      document.body.append(container);
+      // Server rendering has no viewport; the browser must start with the same markup.
+      vi.stubGlobal("window", undefined);
+      try {
+        container.innerHTML = renderToString(view);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+      setViewport(width);
+      const serverRail = container.querySelector('[data-testid="global-ask-ai-button"]');
+      const onRecoverableError = vi.fn();
+      const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+      let root: ReturnType<typeof hydrateRoot> | undefined;
+      try {
+        await act(async () => {
+          root = hydrateRoot(container, view, { onRecoverableError });
+        });
+        expect(onRecoverableError).not.toHaveBeenCalled();
+        expect(consoleError).not.toHaveBeenCalled();
+        const controls = within(container);
+        if (width < 1280) {
+          expect(controls.getByTestId("floating-ask-ai-button")).toBeInTheDocument();
+          expect(controls.queryByTestId("global-ask-ai-button")).toBeNull();
+        } else {
+          expect(controls.getByTestId("global-ask-ai-button")).toBe(serverRail);
+          expect(controls.queryByTestId("floating-ask-ai-button")).toBeNull();
+        }
+      } finally {
+        await act(async () => root?.unmount());
+        container.remove();
+        consoleError.mockRestore();
+      }
+    },
+  );
 
   it("uses the initial feed payload without fetching on mount", async () => {
     const items = [makeFeedItem({ id: "story-1", headline: "Hydrated story" })];

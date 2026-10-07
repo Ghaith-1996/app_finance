@@ -193,12 +193,8 @@ export function FeedView({
   );
   const [pendingStory, setPendingStory] = useState<NewsItem | null>(null);
   const [switchConfirmOpen, setSwitchConfirmOpen] = useState(false);
-  const [isDesktopChatLayout, setIsDesktopChatLayout] = useState(
-    () =>
-      typeof window === "undefined"
-        ? true
-        : window.innerWidth >= DESKTOP_CHAT_BREAKPOINT,
-  );
+  // Match the server on the first browser render; the effect resolves the viewport after hydration.
+  const [isDesktopChatLayout, setIsDesktopChatLayout] = useState(true);
 
   const loadingRef = useRef(false);
   const queuedSilentRefreshRef = useRef(false);

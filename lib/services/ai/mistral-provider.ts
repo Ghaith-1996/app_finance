@@ -172,17 +172,12 @@ export function createMistralProvider(): IAIProvider {
       return stubAIProvider.generateInsights(holdings, newsContexts);
     },
 
+    // No stub fallback: enrichment must see provider failures so the article stays retryable.
     async analyzeArticle(headline, content, hintTickers): Promise<ArticleAnalysis> {
-      try {
-        const p = articleEnrichmentPrompt(headline, content, hintTickers);
-        const raw = await respond(key, model, p.system, p.user, 500);
-        if (raw) {
-          return parseArticleAnalysis(raw, headline, hintTickers, { dropEmptyStockTags: true });
-        }
-      } catch {
-        /* fallback */
-      }
-      return stubAIProvider.analyzeArticle(headline, content, hintTickers);
+      const p = articleEnrichmentPrompt(headline, content, hintTickers);
+      const raw = await respond(key, model, p.system, p.user, 500);
+      if (!raw) throw new Error("Mistral returned an empty article analysis");
+      return parseArticleAnalysis(raw, headline, hintTickers, { dropEmptyStockTags: true });
     },
 
     async answerArticleQuestion(context: ArticleChatContext) {

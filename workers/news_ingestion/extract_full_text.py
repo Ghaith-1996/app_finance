@@ -142,6 +142,9 @@ def fetch_public_html(url: str) -> tuple[str | None, str | None, str | None]:
     current_url = url
     try:
         with public_network_only(), requests.Session() as session:
+            # Ignore HTTP(S)_PROXY/ALL_PROXY/.netrc: through a proxy the guard would only check the
+            # proxy's address, and the proxy would resolve the publisher host unchecked.
+            session.trust_env = False
             for _ in range(MAX_REDIRECT_HOPS):
                 response = session.get(
                     current_url,

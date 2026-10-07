@@ -55,7 +55,7 @@ export default async function FeedPage({
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  const billingSummary = user ? await getBillingSummaryForUser(user.id, user.email) : null;
+  const billingSummary = user ? await getBillingSummaryForUser(user.id, user.email, user) : null;
   // Resolve ?story= by ID so saved/digest/alert links work outside the 24h feed window (F05).
   const initialStory = await loadDeepLinkedStory(supabase, initialStoryId, {
     portfolioSymbols: initialFeedPayload?.portfolioSymbols ?? [],

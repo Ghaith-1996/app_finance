@@ -56,7 +56,15 @@ async function chat(
 
 export function createOpenAIProvider(): IAIProvider {
   const key = process.env.OPENAI_API_KEY;
-  if (!key) return stubAIProvider;
+  if (!key) {
+    return {
+      ...stubAIProvider,
+      // Enrichment must fail (and stay retryable), not record stub output as succeeded.
+      async analyzeArticle() {
+        throw new Error("OpenAI is misconfigured: OPENAI_API_KEY is missing.");
+      },
+    };
+  }
 
   return {
     async generateSummary(article, holdings) {

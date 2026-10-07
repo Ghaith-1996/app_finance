@@ -150,6 +150,33 @@ describe("billing subscriptions", () => {
     expect(summary.aiQuotaWindow).toBe("day");
   });
 
+  it("unlocks admin tiers for an email-allowlisted admin whose authenticated user has a confirmed email", async () => {
+    currentSupabase = createSupabaseMock("free");
+    process.env.ADMIN_USER_EMAILS = "admin@example.test";
+    const user = { id: "user-1", email: "admin@example.test", email_confirmed_at: "2026-10-01T00:00:00Z" };
+
+    const summary = await getBillingSummaryForUser(user.id, user.email, user);
+
+    expect(summary.hasAdminModelAccess).toBe(true);
+    expect(summary.allowedModelTiers).toEqual(["free", "premium", "ultimate"]);
+  });
+
+  it("does not unlock admin tiers for an allowlisted email that is unconfirmed or only self-asserted", async () => {
+    currentSupabase = createSupabaseMock("free");
+    process.env.ADMIN_USER_EMAILS = "admin@example.test";
+
+    const unconfirmed = await getBillingSummaryForUser("user-1", "admin@example.test", {
+      id: "user-1",
+      email: "admin@example.test",
+      email_confirmed_at: undefined,
+      user_metadata: { email_verified: true },
+    });
+    const withoutUser = await getBillingSummaryForUser("user-1", "admin@example.test");
+
+    expect(unconfirmed.hasAdminModelAccess).toBe(false);
+    expect(withoutUser.hasAdminModelAccess).toBe(false);
+  });
+
   it("falls back to free-tier quota metadata when a paid subscription is no longer entitled", async () => {
     currentSupabase = createSupabaseMock("premium", {
       status: "past_due",

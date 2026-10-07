@@ -97,6 +97,10 @@ export function createMistralProvider(): IAIProvider {
 
     return {
       ...stubAIProvider,
+      // Enrichment must fail (and stay retryable), not record stub output as succeeded.
+      async analyzeArticle() {
+        throw chatError;
+      },
       async answerArticleQuestion() {
         throw chatError;
       },

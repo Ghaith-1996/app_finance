@@ -57,7 +57,15 @@ async function ask(
 
 export function createAnthropicProvider(): IAIProvider {
   const key = process.env.ANTHROPIC_API_KEY;
-  if (!key) return stubAIProvider;
+  if (!key) {
+    return {
+      ...stubAIProvider,
+      // Enrichment must fail (and stay retryable), not record stub output as succeeded.
+      async analyzeArticle() {
+        throw new Error("Anthropic is misconfigured: ANTHROPIC_API_KEY is missing.");
+      },
+    };
+  }
 
   return {
     async generateSummary(article, holdings) {

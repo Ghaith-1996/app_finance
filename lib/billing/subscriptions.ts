@@ -112,11 +112,8 @@ function applyAdminModelAccess(
   user: (Pick<User, "id" | "email"> &
     Partial<Pick<User, "email_confirmed_at" | "user_metadata">>) | null,
 ): BillingState {
-  const adminCandidate = user
-    ? { id: user.id, email: user.email ?? undefined }
-    : null;
-
-  if (!isAdminUser(adminCandidate)) {
+  // Pass the whole user: an email allowlist match needs the server-owned email_confirmed_at.
+  if (!isAdminUser(user)) {
     return state;
   }
 

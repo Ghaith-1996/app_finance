@@ -27,7 +27,7 @@ export default async function AdminPage() {
   }
 
   const showOnboardingNav = await loadOnboardingNavState();
-  const billingSummary = await getBillingSummaryForUser(user.id, user.email);
+  const billingSummary = await getBillingSummaryForUser(user.id, user.email, user);
 
   return (
     <AppShell

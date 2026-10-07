@@ -208,6 +208,21 @@ describe("buildHoldingPricingPlan — B3 partial quote refresh", () => {
     expect(withoutRate.syncState).toBe("partial");
     expect(withoutRate.valuation.missingFxCurrencies).toEqual(["CAD"]);
   });
+
+  it("P2: a fresh quote converted with a reused stored FX rate is partial, not complete", () => {
+    const plan = buildHoldingPricingPlan(
+      [row("a", "SHOP.TO", { quote_currency: "CAD", fx_rate_to_usd: 0.7, fx_as_of: OLD })],
+      new Map([["SHOP.TO", { price: 100, previousClose: 98, dailyChange: 2.04, currency: "CAD" }]]),
+      usdRates,
+      NOW.toISOString(),
+    );
+    // The last known rate still values the position, with its own (old) timestamp…
+    expect(plan.updates[0]).toMatchObject({ fxRateToUsd: 0.7, fxAsOf: OLD, quoteAsOf: NOW.toISOString() });
+    expect(plan.valuation.status).toBe("complete");
+    // …but the portfolio must not be stamped as freshly synced.
+    expect(plan.staleFxCurrencies).toEqual(["CAD"]);
+    expect(plan.syncState).toBe("partial");
+  });
 });
 
 describe("formatQuoteAmount — R4 minor currency units", () => {

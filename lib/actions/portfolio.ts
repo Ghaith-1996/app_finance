@@ -797,6 +797,9 @@ async function syncHoldingPricesInternal(
     if (plan.valuation.missingFxCurrencies.length > 0) {
       notes.push(`no USD exchange rate for ${plan.valuation.missingFxCurrencies.join(", ")}`);
     }
+    if (plan.staleFxCurrencies.length > 0) {
+      notes.push(`using last known USD exchange rate for ${plan.staleFxCurrencies.join(", ")}`);
+    }
     return {
       status: "partial",
       updated,

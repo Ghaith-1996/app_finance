@@ -127,6 +127,9 @@ export async function ingestNewsToSupabase(
           enrichment_attempts: attempts,
           enrichment_next_attempt_at: null,
           enrichment_last_error: errorMessage(error),
+          // Settle time, not proof of enrichment (the status says that): the analysis cron's work
+          // watermark must see this fallback article, or a provider outage hides it from feeds.
+          enriched_at: new Date().toISOString(),
         };
       } else {
         update = {

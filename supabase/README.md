@@ -41,6 +41,7 @@ two-session concurrency races. It never connects to a real project. CI runs the 
 | `039_holding_transaction_identity.sql` | `holding_transactions.requested_holding_id`; `apply_holding_transaction` treats an id as a retry only for the same holding and add price | add/sell shares |
 | `040_phone_verification_release.sql` | `release_phone_verification` (service role only) | settings SMS verification (unsent codes no longer consume the cooldown) |
 | `041_snapshot_valuation_version.sql` | `portfolio_value_snapshots.valuation_version`; pre-041 rows stay NULL and are excluded from history | hourly value snapshots; `/portfolio/full` performance history |
+| `042_enrichment_settled_watermark.sql` | backfills `enriched_at` on terminally failed news rows; `news_items_settled_at_idx` | analysis cron eligibility (terminal enrichment failures count as new work) |
 
 Deploying the app before these migrations breaks the listed features (missing RPCs/columns).
 

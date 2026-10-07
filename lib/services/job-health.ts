@@ -89,7 +89,8 @@ async function loadAnalysisFreshness(supabase: SupabaseClient, now: Date): Promi
     supabase
       .from("news_items")
       .select("enriched_at")
-      .eq("enrichment_status", "succeeded")
+      // Same watermark as the analysis cron: terminal failures are settled work too (review P1).
+      .in("enrichment_status", ["succeeded", "failed"])
       .not("enriched_at", "is", null)
       .order("enriched_at", { ascending: false })
       .limit(1)

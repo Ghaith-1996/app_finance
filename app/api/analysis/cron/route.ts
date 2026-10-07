@@ -45,11 +45,15 @@ async function getPortfolios(supabase: ReturnType<typeof createServiceClient>) {
   return portfolios;
 }
 
+// Review P1: terminal failures count as work too. They carry fallback text that runAnalysis can
+// still match, and during a provider outage they may be the only articles that settle.
+const SETTLED_ENRICHMENT_STATUSES = ["succeeded", "failed"];
+
 async function getNewestEnrichedAt(supabase: ReturnType<typeof createServiceClient>) {
   const { data, error } = await supabase
     .from("news_items")
     .select("enriched_at")
-    .eq("enrichment_status", "succeeded")
+    .in("enrichment_status", SETTLED_ENRICHMENT_STATUSES)
     .not("enriched_at", "is", null)
     .order("enriched_at", { ascending: false })
     .limit(1)

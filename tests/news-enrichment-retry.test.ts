@@ -178,8 +178,10 @@ describe("news enrichment retry semantics", () => {
       enrichment_attempts: ENRICHMENT_MAX_ATTEMPTS,
       global_summary: "Original snippet",
       overall_effect: "neutral",
-      enriched_at: null,
     });
+    // Review P1: the terminal state is stamped so the analysis cron's work watermark sees the
+    // fallback article; the status (not the stamp) is what says it was never enriched.
+    expect(typeof rows[0].enriched_at).toBe("string");
     expect((await countDueEnrichmentBacklog(db as never, T0)).count).toBe(0);
   });
 

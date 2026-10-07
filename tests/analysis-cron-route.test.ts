@@ -41,11 +41,14 @@ function buildMockSupabase({
   latestRunsByPortfolio = {},
   latestRunStartsByPortfolio = {},
   newestEnrichedAt = new Date().toISOString(),
+  newestFailedAt = null,
 }: {
   portfolios?: Array<{ id: string; user_id: string }>;
   latestRunsByPortfolio?: Record<string, string | null | undefined>;
   latestRunStartsByPortfolio?: Record<string, string>;
   newestEnrichedAt?: string | null;
+  /** Settle time of the newest article whose enrichment terminally failed. */
+  newestFailedAt?: string | null;
 } = {}) {
   return {
     from: (table: string) => {
@@ -64,13 +67,28 @@ function buildMockSupabase({
         };
       }
       if (table === "news_items") {
+        // Honour the enrichment_status filter so the test proves which states form the watermark.
+        let statuses: string[] = [];
         const chain = {
-          eq: () => chain,
+          eq: (column: string, value: string) => {
+            if (column === "enrichment_status") statuses = [value];
+            return chain;
+          },
+          in: (column: string, values: string[]) => {
+            if (column === "enrichment_status") statuses = values;
+            return chain;
+          },
           not: () => chain,
           order: () => chain,
           limit: () => chain,
-          maybeSingle: () =>
-            Promise.resolve({ data: newestEnrichedAt ? { enriched_at: newestEnrichedAt } : null, error: null }),
+          maybeSingle: () => {
+            const candidates = [
+              statuses.includes("succeeded") ? newestEnrichedAt : null,
+              statuses.includes("failed") ? newestFailedAt : null,
+            ].filter((value): value is string => !!value);
+            const newest = candidates.sort().at(-1);
+            return Promise.resolve({ data: newest ? { enriched_at: newest } : null, error: null });
+          },
         };
         return { select: () => chain };
       }
@@ -235,6 +253,20 @@ describe("GET /api/analysis/cron", () => {
         latestRunsByPortfolio: { p1: minutesAgo(50) },
         latestRunStartsByPortfolio: { p1: minutesAgo(60) },
         newestEnrichedAt: minutesAgo(55),
+      });
+      const body = await (await GET(makeGetRequest("test-secret"))).json();
+      expect(body.portfolioIds).toEqual(["p1"]);
+      expect(body.upToDateCount).toBe(0);
+    });
+
+    it("P1: an article whose enrichment terminally failed after the last run is analysed next time", async () => {
+      // No article succeeded since the last run (provider outage), but one exhausted its retries
+      // and now carries fallback text that runAnalysis can still match.
+      mockSupabase = buildMockSupabase({
+        portfolios: [{ id: "p1", user_id: "u1" }],
+        latestRunsByPortfolio: { p1: hourAgo() },
+        newestEnrichedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+        newestFailedAt: new Date(Date.now() - 20 * 60 * 1000).toISOString(),
       });
       const body = await (await GET(makeGetRequest("test-secret"))).json();
       expect(body.portfolioIds).toEqual(["p1"]);

@@ -925,7 +925,11 @@ export async function syncTrackedEarningsReports(
 
     try {
       const [secResult, companySeedResult] = await Promise.allSettled([
-        resolveSecReport(symbol, { fetchImpl, tickerMap: secTickerMap ?? undefined }),
+        // A failed ticker-map load is already recorded above; without a map the resolver would
+        // re-download it for every symbol, so skip SEC for this run instead.
+        secTickerMapError
+          ? Promise.resolve(null)
+          : resolveSecReport(symbol, { fetchImpl, tickerMap: secTickerMap ?? undefined }),
         getWebsiteSeed(symbol),
       ]);
 

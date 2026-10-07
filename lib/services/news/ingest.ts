@@ -24,8 +24,9 @@ function errorMessage(error: unknown): string {
  * elapsed — not from the IDs one ingest run inserted, so work left by a crash is picked up later.
  * An AI failure leaves the article retryable (status `retrying`, attempts/backoff recorded) and does
  * not store fallback text; only after ENRICHMENT_MAX_ATTEMPTS does it become `failed`, with fallback
- * display text that is still never treated as successful enrichment. Each write is conditional on the
- * attempt count read, so two concurrent workers cannot both record the same attempt.
+ * display text that is still never treated as successful enrichment. Each attempt is claimed with a
+ * write conditional on the attempt count read before the provider is called, so two concurrent
+ * workers cannot both run or record the same attempt.
  *
  * Source-trust rules:
  * - edgar: provider stock_tags are authoritative (SEC-confirmed tickers).
@@ -84,6 +85,31 @@ export async function ingestNewsToSupabase(
     const articleBody = fullText ?? rawText ?? "";
     const attemptsBefore = Number(article.enrichment_attempts ?? 0);
     const attempts = attemptsBefore + 1;
+
+    // Claim the attempt before calling the provider (review P2): only the worker whose conditional
+    // update wins calls it, so overlapping runs neither double provider traffic nor let one's timeout
+    // overwrite another's success. The claim moves the next attempt out by the normal backoff (longer
+    // than the AI request timeout), so a worker that dies mid-call leaves the article due again later
+    // with the attempt counted. Explicit-ID runs skip the select's due filter, so the claim checks it.
+    const { data: claimed, error: claimError } = await supabase
+      .from("news_items")
+      .update({
+        enrichment_attempts: attempts,
+        enrichment_next_attempt_at: new Date(now.getTime() + enrichmentBackoffMs(attempts)).toISOString(),
+      })
+      .eq("id", article.id as string)
+      .eq("enrichment_attempts", attemptsBefore)
+      .or(`enrichment_next_attempt_at.is.null,enrichment_next_attempt_at.lte.${nowIso}`)
+      .select("id");
+
+    if (claimError) {
+      return { enriched, skipped, retrying, failed, error: claimError.message };
+    }
+    if (!Array.isArray(claimed) || claimed.length === 0) {
+      // Another worker claimed or recorded this attempt first.
+      skipped++;
+      continue;
+    }
 
     let update: Record<string, unknown>;
     try {
@@ -145,14 +171,14 @@ export async function ingestNewsToSupabase(
       .from("news_items")
       .update(update)
       .eq("id", article.id as string)
-      .eq("enrichment_attempts", attemptsBefore)
+      .eq("enrichment_attempts", attempts)
       .select("id");
 
     if (updateError) {
       return { enriched, skipped, retrying, failed, error: updateError.message };
     }
     if (!Array.isArray(written) || written.length === 0) {
-      // Another worker recorded this attempt first.
+      // Our claim expired and another worker claimed a later attempt.
       skipped++;
       continue;
     }

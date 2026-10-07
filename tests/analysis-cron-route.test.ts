@@ -50,7 +50,28 @@ function buildMockSupabase({
   /** Settle time of the newest article whose enrichment terminally failed. */
   newestFailedAt?: string | null;
 } = {}) {
+  const stats = { perPortfolioRunReads: 0, runHistoryScans: 0, latestRunPageReads: 0 };
+  // One row per portfolio, as migration 044's latest_usable_analysis_runs() returns.
+  const latestRuns = Object.entries(latestRunsByPortfolio)
+    .filter((entry): entry is [string, string] => !!entry[1])
+    .map(([portfolioId, completedAt]) => ({
+      portfolio_id: portfolioId,
+      completed_at: completedAt,
+      started_at: latestRunStartsByPortfolio[portfolioId] ?? null,
+    }));
   return {
+    stats,
+    rpc: (name: string) => {
+      if (name !== "latest_usable_analysis_runs") throw new Error(`Unexpected rpc: ${name}`);
+      return {
+        order: () => ({
+          range: (from: number, to: number) => {
+            stats.latestRunPageReads += 1;
+            return Promise.resolve({ data: latestRuns.slice(from, to + 1), error: null });
+          },
+        }),
+      };
+    },
     from: (table: string) => {
       if (table === "portfolios") {
         return {
@@ -96,9 +117,19 @@ function buildMockSupabase({
         let selectedPortfolioId: string | null = null;
         return {
           select: () => ({
+            // A scan of every usable run in history (what the review flagged), one page at a time.
+            in: () => ({
+              order: () => ({
+                range: (from: number, to: number) => {
+                  stats.runHistoryScans += 1;
+                  return Promise.resolve({ data: latestRuns.slice(from, to + 1), error: null });
+                },
+              }),
+            }),
             eq: (column: string, value: string) => {
               if (column === "portfolio_id") {
                 selectedPortfolioId = value;
+                stats.perPortfolioRunReads += 1;
               }
               return {
                 in: () => ({
@@ -281,6 +312,27 @@ describe("GET /api/analysis/cron", () => {
       });
       const body = await (await GET(makeGetRequest("test-secret"))).json();
       expect(body.portfolioIds).toEqual(["p1"]);
+    });
+
+    it("reads only the latest usable run per portfolio, in pages, not per portfolio or full history", async () => {
+      const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+      const many = Array.from({ length: 2_350 }, (_, index) => ({ id: `p${index}`, user_id: "u" }));
+      mockSupabase = buildMockSupabase({
+        portfolios: many,
+        // Even portfolios ran an hour ago and are up to date; odd ones never ran.
+        latestRunsByPortfolio: Object.fromEntries(many.filter((_, index) => index % 2 === 0).map((p) => [p.id, hourAgo])),
+        newestEnrichedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+      });
+
+      const body = await (await GET(makeGetRequest("test-secret"))).json();
+
+      expect(body.portfolioIds).toHaveLength(1_175);
+      expect(body.portfolioIds).not.toContain("p0");
+      expect(body.portfolioIds).toContain("p1");
+      expect(body.upToDateCount).toBe(1_175);
+      expect(mockSupabase.stats.perPortfolioRunReads).toBe(0);
+      expect(mockSupabase.stats.runHistoryScans).toBe(0);
+      expect(mockSupabase.stats.latestRunPageReads).toBeLessThanOrEqual(3);
     });
 
     it("reads every portfolio page", async () => {

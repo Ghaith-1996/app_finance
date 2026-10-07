@@ -99,6 +99,10 @@ export function createOpenRouterProvider(): IAIProvider {
     );
     return {
       ...stubAIProvider,
+      // Enrichment must fail (and stay retryable), not record stub output as succeeded.
+      async analyzeArticle() {
+        throw chatError;
+      },
       async answerArticleQuestion() {
         throw chatError;
       },
@@ -159,14 +163,11 @@ export function createOpenRouterProvider(): IAIProvider {
       return stubAIProvider.generateInsights(holdings, newsContexts);
     },
 
+    // No stub fallback: enrichment must see provider failures so the article stays retryable.
     async analyzeArticle(headline, content, hintTickers): Promise<ArticleAnalysis> {
-      try {
-        const raw = await chatComplete(key, model, msgs(articleEnrichmentPrompt(headline, content, hintTickers)), 500, extraHeaders);
-        if (raw) {
-          return parseArticleAnalysis(raw, headline, hintTickers, { dropEmptyStockTags: true });
-        }
-      } catch { /* fallback */ }
-      return stubAIProvider.analyzeArticle(headline, content, hintTickers);
+      const raw = await chatComplete(key, model, msgs(articleEnrichmentPrompt(headline, content, hintTickers)), 500, extraHeaders);
+      if (!raw) throw new Error("OpenRouter returned an empty article analysis");
+      return parseArticleAnalysis(raw, headline, hintTickers, { dropEmptyStockTags: true });
     },
 
     async answerArticleQuestion(context: ArticleChatContext) {

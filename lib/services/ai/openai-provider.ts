@@ -56,7 +56,15 @@ async function chat(
 
 export function createOpenAIProvider(): IAIProvider {
   const key = process.env.OPENAI_API_KEY;
-  if (!key) return stubAIProvider;
+  if (!key) {
+    return {
+      ...stubAIProvider,
+      // Enrichment must fail (and stay retryable), not record stub output as succeeded.
+      async analyzeArticle() {
+        throw new Error("OpenAI is misconfigured: OPENAI_API_KEY is missing.");
+      },
+    };
+  }
 
   return {
     async generateSummary(article, holdings) {
@@ -106,15 +114,12 @@ export function createOpenAIProvider(): IAIProvider {
       return stubAIProvider.generateInsights(holdings, newsContexts);
     },
 
+    // No stub fallback: enrichment must see provider failures so the article stays retryable.
     async analyzeArticle(headline, content, hintTickers): Promise<ArticleAnalysis> {
-      try {
-        const p = articleEnrichmentPrompt(headline, content, hintTickers);
-        const raw = await chat(key, [{ role: "system", content: p.system }, { role: "user", content: p.user }], 500);
-        if (raw) {
-          return parseArticleAnalysis(raw, headline, hintTickers, { dropEmptyStockTags: false });
-        }
-      } catch { /* fallback */ }
-      return stubAIProvider.analyzeArticle(headline, content, hintTickers);
+      const p = articleEnrichmentPrompt(headline, content, hintTickers);
+      const raw = await chat(key, [{ role: "system", content: p.system }, { role: "user", content: p.user }], 500);
+      if (!raw) throw new Error("OpenAI returned an empty article analysis");
+      return parseArticleAnalysis(raw, headline, hintTickers, { dropEmptyStockTags: false });
     },
 
     async answerArticleQuestion(context: ArticleChatContext) {

@@ -210,6 +210,44 @@ describe("news enrichment retry semantics", () => {
     expect(result).toEqual({ enriched: 0, skipped: 1, retrying: 0, failed: 0 });
   });
 
+  it("overlapping workers claim the row before calling the provider: one call, one outcome", async () => {
+    const rows = [article("news-1")];
+    const db = createNewsTable(rows);
+    // Without a claim both workers call the provider (double traffic), and a timeout in one could
+    // commit `retrying` first and discard the other's success.
+    mocked.analyzeArticle.mockResolvedValue(goodAnalysis);
+
+    const [backlog, explicit] = await Promise.all([
+      ingestNewsToSupabase(db as never, { now: T0 }),
+      ingestNewsToSupabase(db as never, { articleIds: ["news-1"], now: T0 }),
+    ]);
+
+    expect(mocked.analyzeArticle).toHaveBeenCalledTimes(1);
+    expect(backlog.enriched + explicit.enriched).toBe(1);
+    expect(backlog.skipped + explicit.skipped).toBe(1);
+    expect(rows[0]).toMatchObject({ enrichment_status: "succeeded", enrichment_attempts: 1 });
+  });
+
+  it("a claim left by a crashed worker becomes due again after the backoff and counts as an attempt", async () => {
+    const rows = [article("news-1")];
+    const db = createNewsTable(rows);
+    mocked.analyzeArticle.mockImplementationOnce(() => new Promise(() => {})); // never settles
+
+    void ingestNewsToSupabase(db as never, { now: T0 });
+    await vi.waitFor(() => expect(mocked.analyzeArticle).toHaveBeenCalledTimes(1));
+    expect(rows[0]).toMatchObject({ enrichment_attempts: 1 });
+
+    // Claimed and not yet due: neither backlog nor explicit-ID runs call the provider again.
+    const early = await ingestNewsToSupabase(db as never, { articleIds: ["news-1"], now: new Date(T0.getTime() + 60_000) });
+    expect(early.enriched + early.retrying + early.failed).toBe(0);
+    expect(mocked.analyzeArticle).toHaveBeenCalledTimes(1);
+
+    mocked.analyzeArticle.mockResolvedValueOnce(goodAnalysis);
+    const later = await ingestNewsToSupabase(db as never, { now: new Date(T0.getTime() + enrichmentBackoffMs(1)) });
+    expect(later.enriched).toBe(1);
+    expect(rows[0]).toMatchObject({ enrichment_status: "succeeded", enrichment_attempts: 2 });
+  });
+
   it("backoff grows and is capped", () => {
     expect(enrichmentBackoffMs(1)).toBe(5 * 60_000);
     expect(enrichmentBackoffMs(2)).toBe(10 * 60_000);

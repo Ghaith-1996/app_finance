@@ -6,11 +6,18 @@ import { loadJobHealth } from "@/lib/services/job-health";
 
 type Answer = { data?: unknown; count?: number; error?: { message: string } | null };
 
-/** Returns a canned answer per table + filter signature; list answers honour .range() pages. */
-function fakeSupabase(answers: (table: string, ops: string[]) => Answer) {
+/**
+ * Returns a canned answer per table + filter signature; list answers honour .range() pages.
+ * An RPC is answered as the table "rpc:<name>". `tables` records every table/RPC read.
+ */
+function fakeSupabase(answers: (table: string, ops: string[]) => Answer, tables: Array<[string, string[]]> = []) {
   return {
+    rpc(name: string) {
+      return this.from(`rpc:${name}`);
+    },
     from(table: string) {
       const ops: string[] = [];
+      tables.push([table, ops]);
       let window: [number, number] | null = null;
       const builder: Record<string, unknown> = {};
       for (const method of ["select", "order", "limit", "in", "or", "eq", "gte", "not"]) {
@@ -45,7 +52,7 @@ function healthyAnswers(table: string, ops: string[]): Answer {
   }
   if (table === "news_items" && has("enriched_at")) return { data: { enriched_at: minutesAgo(15) } };
   if (table === "portfolios") return { data: [{ id: "p1", created_at: minutesAgo(30 * 24 * 60) }] };
-  if (table === "analysis_runs" && has("portfolio_id")) {
+  if (table === "rpc:latest_usable_analysis_runs") {
     return { data: [{ id: "r1", portfolio_id: "p1", started_at: minutesAgo(32), completed_at: minutesAgo(30) }] };
   }
   if (table === "holdings" && !has("or:")) return { count: 10 };
@@ -61,7 +68,7 @@ function withAnalysis(
   return (table: string, ops: string[]): Answer => {
     const has = (text: string) => ops.some((op) => op.includes(text));
     if (table === "portfolios") return { data: portfolios };
-    if (table === "analysis_runs" && has("portfolio_id")) return { data: runs };
+    if (table === "rpc:latest_usable_analysis_runs") return { data: runs };
     if (table === "news_items" && has("enriched_at")) return { data: { enriched_at: newestEnrichedAt } };
     return healthyAnswers(table, ops);
   };
@@ -202,6 +209,16 @@ describe("loadJobHealth", () => {
       );
       expect(report.analysis.portfoliosNeverAnalyzed).toBe(0);
       expect(report.status).toBe("ok");
+    });
+
+    it("reads the latest run per portfolio, never the run history", async () => {
+      const tables: Array<[string, string[]]> = [];
+      await loadJobHealth(fakeSupabase(healthyAnswers, tables) as never, NOW);
+      expect(tables.map(([table]) => table)).toContain("rpc:latest_usable_analysis_runs");
+      const historyScans = tables.filter(
+        ([table, ops]) => table === "analysis_runs" && ops.some((op) => op.includes("portfolio_id")),
+      );
+      expect(historyScans).toEqual([]);
     });
 
     it("reads every page of portfolios and runs", async () => {

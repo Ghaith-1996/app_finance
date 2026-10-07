@@ -217,15 +217,14 @@ async function reconcileAgainstStoredSubscription(
       ? listed.data
       : [...listed.data, incoming];
     return selectAuthoritativeSubscription(candidates);
-  } catch {
+  } catch (error) {
     // Stripe unreachable: never let a different, non-entitled subscription replace stored access.
     const storedEnd = stored.current_period_end ? Date.parse(stored.current_period_end) : null;
     if (!isEntitledState(stored.status, storedEnd, Date.now())) return incoming;
     if (!isStripeSubscriptionEntitled(incoming)) return null;
-    // Both grant access and only the full list can say which one is authoritative; arrival order
-    // must not (a late event for an older Premium would downgrade a newer Ultimate). Failing the
-    // webhook makes Stripe redeliver it once the list can be read.
-    throw new Error("Cannot reconcile two entitled subscriptions while Stripe is unreachable; retry later");
+    // Two entitled subscriptions cannot be ordered without Stripe (an older Premium event must not
+    // downgrade a newer Ultimate one): fail so Stripe redelivers the event once it can be reconciled.
+    throw new Error("Could not reconcile subscriptions with Stripe; retry later", { cause: error });
   }
 }
 

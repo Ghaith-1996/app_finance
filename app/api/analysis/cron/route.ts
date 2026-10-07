@@ -2,6 +2,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { runAnalysis } from "@/lib/services/analysis";
 import { createLogger } from "@/lib/logger";
 import { fetchAllRows } from "@/lib/supabase/paginate";
+import { fetchLatestUsableRuns } from "@/lib/services/latest-analysis-runs";
 
 const log = createLogger("cron-analysis");
 
@@ -78,31 +79,14 @@ async function getLatestCompletedRun(
   return latestRun as { completed_at?: string | null; started_at?: string | null } | null;
 }
 
-type UsableRun = { portfolio_id: string; completed_at: string | null; started_at: string | null };
-
 /**
- * Latest usable run per portfolio, read in bounded pages (only the newest few runs per portfolio
- * are kept) instead of one sequential query per portfolio, which could time out at scale.
+ * Latest usable run per portfolio: one row each from migration 044's RPC, read in pages, instead of
+ * one sequential query per portfolio or a scan of the whole run history.
  */
 async function getLatestCompletedRunsByPortfolio(supabase: ReturnType<typeof createServiceClient>) {
-  const { data: runs, error } = await fetchAllRows<UsableRun & { id: string }>((from, to) =>
-    supabase
-      .from("analysis_runs")
-      .select("id, portfolio_id, completed_at, started_at")
-      .in("status", ["complete", "degraded"])
-      .order("id", { ascending: true })
-      .range(from, to),
-  );
+  const { data: runs, error } = await fetchLatestUsableRuns(supabase);
   if (error) throw new Error(`Could not load analysis runs: ${error.message}`);
-
-  const latestByPortfolio = new Map<string, UsableRun>();
-  for (const run of runs) {
-    const completedMs = Date.parse(run.completed_at ?? "");
-    if (!Number.isFinite(completedMs)) continue;
-    const current = latestByPortfolio.get(run.portfolio_id);
-    if (!current || completedMs > Date.parse(current.completed_at ?? "")) latestByPortfolio.set(run.portfolio_id, run);
-  }
-  return latestByPortfolio;
+  return new Map(runs.map((run) => [run.portfolio_id, run]));
 }
 
 async function getEligiblePortfolioIds(

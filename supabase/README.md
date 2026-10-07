@@ -43,6 +43,7 @@ two-session concurrency races. It never connects to a real project. CI runs the 
 | `041_snapshot_valuation_version.sql` | `portfolio_value_snapshots.valuation_version`; pre-041 rows stay NULL and are excluded from history | hourly value snapshots; `/portfolio/full` performance history |
 | `042_enrichment_settled_watermark.sql` | backfills `enriched_at` on terminally failed news rows; `news_items_settled_at_idx` | analysis cron eligibility (terminal enrichment failures count as new work) |
 | `043_holding_transaction_lock_order.sql` | `apply_holding_transaction` locks the holding row before writing the ledger row (no deadlock between concurrent changes to one holding) | add/sell shares |
+| `044_latest_usable_analysis_runs.sql` | `latest_usable_analysis_runs()` (service role only), one newest complete/degraded run per portfolio; `idx_analysis_runs_usable_latest` | analysis cron target discovery; admin job health |
 
 Deploying the app before these migrations breaks the listed features (missing RPCs/columns).
 

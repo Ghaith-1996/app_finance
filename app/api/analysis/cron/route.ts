@@ -78,12 +78,40 @@ async function getLatestCompletedRun(
   return latestRun as { completed_at?: string | null; started_at?: string | null } | null;
 }
 
+type UsableRun = { portfolio_id: string; completed_at: string | null; started_at: string | null };
+
+/**
+ * Latest usable run per portfolio, read in bounded pages (only the newest few runs per portfolio
+ * are kept) instead of one sequential query per portfolio, which could time out at scale.
+ */
+async function getLatestCompletedRunsByPortfolio(supabase: ReturnType<typeof createServiceClient>) {
+  const { data: runs, error } = await fetchAllRows<UsableRun & { id: string }>((from, to) =>
+    supabase
+      .from("analysis_runs")
+      .select("id, portfolio_id, completed_at, started_at")
+      .in("status", ["complete", "degraded"])
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
+  if (error) throw new Error(`Could not load analysis runs: ${error.message}`);
+
+  const latestByPortfolio = new Map<string, UsableRun>();
+  for (const run of runs) {
+    const completedMs = Date.parse(run.completed_at ?? "");
+    if (!Number.isFinite(completedMs)) continue;
+    const current = latestByPortfolio.get(run.portfolio_id);
+    if (!current || completedMs > Date.parse(current.completed_at ?? "")) latestByPortfolio.set(run.portfolio_id, run);
+  }
+  return latestByPortfolio;
+}
+
 async function getEligiblePortfolioIds(
   supabase: ReturnType<typeof createServiceClient>,
   opts?: { force?: boolean },
 ) {
   const portfolios = await getPortfolios(supabase);
   const newestEnrichedAt = opts?.force ? null : await getNewestEnrichedAt(supabase);
+  const latestRuns = opts?.force ? null : await getLatestCompletedRunsByPortfolio(supabase);
   const portfolioIds: string[] = [];
   let skippedCount = 0;
   let upToDateCount = 0;
@@ -92,8 +120,8 @@ async function getEligiblePortfolioIds(
   // articles were enriched after its last usable run — not merely when this run inserted rows.
   // A failed run leaves the last usable run older than the news, so it is retried next time.
   for (const portfolio of portfolios) {
-    if (!opts?.force) {
-      const latestRun = await getLatestCompletedRun(supabase, portfolio.id);
+    if (latestRuns) {
+      const latestRun = latestRuns.get(portfolio.id);
       const completedAt = latestRun?.completed_at ?? null;
       if (isInCooldown(completedAt)) {
         skippedCount++;

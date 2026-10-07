@@ -157,6 +157,25 @@ describe("subscription reconciliation (B7)", () => {
     expect(mocked.stored[0]).toMatchObject({ stripe_subscription_id: "sub_new_B", status: "active" });
   });
 
+  it("when Stripe cannot be reached, an older entitled subscription does not replace stored access; the event is retried", async () => {
+    // Stored B is the newer (e.g. Ultimate) subscription; A's event arrives late and is still active.
+    mocked.stored = [{ stripe_subscription_id: "sub_new_B", status: "active", current_period_end: null }];
+    mocked.listFails = true;
+
+    await expect(syncSubscriptionFromStripeSubscription(oldA("active"))).rejects.toThrow(/retry later/);
+
+    expect(mocked.stored[0]).toMatchObject({ stripe_subscription_id: "sub_new_B", status: "active" });
+  });
+
+  it("when Stripe cannot be reached and stored access has lapsed, an entitled subscription is still applied", async () => {
+    mocked.stored = [{ stripe_subscription_id: "sub_old_A", status: "canceled", current_period_end: null }];
+    mocked.listFails = true;
+
+    await syncSubscriptionFromStripeSubscription(newB("active"));
+
+    expect(mocked.stored[0]).toMatchObject({ stripe_subscription_id: "sub_new_B", status: "active" });
+  });
+
   it("events for the stored subscription update it directly without reconciliation", async () => {
     mocked.stored = [{ stripe_subscription_id: "sub_new_B", status: "active", current_period_end: null }];
 

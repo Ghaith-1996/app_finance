@@ -54,7 +54,7 @@ async function outsideRun() {
     assert.equal(proof.cliVersion, "2.119.0");
     proof.dockerVersion = (await docker(["version", "--format", "{{.Server.Version}}"])).trim();
     const migrations = (await readdir(join(root, "supabase/migrations"))).filter((name) => name.endsWith(".sql")).sort();
-    assert.equal(migrations.length, 44, "Review the migration manifest before changing expected count");
+    assert.equal(migrations.length, 46, "Review the migration manifest before changing expected count");
     proof.hashes = {};
     for (const path of ["package-lock.json", "requirements.lock", "next.config.ts", ...migrations.map((name) => `supabase/migrations/${name}`)]) proof.hashes[path] = createHash("sha256").update(await readFile(join(root, path))).digest("hex");
     console.log("E2E: building dependencies before isolated execution");
@@ -76,7 +76,7 @@ async function outsideRun() {
       proof.migrations.push(name);
     }
     await docker(["exec", db, "psql", "-U", "postgres", "-d", "postgres", "-c", "NOTIFY pgrst, 'reload schema'"]);
-    proof.gates.push("all-44-migrations-lexical");
+    proof.gates.push("all-46-migrations-lexical");
     await docker(["network", "create", "--internal", "--label", `pulsefolio.e2e.owner=${owned}`, owned]);
     network = true;
     await docker(["network", "connect", "--alias", "supabase", owned, `supabase_kong_${owned}`]);

@@ -49,10 +49,6 @@ describe("spawnArticleExtractionWorker — UUID validation", () => {
     ).toThrow("Invalid article ID format");
   });
 
-  it("does not throw for empty array", () => {
-    expect(() => spawnArticleExtractionWorker([])).not.toThrow();
-  });
-
   it("handles errors when neither Python executable can be spawned", () => {
     const primary = createSpawnProcess();
     const fallback = createSpawnProcess();

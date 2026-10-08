@@ -31,7 +31,7 @@ vi.mock("@/lib/logger", () => ({
   }),
 }));
 
-import { GET, POST } from "@/app/api/earnings-reports/cron/route";
+import { POST } from "@/app/api/earnings-reports/cron/route";
 
 function makeRequest(secret?: string) {
   const headers = new Headers();
@@ -53,6 +53,8 @@ describe("POST /api/earnings-reports/cron", () => {
       secFallbacks: 1,
       missing: 1,
       inactivated: 2,
+      failed: 0,
+      stale: 0,
     });
     mockLoggerInfo.mockReset();
     mockLoggerError.mockReset();
@@ -76,8 +78,20 @@ describe("POST /api/earnings-reports/cron", () => {
       secFallbacks: 1,
       missing: 1,
       inactivated: 2,
+      failed: 0,
+      stale: 0,
+      partial: false,
     });
     expect(mockSyncTrackedEarningsReports).toHaveBeenCalledWith({ kind: "service-client" });
+  });
+
+  it("reports partial provider failure and returns 502 when every lookup failed (J6)", async () => {
+    mockSyncTrackedEarningsReports.mockResolvedValueOnce({
+      processed: 2, resolved: 0, companyLinks: 0, secFallbacks: 0, missing: 0, inactivated: 0, failed: 2, stale: 2,
+    });
+    const response = await POST(makeRequest("test-secret"));
+    expect(response.status).toBe(502);
+    expect(await response.json()).toMatchObject({ failed: 2, stale: 2, partial: true });
   });
 
   it("returns 500 when the sync service throws", async () => {
@@ -89,12 +103,5 @@ describe("POST /api/earnings-reports/cron", () => {
     const body = await response.json();
     expect(body.error).toBe("Earnings report sync failed");
     expect(body.detail).toBe("db unavailable");
-  });
-});
-
-describe("GET /api/earnings-reports/cron", () => {
-  it("directs callers to POST", async () => {
-    const response = await GET();
-    expect(response.status).toBe(405);
   });
 });

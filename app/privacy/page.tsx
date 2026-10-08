@@ -10,7 +10,7 @@ import {
 } from "@/lib/legal/constants";
 
 export const metadata = {
-  title: "Privacy Policy - Pulsefolio",
+  title: "Privacy Policy",
   description: "Privacy Policy for Pulsefolio.",
 };
 

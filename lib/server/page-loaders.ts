@@ -1,5 +1,7 @@
 import "server-only";
 
+import { mapHoldingFromDb, type PortfolioHoldingRow } from "@/lib/services/portfolio";
+
 import {
   attachLatestEarningsReportFields,
   loadActiveEarningsReportsBySymbols,
@@ -13,6 +15,12 @@ import {
 } from "@/lib/server/feed";
 import { newsWindowCutoffIso } from "@/lib/services/news/pool-snapshot";
 import { loadPortfolioValueSnapshots } from "@/lib/services/portfolio-value-snapshots";
+import { formatRelativeTime } from "@/lib/time/format";
+import {
+  summarizeValuation,
+  valuationInputFromHolding,
+  valuePortfolio,
+} from "@/lib/services/valuation";
 import {
   calculatePortfolioHealth,
   type PortfolioHealthResult,
@@ -126,29 +134,6 @@ export type HomeDashboardData = {
   matchedStoryCount24h: number;
 };
 
-type HoldingRow = {
-  id: string;
-  symbol: string;
-  company: string;
-  sector: string;
-  market: string;
-  source: string;
-  price: number | null;
-  daily_change: number | null;
-  allocation: number | null;
-  thesis: string | null;
-  quantity: number | null;
-  average_cost: number | null;
-  cost_basis: number | null;
-  current_price: number | null;
-  current_value: number | null;
-  unrealized_gain_amount: number | null;
-  unrealized_gain_percent: number | null;
-  quote_currency: string | null;
-  quote_as_of: string | null;
-  import_source: string | null;
-};
-
 type AuthenticatedPageContext = {
   supabase: ServerSupabase;
   userId: string | null;
@@ -168,12 +153,13 @@ const FEED_OVERVIEW_FALLBACK: PortfolioOverview = {
   primaryGoal: "Add a portfolio and run analysis.",
 };
 
+// No portfolio: show true zero/unknown state, never sample money or invented recency (audit F19).
 const PORTFOLIO_OVERVIEW_FALLBACK: PortfolioOverview = {
-  totalValue: 17900,
-  dayChange: -1.92,
+  totalValue: 0,
+  dayChange: 0,
   monthlyChange: 0,
-  lastSyncedAt: "2 mins ago",
-  lastAnalyzedAt: "21 hours ago",
+  lastSyncedAt: "",
+  lastAnalyzedAt: "Never",
   coverage: "0 stories",
   primaryGoal: "Add holdings and run analysis.",
 };
@@ -233,42 +219,7 @@ function createTimingLogger(label: string) {
 }
 
 function formatTimeAgo(iso: string | null | undefined): string {
-  if (!iso) return "-";
-  const timestamp = new Date(iso).getTime();
-  if (Number.isNaN(timestamp)) return "-";
-  const minutes = Math.floor((Date.now() - timestamp) / 60_000);
-  if (minutes < 1) return "Just now";
-  if (minutes < 60) return `${minutes} minutes ago`;
-  if (minutes < 1440) return `${Math.floor(minutes / 60)} hours ago`;
-  return `${Math.floor(minutes / 1440)} days ago`;
-}
-
-function mapHoldingFromRow(row: HoldingRow): Holding {
-  return {
-    id: row.id,
-    symbol: row.symbol,
-    company: row.company,
-    sector: row.sector,
-    market: row.market,
-    source: row.source,
-    price: Number(row.price ?? 0),
-    dailyChange: Number(row.daily_change ?? 0),
-    allocation: Number(row.allocation ?? 0),
-    thesis: row.thesis ?? "",
-    quantity: Number(row.quantity ?? 0),
-    averageCost: Number(row.average_cost ?? 0),
-    costBasis: Number(row.cost_basis ?? 0),
-    currentPrice: Number(row.current_price ?? 0),
-    currentValue: Number(row.current_value ?? 0),
-    unrealizedGainAmount: Number(row.unrealized_gain_amount ?? 0),
-    unrealizedGainPercent: Number(row.unrealized_gain_percent ?? 0),
-    quoteCurrency: row.quote_currency ?? "USD",
-    quoteAsOf: row.quote_as_of ?? null,
-    importSource: row.import_source ?? "manual",
-    latestEarningsReportUrl: null,
-    latestEarningsReportSource: null,
-    latestEarningsReportDate: null,
-  };
+  return formatRelativeTime(iso, new Date(), "-");
 }
 
 async function resolveAuthenticatedPageContext(
@@ -324,14 +275,14 @@ async function resolveAuthenticatedPageContext(
 async function loadHoldingRows(
   supabase: ServerSupabase,
   portfolioId: string,
-): Promise<HoldingRow[]> {
+): Promise<PortfolioHoldingRow[]> {
   const { data } = await supabase
     .from("holdings")
     .select("*")
     .eq("portfolio_id", portfolioId)
     .order("created_at", { ascending: true });
 
-  return (data ?? []) as HoldingRow[];
+  return (data ?? []) as PortfolioHoldingRow[];
 }
 
 async function loadLatestAnalysisRun(
@@ -429,6 +380,7 @@ async function loadPortfolioFeedHighlightsForRun(
       ai_summary,
       match_reason_codes,
       news_items (
+        id,
         headline,
         source,
         published_at,
@@ -449,6 +401,7 @@ async function loadPortfolioFeedHighlightsForRun(
       if (!news) return null;
 
       return {
+        newsItemId: (news.id as string | undefined) ?? undefined,
         headline: (news.headline as string) ?? "Untitled story",
         source: (news.source as string) ?? "Unknown source",
         publishedAt: (news.published_at as string) ?? new Date().toISOString(),
@@ -928,32 +881,12 @@ function buildPortfolioOverview(
     emptyCoverageLabel?: string;
   },
 ): PortfolioOverview {
-  const enriched = holdings.map((holding) => {
-    const price = Number(holding.currentPrice || holding.price || 0);
-    const quantity = Number(holding.quantity ?? 0);
-    const value =
-      quantity > 0
-        ? quantity * price
-        : price * (Number(holding.allocation ?? 0) / 100) * 1000;
-
-    return {
-      dailyChange: Number(holding.dailyChange ?? 0),
-      value,
-    };
-  });
-
-  const totalValue = enriched.reduce((sum, holding) => sum + holding.value, 0);
-  const weightedDayChange =
-    totalValue > 0
-      ? enriched.reduce(
-          (sum, holding) => sum + holding.dailyChange * (holding.value / totalValue),
-          0,
-        )
-      : 0;
+  const valuation = valuePortfolio(holdings.map(valuationInputFromHolding));
 
   return {
-    totalValue: Math.round(totalValue),
-    dayChange: Math.round(weightedDayChange * 100) / 100,
+    totalValue: Math.round(valuation.totalValue),
+    dayChange: Math.round((valuation.dayChangePercent ?? 0) * 100) / 100,
+    valuation: summarizeValuation(valuation),
     monthlyChange: 0,
     lastSyncedAt: options.lastSyncedAt
       ? formatTimeAgo(options.lastSyncedAt)
@@ -1141,7 +1074,7 @@ export async function loadHomeDashboardData(): Promise<{
   timer.mark("dashboard signals");
 
   const holdings = attachLatestEarningsReportFields(
-    holdingRows.map(mapHoldingFromRow),
+    holdingRows.map(mapHoldingFromDb),
     reportsBySymbol,
   );
   const overview = buildPortfolioOverview(holdings, {
@@ -1283,7 +1216,7 @@ export async function loadFeedPageData(): Promise<{
   ]);
   timer.mark("overview/feed context");
 
-  const holdings = holdingRows.map(mapHoldingFromRow);
+  const holdings = holdingRows.map(mapHoldingFromDb);
   const portfolioSymbols = [
     ...new Set(holdingRows.map((row) => String(row.symbol ?? "").toUpperCase()).filter(Boolean)),
   ];
@@ -1380,7 +1313,7 @@ export async function loadPortfolioPageData(): Promise<{
   timer.mark("feed highlights");
 
   const holdings = attachLatestEarningsReportFields(
-    holdingRows.map(mapHoldingFromRow),
+    holdingRows.map(mapHoldingFromDb),
     reportsBySymbol,
   );
   timer.done();
@@ -1397,7 +1330,7 @@ export async function loadPortfolioPageData(): Promise<{
       lastSyncedAt: portfolio.lastSyncedAt,
       lastAnalyzedAt: latestRun?.completedAt ?? null,
       feedCount,
-      emptyLastSyncedLabel: "2 mins ago",
+      emptyLastSyncedLabel: "",
       emptyCoverageLabel: "0 stories",
     }),
     feedHighlights,
@@ -1445,7 +1378,7 @@ export async function loadAnalysisPageData(
   );
   timer.mark("insights");
 
-  const holdings = holdingRows.map(mapHoldingFromRow);
+  const holdings = holdingRows.map(mapHoldingFromDb);
   timer.done();
 
   return {
@@ -1531,7 +1464,7 @@ export async function loadFullPortfolioPageData(): Promise<{
   timer.mark("insights/highlights");
 
   const holdings = attachLatestEarningsReportFields(
-    holdingRows.map(mapHoldingFromRow),
+    holdingRows.map(mapHoldingFromDb),
     reportsBySymbol,
   );
   timer.done();

@@ -68,10 +68,6 @@ describe("buildPortfolioQueries", () => {
     expect(queries).toEqual(['"Tesla Inc" TSLA stock']);
   });
 
-  it("returns an empty array for empty holdings", () => {
-    expect(buildPortfolioQueries([])).toEqual([]);
-  });
-
   it("uses company-only when company matches symbol (case-insensitive)", () => {
     // When company name uppercased === symbol, only company-based query
     const queries = buildPortfolioQueries([

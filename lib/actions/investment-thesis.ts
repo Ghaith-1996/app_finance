@@ -20,13 +20,14 @@ import {
   normalizeThesisScope,
   normalizeThesisSymbol,
   normalizeThesisText,
+  describeThesisStorageError,
 } from "@/lib/investment-theses/utils";
 import { THESIS_COLUMNS } from "@/lib/server/investment-theses";
 import { createClient } from "@/lib/supabase/server";
 
 type ThesisActionResult =
   | { ok: true; thesis: InvestmentThesis | null; history?: InvestmentThesisHistoryItem[] }
-  | { ok: false; error: string };
+  | { ok: false; error: string; unavailable?: boolean };
 
 type ThesisInput = {
   symbol: string;
@@ -70,6 +71,11 @@ function resolveScope(input: ThesisInput): InvestmentThesisScope {
   return input.portfolioId ? "holding" : normalizeThesisScope(input.scope);
 }
 
+function storageFailure(error: { code?: string | null; message?: string | null }): ThesisActionResult {
+  const described = describeThesisStorageError(error);
+  return { ok: false, error: described.message, unavailable: described.unavailable };
+}
+
 async function findExistingThesis(
   supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string,
@@ -90,7 +96,7 @@ async function findExistingThesis(
     : query.is("portfolio_id", null);
 
   const { data, error } = await query.maybeSingle();
-  if (error) return { data: null, error: error.message };
+  if (error) return { data: null, error };
   return { data: data as InvestmentThesisRow | null, error: null };
 }
 
@@ -156,7 +162,7 @@ export async function getInvestmentThesisState(input: ThesisInput): Promise<Thes
     portfolioId,
     scope,
   });
-  if (existing.error) return { ok: false, error: existing.error };
+  if (existing.error) return storageFailure(existing.error);
 
   return {
     ok: true,
@@ -202,7 +208,7 @@ export async function saveInvestmentThesis(input: SaveThesisInput): Promise<Thes
     portfolioId,
     scope,
   });
-  if (existing.error) return { ok: false, error: existing.error };
+  if (existing.error) return storageFailure(existing.error);
 
   const payload = {
     user_id: user.id,
@@ -231,7 +237,7 @@ export async function saveInvestmentThesis(input: SaveThesisInput): Promise<Thes
         .single();
 
   const { data, error } = await query;
-  if (error) return { ok: false, error: error.message };
+  if (error) return storageFailure(error);
   if (existing.data) {
     await insertThesisHistory(supabase, existing.data, "updated", user.id);
   } else if (data) {
@@ -270,7 +276,7 @@ export async function deleteInvestmentThesis(input: ThesisInput): Promise<Thesis
     portfolioId,
     scope,
   });
-  if (existing.error) return { ok: false, error: existing.error };
+  if (existing.error) return storageFailure(existing.error);
   if (!existing.data) return { ok: true, thesis: null };
 
   const { error } = await supabase
@@ -279,7 +285,7 @@ export async function deleteInvestmentThesis(input: ThesisInput): Promise<Thesis
     .eq("id", existing.data.id)
     .eq("user_id", user.id);
 
-  if (error) return { ok: false, error: error.message };
+  if (error) return storageFailure(error);
   await insertThesisHistory(supabase, existing.data, "deleted", user.id);
 
   revalidatePath("/portfolio/full");

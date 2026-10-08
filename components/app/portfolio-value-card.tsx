@@ -2,23 +2,23 @@
 
 import { useState } from "react";
 
-import { InlineRefreshPricesButton } from "@/components/app/inline-refresh-prices-button";
+import { RefreshPricesButton } from "@/components/app/refresh-prices-button";
+import { describeOverview, refreshedOverview } from "@/lib/portfolio/value-display";
 import type { PortfolioOverview, PortfolioPricingRefreshResult } from "@/lib/types";
-import { formatCurrency } from "@/lib/utils";
 
 export function PortfolioValueCard({
   initialOverview,
   portfolioId,
 }: {
-  initialOverview: Pick<PortfolioOverview, "totalValue" | "dayChange" | "lastSyncedAt">;
+  initialOverview: Pick<PortfolioOverview, "totalValue" | "dayChange" | "lastSyncedAt" | "valuation">;
   portfolioId: string;
 }) {
   const [overview, setOverview] = useState(initialOverview);
+  const display = describeOverview(overview);
 
   function handleRefreshed(result: PortfolioPricingRefreshResult) {
-    if (result.status === "updated" && result.overview) {
-      setOverview(result.overview);
-    }
+    const next = refreshedOverview(result);
+    if (next) setOverview(next);
   }
 
   return (
@@ -28,22 +28,29 @@ export function PortfolioValueCard({
           TOTAL VALUE
         </p>
         <div className="mt-4 flex items-baseline gap-3">
-          <p className="text-4xl font-bold tracking-tight text-white">
-            {formatCurrency(overview.totalValue || 17900).split(".")[0]}
-          </p>
+          <p className="text-4xl font-bold tracking-tight text-white">{display.value}</p>
           <p
             className={`flex items-center text-sm font-semibold ${
-              overview.dayChange >= 0 ? "text-emerald-400" : "text-red-400"
+              display.direction === "up"
+                ? "text-emerald-400"
+                : display.direction === "down"
+                  ? "text-red-400"
+                  : "text-slate-500"
             }`}
           >
-            {overview.dayChange >= 0 ? "+" : ""}
-            {overview.dayChange}%
+            {display.dayChangePercent === "—" ? "Day change unavailable" : `${display.dayChangePercent} today`}
           </p>
         </div>
+        {display.notes.map((note) => (
+          <p key={note} className="mt-2 text-xs text-amber-300">
+            {note}
+          </p>
+        ))}
       </div>
       <div className="flex flex-wrap items-center gap-2 text-[13px] text-slate-600">
-        <span>{`Updated ${overview.lastSyncedAt || "2 mins ago"}`}</span>
-        <InlineRefreshPricesButton
+        <span>{overview.lastSyncedAt ? `Updated ${overview.lastSyncedAt}` : "Not synced yet"}</span>
+        <RefreshPricesButton
+          presentation="inline"
           portfolioId={portfolioId}
           onRefreshed={handleRefreshed}
         />

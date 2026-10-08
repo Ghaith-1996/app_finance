@@ -61,9 +61,10 @@ export function WatchlistSearchPanel({ onClose, onAdded }: Props) {
         <button
           type="button"
           onClick={onClose}
+          aria-label="Close symbol search"
           className="rounded-lg p-1 text-slate-500 transition hover:bg-white/5 hover:text-slate-300"
         >
-          <X className="h-4 w-4" />
+          <X className="h-4 w-4" aria-hidden="true" />
         </button>
       </div>
 

@@ -117,14 +117,39 @@ export async function sendDigestSms(input: {
     };
   }
 
+  const result = await sendTwilioSms(input.phoneNumber.trim(), buildSmsBody(input.digest, input.baseUrl));
+  return {
+    channel: "sms",
+    status: result.status,
+    digestId: input.digest.id,
+    providerMessageId: result.providerMessageId,
+    errorText: result.errorText,
+  };
+}
+
+export type TwilioSendResult = {
+  status: "sent" | "failed" | "uncertain";
+  providerMessageId: string | null;
+  errorText: string | null;
+};
+
+/** True when every Twilio setting needed to send an SMS is present. */
+export function isTwilioConfigured(): boolean {
+  return ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_MESSAGING_SERVICE_SID"].every((name) =>
+    Boolean(process.env[name]?.trim()),
+  );
+}
+
+/** One Twilio Messages call, shared by digest SMS and phone verification codes. */
+export async function sendTwilioSms(to: string, text: string): Promise<TwilioSendResult> {
   const accountSid = requireTwilioAccountSid();
   const authToken = requireTwilioAuthToken();
   const messagingServiceSid = requireTwilioMessagingServiceSid();
 
   const body = new URLSearchParams({
-    To: input.phoneNumber.trim(),
+    To: to,
     MessagingServiceSid: messagingServiceSid,
-    Body: buildSmsBody(input.digest, input.baseUrl),
+    Body: text,
   });
 
   const auth = Buffer.from(`${accountSid}:${authToken}`).toString("base64");
@@ -146,11 +171,11 @@ export async function sendDigestSms(input: {
       | { sid?: string; message?: string; code?: number }
       | null;
 
+    // 4xx (including 429) is a confirmed non-acceptance and may be retried. A 5xx is ambiguous —
+    // Twilio may have queued the message — so it is never retried automatically (audit J5).
     if (!response.ok) {
       return {
-        channel: "sms",
-        status: "failed",
-        digestId: input.digest.id,
+        status: response.status >= 500 ? "uncertain" : "failed",
         providerMessageId: payload?.sid ?? null,
         errorText:
           payload?.message ||
@@ -159,18 +184,14 @@ export async function sendDigestSms(input: {
     }
 
     return {
-      channel: "sms",
       status: "sent",
-      digestId: input.digest.id,
       providerMessageId: payload?.sid ?? null,
       errorText: null,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return {
-      channel: "sms",
       status: "uncertain",
-      digestId: input.digest.id,
       providerMessageId: null,
       errorText: message || "Twilio request did not confirm a final delivery state.",
     };

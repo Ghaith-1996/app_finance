@@ -10,7 +10,14 @@ import { ThemeToggle } from "@/components/preferences/theme-toggle";
 import { usePreferences } from "@/components/providers/preferences-provider";
 import { sanitizeExternalUrl } from "@/lib/security/external-url";
 
-export function UserMenu({ showAdminLink = false }: { showAdminLink?: boolean }) {
+export function UserMenu({
+  showAdminLink = false,
+  compact = false,
+}: {
+  showAdminLink?: boolean;
+  /** Avatar-only trigger whose menu opens downward, for the small-screen header (audit F21). */
+  compact?: boolean;
+}) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<{
     displayName: string | null;
@@ -120,9 +127,14 @@ export function UserMenu({ showAdminLink = false }: { showAdminLink?: boolean })
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-3 rounded-xl px-3 py-2 transition hover:bg-surface-soft"
+        className={
+          compact
+            ? "flex items-center rounded-lg p-1 transition hover:bg-surface-soft"
+            : "flex w-full items-center gap-3 rounded-xl px-3 py-2 transition hover:bg-surface-soft"
+        }
         aria-haspopup="menu"
         aria-expanded={open}
+        aria-label={compact ? `Account menu for ${name}` : undefined}
       >
         {avatarUrl ? (
           <img
@@ -135,19 +147,25 @@ export function UserMenu({ showAdminLink = false }: { showAdminLink?: boolean })
             {name.charAt(0).toUpperCase()}
           </span>
         )}
-        <div className="min-w-0 flex-1 text-left">
-          <p className="truncate text-sm font-medium text-primary">{name}</p>
-          {profile?.handle ? (
-            <p className="truncate text-xs text-secondary">@{profile.handle}</p>
-          ) : null}
-        </div>
-        <ChevronDown className="h-4 w-4 text-secondary" />
+        {compact ? null : (
+          <>
+            <div className="min-w-0 flex-1 text-left">
+              <p className="truncate text-sm font-medium text-primary">{name}</p>
+              {profile?.handle ? (
+                <p className="truncate text-xs text-secondary">@{profile.handle}</p>
+              ) : null}
+            </div>
+            <ChevronDown className="h-4 w-4 text-secondary" aria-hidden="true" />
+          </>
+        )}
       </button>
 
       {open ? (
         <div
           role="menu"
-          className="glass-surface absolute bottom-full left-0 z-50 mb-2 min-w-[240px] overflow-hidden rounded-xl border border-subtle bg-surface-raised py-1 shadow-[var(--surface-shadow)]"
+          className={`glass-surface absolute z-50 min-w-[240px] overflow-hidden rounded-xl border border-subtle bg-surface-raised py-1 shadow-[var(--surface-shadow)] ${
+            compact ? "right-0 top-full mt-2" : "bottom-full left-0 mb-2"
+          }`}
         >
           <Link
             href="/settings"

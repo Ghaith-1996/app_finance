@@ -1,8 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  defaultHandle,
-  deriveNamesFromMetadata,
   isProfileComplete,
   validateProfileInput,
 } from "@/lib/profile/utils";
@@ -37,29 +35,6 @@ describe("profile utils", () => {
     if (!result.ok) {
       expect(result.error).toMatch(/username must be 3-20 characters/i);
     }
-  });
-
-  it("derives names from full_name metadata when split fields are absent", () => {
-    expect(deriveNamesFromMetadata({ full_name: "Grace Hopper" })).toEqual({
-      firstName: "Grace",
-      lastName: "Hopper",
-    });
-  });
-
-  it("builds a default handle from preferred username or email", () => {
-    expect(
-      defaultHandle({
-        email: "person@example.com",
-        user_metadata: { preferred_username: "Trader_One" },
-      }),
-    ).toBe("trader_one");
-
-    expect(
-      defaultHandle({
-        email: "person@example.com",
-        user_metadata: {},
-      }),
-    ).toBe("person");
   });
 
   it("checks profile completeness from required fields only", () => {

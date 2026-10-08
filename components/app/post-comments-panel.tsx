@@ -12,6 +12,8 @@ import { cn } from "@/lib/utils";
 
 interface Props {
   postId: string;
+  /** The post being discussed, shown above its replies (audit D13). */
+  source?: { authorName: string; body: string };
   onClose: () => void;
 }
 
@@ -25,7 +27,7 @@ function timeAgo(iso: string): string {
   return `${Math.floor(hrs / 24)}d`;
 }
 
-export function PostCommentsPanel({ postId, onClose }: Props) {
+export function PostCommentsPanel({ postId, source, onClose }: Props) {
   const [comments, setComments] = useState<CommunityComment[]>([]);
   const [loading, setLoading] = useState(true);
   const [body, setBody] = useState("");
@@ -65,12 +67,20 @@ export function PostCommentsPanel({ postId, onClose }: Props) {
         <button
           type="button"
           onClick={onClose}
-          className="rounded-lg p-1.5 text-slate-500 transition hover:bg-white/5 hover:text-slate-300"
+          className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm text-slate-400 transition hover:bg-white/5 hover:text-slate-200"
         >
-          <ArrowLeft className="h-4 w-4" />
+          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+          Back to community
         </button>
         <p className="text-sm font-semibold text-white">Comments</p>
       </div>
+
+      {source ? (
+        <div className="border-b border-white/[0.06] px-4 py-3">
+          <p className="text-xs text-slate-500">Original post by {source.authorName}</p>
+          <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-slate-200">{source.body}</p>
+        </div>
+      ) : null}
 
       {/* Comments list */}
       <div className="flex-1 space-y-3 overflow-y-auto p-4">

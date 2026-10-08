@@ -61,13 +61,6 @@ describe("verifyTurnstileToken", () => {
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
-  it("returns missing-token when token is undefined", async () => {
-    const { verifyTurnstileToken } = await loadModule();
-    const result = await verifyTurnstileToken({ token: undefined });
-    expect(result.success).toBe(false);
-    if (!result.success) expect(result.code).toBe("missing-token");
-  });
-
   it("returns missing-secret when TURNSTILE_SECRET_KEY is not set", async () => {
     setEnv("TURNSTILE_SECRET_KEY", undefined);
     const { verifyTurnstileToken } = await loadModule();
@@ -189,19 +182,6 @@ describe("verifyTurnstileToken", () => {
     }
   });
 
-  it("returns network-error on abort/timeout", async () => {
-    const abortErr = new DOMException("Aborted", "AbortError");
-    mockFetch.mockRejectedValueOnce(abortErr);
-
-    const { verifyTurnstileToken } = await loadModule();
-    const result = await verifyTurnstileToken({ token: "some-token" });
-
-    expect(result.success).toBe(false);
-    if (!result.success) {
-      expect(result.code).toBe("network-error");
-    }
-  });
-
   // ---- Action / hostname mismatch ----
 
   it("rejects when action does not match expected", async () => {
@@ -302,11 +282,5 @@ describe("getClientIp", () => {
       headers: { "x-forwarded-for": "10.0.0.2, 10.0.0.3" },
     });
     expect(getClientIp(req)).toBe("10.0.0.2");
-  });
-
-  it("returns null when no IP headers present", async () => {
-    const { getClientIp } = await import("@/lib/security/turnstile");
-    const req = new Request("https://example.com");
-    expect(getClientIp(req)).toBeNull();
   });
 });

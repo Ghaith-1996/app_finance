@@ -1,0 +1,76 @@
+name: CI
+
+# Audit H6: pull-request quality gate. A regression of a repaired finding (each has a test in
+# tests/, workers/news_ingestion/tests or supabase/tests) blocks merging.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    name: Typecheck, lint, test, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # Placeholders so the production build can compile; no real service is contacted.
+      NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
+      NEXT_PUBLIC_TURNSTILE_SITE_KEY: 1x00000000000000000000AA
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run test
+      - run: npm run build
+
+  dependency-audit:
+    name: Dependency advisories
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      # Fails on high or critical advisories in production dependencies.
+      - run: npm audit --omit=dev --audit-level=high
+
+  python:
+    name: Python worker tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: python -m pip install --require-hashes -r requirements.lock
+      - run: python -m unittest discover -s workers/news_ingestion/tests -t .
+
+  database:
+    name: Migrations and SQL tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      # Rebuilds the schema from every migration in a disposable Supabase Postgres container,
+      # replays upgrade seeds, and runs supabase/tests/*.test.sql (including concurrency races).
+      - run: bash scripts/db/validate-migrations.sh

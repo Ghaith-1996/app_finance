@@ -4,6 +4,8 @@ import { OnboardingPageClient } from "@/components/app/onboarding-page-client";
 import { getUserPortfolios } from "@/lib/actions/portfolio";
 import { loadShellChromeState } from "@/lib/server/page-loaders";
 
+export const metadata = { title: "Add your portfolio" };
+
 export default async function OnboardingPage() {
   const { data: portfolios } = await getUserPortfolios();
 

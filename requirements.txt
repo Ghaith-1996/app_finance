@@ -1,5 +1,9 @@
 # Python news ingestion worker dependencies
-# Install with: pip install -r requirements.txt
+# Scheduled workers and CI install the hash-pinned lock (audit H11):
+#   pip install --require-hashes -r requirements.lock
+# After changing this file, regenerate the lock on Python 3.11 / Linux (as the workflows run):
+#   pip install pip-tools
+#   pip-compile --generate-hashes --strip-extras --allow-unsafe --output-file=requirements.lock requirements.txt
 
 edgartools>=2.7.0       # SEC EDGAR filing access
 newsapi-python>=0.2.7   # NewsAPI global headlines

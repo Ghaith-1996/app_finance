@@ -1,3 +1,4 @@
+import { parseChatRequestBody } from "@/lib/security/chat-request";
 import { NextResponse } from "next/server";
 
 import {
@@ -13,13 +14,14 @@ import {
   getAIProviderById,
   toArticleChatError,
 } from "@/lib/services/ai";
-import type { AIChatErrorCode } from "@/lib/services/ai";
+import { userFacingChatErrorMessage } from "@/lib/services/ai/ai-chat-errors";
 import { computePortfolioOverview } from "@/lib/services/portfolio";
 import { loadInvestmentThesesForSymbols } from "@/lib/server/investment-theses";
 import { createClient } from "@/lib/supabase/server";
 import {
   AIUsageAccessError,
   assertUserCanUseAI,
+  releaseAIUsage,
 } from "@/lib/security/ai-access";
 import {
   buildChatGrantSetCookieHeader,
@@ -53,29 +55,6 @@ function respondWithGrant(body: unknown, status: number, scope: ChatGrantScope) 
   }
 }
 
-type ChatHistoryItem = {
-  role?: string;
-  content?: string;
-};
-
-function userFacingMessage(code: AIChatErrorCode): string {
-  switch (code) {
-    case "provider_auth":
-      return "AI provider credentials are invalid or missing. An admin needs to check the API key and deployment configuration.";
-    case "provider_timeout":
-      return "The AI provider took too long to respond. Please try again in a moment.";
-    case "provider_rate_limited":
-      return "The selected AI provider is busy or rate-limited. Please try again shortly.";
-    case "provider_context_limit":
-      return "This conversation contains too much context for the AI provider. Please try again with a shorter question.";
-    case "provider_bad_response":
-      return "The AI provider returned an unusable response. Please try again or rephrase your question.";
-    case "provider_unavailable":
-    default:
-      return "Portfolio copilot is temporarily unavailable. Please try again later.";
-  }
-}
-
 export async function POST(request: Request) {
   const supabase = await createClient();
   const {
@@ -87,41 +66,23 @@ export async function POST(request: Request) {
     return json({ error: "Unauthorized" }, 401);
   }
 
-  let body: {
-    portfolioId?: string;
-    message?: string;
-    modelTier?: unknown;
-    history?: ChatHistoryItem[];
-    turnstileToken?: string;
-  } = {};
-
+  let rawBody: unknown;
   try {
-    body = await request.json();
+    rawBody = await request.json();
   } catch {
     return json({ error: "Invalid JSON body" }, 400);
   }
 
-  const portfolioId = body.portfolioId?.trim();
-  const message = body.message?.trim();
-  const modelTier = parseModelTier(body.modelTier);
-  const history = Array.isArray(body.history)
-    ? body.history
-        .filter(
-          (item): item is { role: "user" | "assistant"; content: string } =>
-            (item.role === "user" || item.role === "assistant") &&
-            typeof item.content === "string" &&
-            item.content.trim().length > 0,
-        )
-        .slice(-12)
-        .map((item) => ({
-          role: item.role,
-          content: item.content.trim().slice(0, 4000),
-        }))
-    : [];
-
-  if (!portfolioId || !message) {
-    return json({ error: "portfolioId and message are required" }, 400);
+  // Audit H4: runtime-validate the untrusted body before using it.
+  const parsed = parseChatRequestBody(rawBody, { allowNewsItem: false });
+  if (!parsed.ok) {
+    return json({ error: parsed.error }, 400);
   }
+  const body = parsed.value;
+  const portfolioId = body.portfolioId;
+  const message = body.message;
+  const modelTier = parseModelTier(body.modelTier);
+  const history = body.history;
   if (!modelTier) {
     return json({ error: "modelTier must be 'free', 'premium', or 'ultimate'" }, 400);
   }
@@ -160,8 +121,9 @@ export async function POST(request: Request) {
     return respondForChat({ error: "Portfolio not found" }, 404);
   }
 
+  let usage: Awaited<ReturnType<typeof assertUserCanUseAI>> | null = null;
   try {
-    await assertUserCanUseAI(user, modelTier, "portfolio_copilot");
+    usage = await assertUserCanUseAI(user, modelTier, "portfolio_copilot");
   } catch (error) {
     if (error instanceof BillingAccessError) {
       return respondForChat(
@@ -189,9 +151,18 @@ export async function POST(request: Request) {
         429,
       );
     }
-    throw error;
+    // Quota/billing infrastructure failure (audit H4): a deliberate 503, not an unhandled 500.
+    return respondForChat(
+      {
+        error: "AI access could not be verified right now. Please try again shortly.",
+        code: "usage_check_unavailable",
+      },
+      503,
+    );
   }
 
+  // Audit H5: the reserved quota unit is kept only once an answer is returned.
+  let delivered = false;
   try {
     const [overview, holdingsResult, runResult, watchlistResult] = await Promise.all([
       computePortfolioOverview(supabase, portfolioId),
@@ -368,18 +339,23 @@ export async function POST(request: Request) {
       const aiErr = error instanceof AIChatError ? error : toArticleChatError(error);
       return respondForChat(
         {
-          error: userFacingMessage(aiErr.code),
+          error: userFacingChatErrorMessage(aiErr.code, "portfolio-copilot"),
           code: aiErr.code,
         },
         503,
       );
     }
 
+    delivered = true;
     return respondForChat({ answer });
   } catch (error) {
     return respondForChat(
       { error: error instanceof Error ? error.message : "Failed to answer question" },
       500,
     );
+  } finally {
+    if (!delivered) {
+      await releaseAIUsage(user.id, usage);
+    }
   }
 }

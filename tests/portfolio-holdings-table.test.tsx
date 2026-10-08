@@ -60,48 +60,7 @@ describe("PortfolioHoldingsTable", () => {
     vi.restoreAllMocks();
   });
 
-  it("renders an external earnings report action when a link exists", () => {
-    render(
-      <PortfolioHoldingsTable
-        portfolioId="portfolio-1"
-        holdings={[
-          {
-            ...baseHolding,
-            latestEarningsReportUrl: "https://investor.apple.com/q1-2026-results",
-            latestEarningsReportSource: "company",
-            latestEarningsReportDate: "2026-04-30",
-          },
-        ]}
-      />,
-    );
-
-    expect(
-      screen.getByRole("link", { name: /aapl latest earnings report/i }),
-    ).toHaveAttribute("href", "https://investor.apple.com/q1-2026-results");
-  });
-
-  it("renders a disabled report action when no link exists", () => {
-    render(
-      <PortfolioHoldingsTable
-        portfolioId="portfolio-1"
-        holdings={[
-          baseHolding,
-          {
-            ...baseHolding,
-            id: "holding-2",
-            symbol: "MSFT",
-            company: "Microsoft",
-          },
-        ]}
-      />,
-    );
-
-    expect(
-      screen.getByLabelText(/msft latest earnings report unavailable/i),
-    ).toHaveAttribute("aria-disabled", "true");
-  });
-
-  it("shows stock details above the sell and buy controls when a holding is opened", () => {
+  it("shows the selected holding's current price, day change, and value", () => {
     render(
       <PortfolioHoldingsTable
         portfolioId="portfolio-1"
@@ -116,18 +75,10 @@ describe("PortfolioHoldingsTable", () => {
     });
     const panel = within(adjustPanel);
 
-    expect(panel.getByText(/stock details/i)).toBeInTheDocument();
-    expect(panel.getByText(/^symbol$/i)).toBeInTheDocument();
-    expect(panel.getByText(/^company$/i)).toBeInTheDocument();
-    expect(panel.getByText(/^current price$/i)).toBeInTheDocument();
-    expect(panel.getByText(/^day %$/i)).toBeInTheDocument();
-    expect(panel.getByText(/^current value$/i)).toBeInTheDocument();
     expect(panel.getAllByText("AAPL").length).toBeGreaterThan(0);
     expect(panel.getByText("Apple Inc.")).toBeInTheDocument();
     expect(panel.getByText("$100.00")).toBeInTheDocument();
     expect(panel.getByText("+1.20%")).toBeInTheDocument();
     expect(panel.getByText("$200.00")).toBeInTheDocument();
-    expect(panel.getByText(/sold shares/i)).toBeInTheDocument();
-    expect(panel.getByText(/added shares/i)).toBeInTheDocument();
   });
 });

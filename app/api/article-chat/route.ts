@@ -1,6 +1,7 @@
+import { parseChatRequestBody } from "@/lib/security/chat-request";
 import { NextResponse } from "next/server";
 
-import { PLAN_LABELS } from "@/lib/billing/plans";
+import { PLAN_LABELS, parseModelTier, providerIdForTier, type TieredProviderId } from "@/lib/billing/plans";
 import {
   BillingAccessError,
 } from "@/lib/billing/subscriptions";
@@ -13,11 +14,12 @@ import {
   getAIProviderById,
   toArticleChatError,
 } from "@/lib/services/ai";
-import type { AIChatErrorCode } from "@/lib/services/ai";
+import { userFacingChatErrorMessage } from "@/lib/services/ai/ai-chat-errors";
 import { createLogger } from "@/lib/logger";
 import {
   AIUsageAccessError,
   assertUserCanUseAI,
+  releaseAIUsage,
 } from "@/lib/security/ai-access";
 import {
   buildChatGrantSetCookieHeader,
@@ -28,24 +30,16 @@ import {
 import { verifyTurnstileToken, getClientIp } from "@/lib/security/turnstile";
 import type {
   ArticleChatMessage,
-  ArticleChatModelTier,
   NewsCategory,
   TickerImpact,
 } from "@/lib/types";
 
 const log = createLogger("article-chat");
 
-type ArticleChatProviderId = "azure" | "openrouter" | "mistral";
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 type ChatHistoryItem = Pick<ArticleChatMessage, "role" | "content">;
 
-function providerIdForTier(tier: ArticleChatModelTier): ArticleChatProviderId {
-  if (tier === "ultimate") return "azure";
-  if (tier === "premium") return "mistral";
-  return "openrouter";
-}
-
-function deploymentLabelForLogs(id: ArticleChatProviderId): string {
+function deploymentLabelForLogs(id: TieredProviderId): string {
   if (id === "azure") {
     return (
       process.env.AZURE_OPENAI_MODEL?.trim() ||
@@ -57,16 +51,6 @@ function deploymentLabelForLogs(id: ArticleChatProviderId): string {
     return process.env.MISTRAL_MODEL?.trim() || "mistral-large-latest";
   }
   return process.env.OPENROUTER_MODEL?.trim() || "openrouter-default";
-}
-
-function parseModelTier(value: unknown): ArticleChatModelTier | null {
-  if (value == null) return "free";
-  if (typeof value !== "string") return null;
-  const normalized = value.trim().toLowerCase();
-  if (normalized === "free" || normalized === "premium" || normalized === "ultimate") {
-    return normalized;
-  }
-  return null;
 }
 
 function parseHistory(value: unknown): ChatHistoryItem[] {
@@ -87,24 +71,6 @@ function parseHistory(value: unknown): ChatHistoryItem[] {
       role: item.role,
       content: item.content.trim().slice(0, 4000),
     }));
-}
-
-function userFacingMessage(code: AIChatErrorCode): string {
-  switch (code) {
-    case "provider_auth":
-      return "AI provider credentials are invalid or missing. An admin needs to check the API key and deployment configuration.";
-    case "provider_timeout":
-      return "The AI provider took too long to respond. Please try again in a moment.";
-    case "provider_rate_limited":
-      return "The selected AI provider is busy or rate-limited. Please try again shortly.";
-    case "provider_context_limit":
-      return "This conversation contains too much context for the AI provider. Please try again with a shorter question.";
-    case "provider_bad_response":
-      return "The AI provider returned an unusable response. Please try again or rephrase your question.";
-    case "provider_unavailable":
-    default:
-      return "Article chat is temporarily unavailable. Please try again later.";
-  }
 }
 
 function buildEphemeralMessages(
@@ -617,29 +583,23 @@ export async function POST(request: Request) {
   const { supabase, user, response } = await requireAuthedContext();
   if (response) return response;
 
-  let body: {
-    portfolioId?: string;
-    newsItemId?: string;
-    message?: string;
-    modelTier?: string;
-    history?: unknown;
-    turnstileToken?: string;
-  } = {};
+  let rawBody: unknown;
   try {
-    body = await request.json();
+    rawBody = await request.json();
   } catch {
     return json({ error: "Invalid JSON body" }, 400);
   }
 
-  const portfolioId = body.portfolioId?.trim();
-  const newsItemId = body.newsItemId?.trim();
-  const message = body.message?.trim();
-  const modelTier = parseModelTier(body.modelTier);
-  const history = parseHistory(body.history);
-
-  if (!portfolioId || !message) {
-    return json({ error: "portfolioId and message are required" }, 400);
+  const parsed = parseChatRequestBody(rawBody, { allowNewsItem: true });
+  if (!parsed.ok) {
+    return json({ error: parsed.error }, 400);
   }
+  const body = parsed.value;
+  const portfolioId = body.portfolioId;
+  const newsItemId = body.newsItemId ?? undefined;
+  const message = body.message;
+  const modelTier = parseModelTier(body.modelTier);
+  const history = body.history;
   if (!modelTier) {
     return json({ error: "modelTier must be 'free', 'premium', or 'ultimate'" }, 400);
   }
@@ -684,8 +644,9 @@ export async function POST(request: Request) {
     }
   }
 
+  let usage: Awaited<ReturnType<typeof assertUserCanUseAI>> | null = null;
   try {
-    await assertUserCanUseAI(
+    usage = await assertUserCanUseAI(
       user,
       modelTier,
       newsItemId ? "article_chat" : "portfolio_copilot",
@@ -717,11 +678,20 @@ export async function POST(request: Request) {
         429,
       );
     }
-    throw error;
+    // Quota/billing infrastructure failure (audit H4): a deliberate 503, not an unhandled 500.
+    return respondForChat(
+      {
+        error: "AI access could not be verified right now. Please try again shortly.",
+        code: "usage_check_unavailable",
+      },
+      503,
+    );
   }
 
   const providerId = providerIdForTier(modelTier);
   const ai = getAIProviderById(providerId);
+  // Audit H5: the reserved quota unit is kept only once the user actually receives an answer.
+  let delivered = false;
 
   try {
     if (!newsItemId) {
@@ -745,7 +715,7 @@ export async function POST(request: Request) {
         });
         return respondForChat(
           {
-            error: userFacingMessage(aiErr.code),
+            error: userFacingChatErrorMessage(aiErr.code, "article-chat"),
             code: aiErr.code,
           },
           503,
@@ -756,6 +726,7 @@ export async function POST(request: Request) {
         threadId: null,
         messages: buildEphemeralMessages(history, message, answer),
       };
+      delivered = true;
       return respondForChat(responseBody);
     }
 
@@ -781,7 +752,7 @@ export async function POST(request: Request) {
       });
       return respondForChat(
         {
-          error: userFacingMessage(aiErr.code),
+          error: userFacingChatErrorMessage(aiErr.code, "article-chat"),
           code: aiErr.code,
         },
         503,
@@ -810,6 +781,8 @@ export async function POST(request: Request) {
     if (insertMessagesError) {
       return respondForChat({ error: insertMessagesError.message }, 500);
     }
+    // The answer is stored in the thread, so the user will see it even if a later step fails.
+    delivered = true;
 
     const { error: updateThreadError } = await supabase
       .from("article_chat_threads")
@@ -827,5 +800,9 @@ export async function POST(request: Request) {
       { error: error instanceof Error ? error.message : "Failed to send chat message" },
       500,
     );
+  } finally {
+    if (!delivered) {
+      await releaseAIUsage(user.id, usage);
+    }
   }
 }

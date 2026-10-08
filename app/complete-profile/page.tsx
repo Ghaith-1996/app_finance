@@ -9,6 +9,8 @@ import { ProfileForm } from "@/components/app/profile-form";
 import { isProfileComplete } from "@/lib/profile/utils";
 import { sanitizeRedirect } from "@/lib/security/redirect";
 
+export const metadata = { title: "Complete your profile" };
+
 export default async function CompleteProfilePage({
   searchParams,
 }: {

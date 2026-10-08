@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  calculatePortfolioHealth,
-  getHoldingMarketValue,
-} from "@/lib/services/portfolio-health";
+import { calculatePortfolioHealth } from "@/lib/services/portfolio-health";
 import type { Holding, PortfolioFeedHighlight } from "@/lib/types";
 
 function makeHolding(overrides: Partial<Holding>): Holding {
@@ -52,17 +49,28 @@ function makeStory(overrides: Partial<PortfolioFeedHighlight>): PortfolioFeedHig
 }
 
 describe("portfolio health scoring", () => {
-  it("uses current value first when calculating holding market value", () => {
-    expect(
-      getHoldingMarketValue(
+  it("measures concentration with the canonical USD valuation (audit H9)", () => {
+    const result = calculatePortfolioHealth({
+      holdings: [
+        makeHolding({ id: "h1", symbol: "AAPL", quantity: 10, currentPrice: 100, currentValue: 1000 }),
+        // CAD quote: C$200 x 10 at 0.75 = US$1,500, not the stored local C$2,000.
         makeHolding({
-          currentValue: 1250,
-          currentPrice: 300,
+          id: "h2",
+          symbol: "SHOP",
           quantity: 10,
-          costBasis: 800,
+          currentPrice: 200,
+          currentValue: 2000,
+          quoteCurrency: "CAD",
+          fxRateToUsd: 0.75,
         }),
-      ),
-    ).toBe(1250);
+        // No usable price: excluded, never counted at its cost basis or allocation.
+        makeHolding({ id: "h3", symbol: "XYZ", price: 0, currentPrice: 0, currentValue: 0, costBasis: 5000, allocation: 40 }),
+      ],
+      now: new Date("2026-05-31T13:10:00.000Z"),
+    });
+
+    const concentration = result.factors.find((factor) => factor.id === "position_concentration");
+    expect(concentration?.value).toBe("SHOP 60%");
   });
 
   it("returns setup guidance when there are no holdings", () => {
@@ -86,6 +94,8 @@ describe("portfolio health scoring", () => {
           symbol: "NVDA",
           company: "Nvidia",
           sector: "Technology",
+          // Concentration comes from quantity x price (80 x $100), the canonical valuation (H9).
+          quantity: 80,
           currentValue: 8000,
           quoteAsOf: "2026-05-29T13:00:00.000Z",
         }),

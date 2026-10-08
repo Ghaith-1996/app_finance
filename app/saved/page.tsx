@@ -6,6 +6,8 @@ import { SavedArticlesList } from "@/components/app/saved-articles-list";
 import { buttonStyles } from "@/components/ui/button";
 import { loadSavedArticlesPageData } from "@/lib/server/saved-articles";
 
+export const metadata = { title: "Saved" };
+
 export default async function SavedArticlesPage() {
   const { showOnboardingNav, showAdminLink, articles } =
     await loadSavedArticlesPageData();

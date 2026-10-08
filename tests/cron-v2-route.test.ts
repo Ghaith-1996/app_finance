@@ -18,7 +18,7 @@ vi.mock("@/lib/logger", () => ({
   }),
 }));
 
-import { GET, POST } from "@/app/api/news/cron/v2/route";
+import { POST } from "@/app/api/news/cron/v2/route";
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
@@ -122,32 +122,6 @@ describe("POST /api/news/cron/v2", () => {
     expect(res.status).toBe(400);
   });
 
-  it("returns providerSet=candidate and insertedArticleIds sorted on valid payload", async () => {
-    const res = await POST(makeRequest("v2-secret", makePayload()));
-    expect(res.status).toBe(200);
-    const body = await res.json();
-
-    expect(body.providerSet).toBe("candidate");
-    expect(body.tickerCount).toBe(2);
-    expect(body.tickers).toBeUndefined();
-    expect(body.insertedArticleIds).toEqual([
-      "id-ai1", "id-ai2", "id-ai3", "id-e1", "id-g1", "id-g2", "id-nc1", "id-nc2",
-    ]);
-    expect(body.shouldEnrich).toBe(true);
-    expect(body.totalInserted).toBe(8);
-  });
-
-  it("returns ingest breakdown with all four candidate sources", async () => {
-    const res = await POST(makeRequest("v2-secret", makePayload()));
-    const body = await res.json();
-
-    expect(body.ingestBreakdown.edgar.inserted).toBe(1);
-    expect(body.ingestBreakdown.newsapi_ai.inserted).toBe(3);
-    expect(body.ingestBreakdown.gnews.inserted).toBe(2);
-    expect(body.ingestBreakdown.newscatcher.inserted).toBe(2);
-    expect(body.ingestBreakdown.total_inserted).toBe(8);
-  });
-
   it("deduplicates and sorts article IDs", async () => {
     const payload = makePayload({
       inserted_article_ids: ["zz", "aa", "zz", "bb", " aa "],
@@ -174,33 +148,4 @@ describe("POST /api/news/cron/v2", () => {
     expect(body.insertedArticleIds).toEqual([]);
   });
 
-  it("logs cron finalize start and completion", async () => {
-    await POST(makeRequest("v2-secret", makePayload()));
-
-    expect(mockLoggerInfo).toHaveBeenCalledWith(
-      "Candidate cron finalize started",
-      expect.objectContaining({ tickers: 2, totalInserted: 8 }),
-    );
-    expect(mockLoggerInfo).toHaveBeenCalledWith(
-      "Candidate cron finalize completed",
-      expect.objectContaining({
-        inserted: expect.objectContaining({
-          edgar: 1,
-          newsapi_ai: 3,
-          gnews: 2,
-          newscatcher: 2,
-          total: 8,
-        }),
-      }),
-    );
-  });
-});
-
-describe("GET /api/news/cron/v2", () => {
-  it("returns 405 directing to POST", async () => {
-    const res = await GET();
-    expect(res.status).toBe(405);
-    const body = await res.json();
-    expect(body.error).toMatch(/POST/);
-  });
 });

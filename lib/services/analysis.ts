@@ -410,8 +410,10 @@ export async function runAnalysis(
   let aiAttempts = 0;
   let aiFailures = 0;
 
+  // Progress updates are heartbeats; a failed heartbeat is not fatal. Terminal transitions go
+  // through publishRun, which verifies the write (audit J2).
   const updateRun = async (status: AnalysisStatus, progress: number) => {
-    await supabase
+    const { error } = await supabase
       .from("analysis_runs")
       .update({
         status,
@@ -421,6 +423,24 @@ export async function runAnalysis(
           : {}),
       })
       .eq("id", runId);
+    return error ?? null;
+  };
+
+  // Readers only see a run once it is complete/degraded, so this write is the publication step.
+  const publishRun = async (status: "complete" | "degraded"): Promise<string | null> => {
+    const { data, error } = await supabase
+      .from("analysis_runs")
+      .update({ status, progress: 100, completed_at: new Date().toISOString() })
+      .eq("id", runId)
+      .select("id");
+    if (error) return error.message;
+    if (!Array.isArray(data) || data.length !== 1) return "analysis run row was not updated";
+    return null;
+  };
+
+  const failUnpublished = async (message: string) => {
+    await updateRun("failed", 0);
+    return { runId, error: message, code: "analysis_failed" as const };
   };
 
   try {
@@ -489,7 +509,7 @@ export async function runAnalysis(
 
     const { data: newsRows, error: newsError } = await supabase
       .from("news_items")
-      .select("id, headline, source, url, published_at, angle, raw_content, category, stock_tags, global_summary, overall_effect, ticker_impacts, source_type, metadata")
+      .select("id, headline, source, url, published_at, angle, raw_content, category, stock_tags, global_summary, overall_effect, ticker_impacts, source_type, metadata, enrichment_status")
       .gte("published_at", newsCutoff)
       .order("published_at", { ascending: false })
       .limit(ANALYSIS_NEWS_POOL_LIMIT);
@@ -503,7 +523,10 @@ export async function runAnalysis(
     const candidatesScored = newsItems.length;
 
     if (newsItems.length === 0) {
-      await updateRun("complete", 100);
+      const publishError = await publishRun("complete");
+      if (publishError) {
+        return failUnpublished(`Analysis results could not be published: ${publishError}`);
+      }
       try {
         await purgePortfolioAnalysisHistory(supabase, portfolioId);
         await purgeStaleFeedItems(supabase);
@@ -545,7 +568,7 @@ export async function runAnalysis(
     }
 
     if (insights.length > 0) {
-      await supabase.from("portfolio_insights").insert(
+      const { error: insightsError } = await supabase.from("portfolio_insights").insert(
         insights.map((i) => ({
           analysis_run_id: runId,
           portfolio_id: portfolioId,
@@ -554,15 +577,22 @@ export async function runAnalysis(
           detail: i.detail,
         })),
       );
+      if (insightsError) {
+        return failUnpublished(`Portfolio insights could not be saved: ${insightsError.message}`);
+      }
     }
 
-    let feedItemsCreated = 0;
+    const feedRows: Array<Record<string, unknown>> = [];
     let step = 0;
     const total = newsItems.length;
     for (const news of newsItems) {
       const article = `${news.headline}. ${news.raw_content ?? ""}`;
 
-      const hasPrecomputed = !!(news.global_summary && news.overall_effect);
+      // Only real AI enrichment counts; fallback text on failed/legacy-unknown rows does not (J3).
+      const enrichmentStatus = (news as Record<string, unknown>).enrichment_status;
+      const hasPrecomputed =
+        (enrichmentStatus === undefined || enrichmentStatus === "succeeded") &&
+        !!(news.global_summary && news.overall_effect);
 
       const sourceType = (news as Record<string, unknown>).source_type as string | undefined;
       const sourceBoost = sourceType === "edgar" ? 15 : 0;
@@ -697,7 +727,7 @@ export async function runAnalysis(
         }
       }
 
-      await supabase.from("feed_items").insert({
+      feedRows.push({
         analysis_run_id: runId,
         news_item_id: news.id,
         portfolio_id: portfolioId,
@@ -717,7 +747,6 @@ export async function runAnalysis(
         source_confidence: sourceConfidence,
       });
 
-      feedItemsCreated++;
       step++;
       await updateRun(
         "generating_insights",
@@ -725,12 +754,24 @@ export async function runAnalysis(
       );
     }
 
+    // One multi-row INSERT: either every scored story is saved or none is.
+    if (feedRows.length > 0) {
+      const { error: feedError } = await supabase.from("feed_items").insert(feedRows);
+      if (feedError) {
+        return failUnpublished(`Feed items could not be saved: ${feedError.message}`);
+      }
+    }
+    const feedItemsCreated = feedRows.length;
+
     const aiFailureRate = aiAttempts > 0 ? aiFailures / aiAttempts : 0;
     const degraded =
       aiFailures > 0 &&
       (aiFailureRate >= 0.25 || (candidatesScored > 0 && feedItemsCreated === 0));
 
-    await updateRun(degraded ? "degraded" : "complete", 100);
+    const publishError = await publishRun(degraded ? "degraded" : "complete");
+    if (publishError) {
+      return failUnpublished(`Analysis results could not be published: ${publishError}`);
+    }
     try {
       await purgePortfolioAnalysisHistory(supabase, portfolioId);
       await purgeStaleFeedItems(supabase);

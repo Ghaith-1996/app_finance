@@ -1,5 +1,5 @@
 import type { PortfolioInsight } from "@/lib/types";
-import { NEWS_CATEGORIES } from "@/lib/types";
+import { parseArticleAnalysis } from "./provider";
 import type {
   ArticleAnalysis,
   ArticleChatContext,
@@ -13,6 +13,7 @@ import { stubAIProvider } from "./stub-provider";
 import {
   ARTICLE_CHAT_MAX_TOKENS,
   PORTFOLIO_COPILOT_MAX_TOKENS,
+  AI_REQUEST_TIMEOUT_MS,
 } from "./constants";
 import { validateAzureConfig } from "@/lib/env";
 import { createLogger } from "@/lib/logger";
@@ -96,6 +97,7 @@ async function respond(
 
   const res = await fetch(`${baseUrl}responses`, {
     method: "POST",
+    signal: AbortSignal.timeout(AI_REQUEST_TIMEOUT_MS),
     headers: {
       "Content-Type": "application/json",
       "api-key": apiKey,
@@ -132,6 +134,10 @@ export function createAzureOpenAIProvider(): IAIProvider {
 
     return {
       ...stubAIProvider,
+      // Enrichment must fail (and stay retryable), not record stub output as succeeded.
+      async analyzeArticle() {
+        throw chatError;
+      },
       async answerArticleQuestion() {
         throw chatError;
       },
@@ -212,33 +218,12 @@ export function createAzureOpenAIProvider(): IAIProvider {
       return stubAIProvider.generateInsights(holdings, newsContexts);
     },
 
+    // No stub fallback: enrichment must see provider failures so the article stays retryable.
     async analyzeArticle(headline, content, hintTickers): Promise<ArticleAnalysis> {
-      try {
-        const p = articleEnrichmentPrompt(headline, content, hintTickers);
-        const raw = await respond(key, baseUrl, model, p.system, p.user, 500, reasoningEffort);
-        if (raw) {
-          const parsed = JSON.parse(raw.replace(/```json?\s*|\s*```/g, "").trim());
-          return {
-            category: NEWS_CATEGORIES.includes(parsed.category) ? parsed.category : "other",
-            globalSummary: parsed.globalSummary || headline,
-            overallEffect: ["bullish", "bearish", "neutral"].includes(parsed.overallEffect) ? parsed.overallEffect : "neutral",
-            stockTags: Array.isArray(parsed.stockTags)
-              ? parsed.stockTags.map((t: string) => String(t).toUpperCase()).filter(Boolean)
-              : (hintTickers ?? []),
-            tickerImpacts: Array.isArray(parsed.tickerImpacts)
-              ? parsed.tickerImpacts
-                  .filter((i: { symbol?: string; effect?: string }) => i.symbol && i.effect)
-                  .map((i: { symbol: string; effect: string }) => ({
-                    symbol: i.symbol.toUpperCase(),
-                    effect: ["bullish", "bearish", "neutral"].includes(i.effect) ? i.effect : "neutral",
-                  }))
-              : [],
-          } as ArticleAnalysis;
-        }
-      } catch {
-        /* fallback */
-      }
-      return stubAIProvider.analyzeArticle(headline, content, hintTickers);
+      const p = articleEnrichmentPrompt(headline, content, hintTickers);
+      const raw = await respond(key, baseUrl, model, p.system, p.user, 500, reasoningEffort);
+      if (!raw) throw new Error("Azure OpenAI returned an empty article analysis");
+      return parseArticleAnalysis(raw, headline, hintTickers, { dropEmptyStockTags: true });
     },
 
     async answerArticleQuestion(context: ArticleChatContext) {

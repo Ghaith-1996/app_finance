@@ -10,6 +10,7 @@ import { buttonStyles } from "@/components/ui/button";
 import { getBillingSummaryForUser } from "@/lib/billing/subscriptions";
 import { getTranslations } from "@/lib/i18n/server";
 import { Panel } from "@/components/ui/panel";
+import { loadDeepLinkedStory } from "@/lib/server/feed";
 import { loadFeedPageData } from "@/lib/server/page-loaders";
 import {
   chatGrantCookieName,
@@ -18,16 +19,7 @@ import {
 } from "@/lib/security/chat-turnstile-grant";
 import { createClient } from "@/lib/supabase/server";
 
-function analysisPulseFill(lastAnalyzedAt: string): number {
-  if (lastAnalyzedAt === "Never") return 12;
-  if (lastAnalyzedAt.includes("Just now")) return 98;
-  if (lastAnalyzedAt.includes("minute")) return 90;
-  const hoursMatch = lastAnalyzedAt.match(/(\d+)\s*hours?/);
-  if (hoursMatch) return Math.max(38, 88 - Number(hoursMatch[1]) * 9);
-  const daysMatch = lastAnalyzedAt.match(/(\d+)\s*days?/);
-  if (daysMatch) return Math.max(18, 55 - Number(daysMatch[1]) * 10);
-  return 55;
-}
+export const metadata = { title: "Feed" };
 
 export default async function FeedPage({
   searchParams,
@@ -63,7 +55,12 @@ export default async function FeedPage({
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  const billingSummary = user ? await getBillingSummaryForUser(user.id, user.email) : null;
+  const billingSummary = user ? await getBillingSummaryForUser(user.id, user.email, user) : null;
+  // Resolve ?story= by ID so saved/digest/alert links work outside the 24h feed window (F05).
+  const initialStory = await loadDeepLinkedStory(supabase, initialStoryId, {
+    portfolioSymbols: initialFeedPayload?.portfolioSymbols ?? [],
+    watchlistSymbols: initialFeedPayload?.watchlistSymbols ?? [],
+  });
   const { t } = await getTranslations();
 
   // Compute initial Turnstile grant state for the general "Ask AI" chat.
@@ -80,7 +77,6 @@ export default async function FeedPage({
     initialGeneralChatTurnstileVerified = hasValidChatGrantValue(rawGrant, scope);
   }
 
-  const pulsePct = analysisPulseFill(portfolioOverview.lastAnalyzedAt);
 
   return (
     <AppShell
@@ -97,50 +93,39 @@ export default async function FeedPage({
         </Link>
       }
     >
-      <div className="space-y-8">
-        <div className="grid gap-4 md:grid-cols-3">
-          <Panel className="space-y-3 rounded-2xl p-6">
+      <div className="space-y-5">
+        {/* Audit D01: one compact strip instead of three tall cards, so the first stories sit
+            above the fold. */}
+        <Panel className="grid gap-4 rounded-2xl p-4 sm:grid-cols-3 sm:gap-6 sm:px-6">
+          <div className="min-w-0 space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
               Intelligence coverage
             </p>
-            <p className="text-3xl font-semibold tracking-tight text-white">
-              {marketStoryCount24h}
-            </p>
-            <p className="text-sm text-slate-500">market stories in the last 24 hours</p>
-            <div className="pt-1">
-              <span className="inline-flex items-center gap-2 rounded-lg border border-brand/25 bg-brand/10 px-3 py-1 text-xs font-semibold text-brand">
-                <span className="h-2 w-2 rounded-full bg-brand" />
-                Feed ready
+            <p className="flex flex-wrap items-baseline gap-x-2">
+              <span className="text-xl font-semibold tracking-tight text-white">
+                {marketStoryCount24h}
               </span>
-            </div>
-            <p className="text-sm text-slate-400">
-              {matchedStoryCount24h} matched to your portfolio
+              <span className="text-sm text-slate-500">market stories in the last 24 hours</span>
             </p>
-          </Panel>
+            <p className="text-xs text-slate-400">{matchedStoryCount24h} matched to your portfolio</p>
+          </div>
+
+          <div className="min-w-0 space-y-1">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
+              Last analysis
+            </p>
+            <p className="text-xl font-semibold tracking-tight text-white">
+              {portfolioOverview.lastAnalyzedAt}
+            </p>
+            <p className="text-xs text-slate-500">Auto-updated every 20 min</p>
+          </div>
 
           <ActivePortfolioValueCard
             portfolioId={portfolioId}
             initialOverview={portfolioOverview}
+            compact
           />
-
-          <Panel className="space-y-3 rounded-2xl p-6">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
-              Analysis pulse
-            </p>
-            <p className="text-3xl font-semibold tracking-tight text-white">
-              {portfolioOverview.lastAnalyzedAt}
-            </p>
-            <p className="text-sm text-slate-500">Auto-updated every 20 min</p>
-            <div className="pt-2">
-              <div className="h-2 overflow-hidden rounded-full bg-white/5">
-                <div
-                  className="h-full rounded-full bg-brand transition-[width] duration-500"
-                  style={{ width: `${pulsePct}%` }}
-                />
-              </div>
-            </div>
-          </Panel>
-        </div>
+        </Panel>
 
         <FeedView
           portfolioId={portfolioId}
@@ -148,6 +133,7 @@ export default async function FeedPage({
           initialSymbol={initialSymbol}
           initialTicker={initialTicker}
           initialStoryId={initialStoryId}
+          initialStory={initialStory}
           initialFeedPayload={initialFeedPayload}
           allowedModelTiers={billingSummary?.allowedModelTiers}
           defaultModelTier={billingSummary?.defaultModelTier}

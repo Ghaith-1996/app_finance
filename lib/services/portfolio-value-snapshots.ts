@@ -2,7 +2,15 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { getFxRatesToBase } from "@/lib/services/fx";
+import {
+  buildHoldingPricingPlan,
+  PRICING_HOLDING_COLUMNS,
+  type PricingHoldingRow,
+  type PricingQuote,
+} from "@/lib/services/holding-pricing";
 import { getQuotes } from "@/lib/services/yahoo-finance";
+import { fetchAllRows } from "@/lib/supabase/paginate";
 import { createServiceClient } from "@/lib/supabase/service";
 import type { PortfolioValueSnapshot } from "@/lib/types";
 
@@ -11,25 +19,7 @@ type PortfolioRow = {
   user_id: string;
 };
 
-type HoldingSnapshotRow = {
-  id: string;
-  portfolio_id: string;
-  symbol: string;
-  quantity: number | string | null;
-  average_cost: number | string | null;
-  cost_basis: number | string | null;
-  current_price: number | string | null;
-  current_value: number | string | null;
-  price: number | string | null;
-  daily_change: number | string | null;
-  quote_currency: string | null;
-};
-
-type Quote = {
-  price: number;
-  dailyChange: number;
-  currency?: string;
-};
+const PORTFOLIO_BATCH_SIZE = 50;
 
 type SnapshotWrite = {
   portfolio_id: string;
@@ -41,17 +31,16 @@ type SnapshotWrite = {
   day_change_percent: number;
   quote_currency: string;
   positions_count: number;
+  valuation_version: number;
   updated_at: string;
 };
 
-type HoldingQuoteUpdate = {
-  id: string;
-  portfolioId: string;
-  price: number;
-  dailyChange: number;
-  currency: string;
-  positionValue: number;
-};
+/**
+ * Unit of total_value/cost_basis (review R3). 2 = USD-normalized canonical valuation. Rows from
+ * before migration 041 are NULL: per-holding currency sums that cannot be compared or converted,
+ * so they are never charted next to current rows.
+ */
+export const SNAPSHOT_VALUATION_VERSION = 2;
 
 export type PortfolioValueSnapshotCronResult = {
   ran: true;
@@ -112,6 +101,7 @@ export async function loadPortfolioValueSnapshots(
     .from("portfolio_value_snapshots")
     .select("id, captured_at, bucket_start, total_value, cost_basis, day_change_percent, quote_currency, positions_count")
     .eq("portfolio_id", portfolioId)
+    .eq("valuation_version", SNAPSHOT_VALUATION_VERSION)
     .order("bucket_start", { ascending: false })
     .limit(limit);
 
@@ -129,217 +119,137 @@ export async function recordPortfolioValueSnapshots(options: {
   const supabase = createServiceClient();
   const errors: string[] = [];
 
-  let portfolioQuery = supabase
-    .from("portfolios")
-    .select("id, user_id")
-    .order("created_at", { ascending: true });
-
-  if (options.maxPortfolios && options.maxPortfolios > 0) {
-    portfolioQuery = portfolioQuery.limit(options.maxPortfolios);
-  }
-
-  const { data: portfoliosData, error: portfoliosError } = await portfolioQuery;
-  if (portfoliosError) {
-    return {
-      ran: true,
-      bucketStart,
-      capturedAt,
-      portfoliosScanned: 0,
-      portfoliosSnapshotted: 0,
-      portfoliosSkipped: 0,
-      holdingsUpdated: 0,
-      quoteFetchError: null,
-      errors: [portfoliosError.message],
-    };
-  }
-
-  const portfolios = (portfoliosData ?? []) as PortfolioRow[];
-  const portfolioIds = portfolios.map((portfolio) => portfolio.id);
-  if (portfolioIds.length === 0) {
-    return {
-      ran: true,
-      bucketStart,
-      capturedAt,
-      portfoliosScanned: 0,
-      portfoliosSnapshotted: 0,
-      portfoliosSkipped: 0,
-      holdingsUpdated: 0,
-      quoteFetchError: null,
-      errors,
-    };
-  }
-
-  const { data: holdingsData, error: holdingsError } = await supabase
-    .from("holdings")
-    .select("id, portfolio_id, symbol, quantity, average_cost, cost_basis, current_price, current_value, price, daily_change, quote_currency")
-    .in("portfolio_id", portfolioIds);
-
-  if (holdingsError) {
-    return {
-      ran: true,
-      bucketStart,
-      capturedAt,
-      portfoliosScanned: portfolios.length,
-      portfoliosSnapshotted: 0,
-      portfoliosSkipped: portfolios.length,
-      holdingsUpdated: 0,
-      quoteFetchError: null,
-      errors: [holdingsError.message],
-    };
-  }
-
-  const holdings = (holdingsData ?? []) as HoldingSnapshotRow[];
-  const symbols = [
-    ...new Set(
-      holdings
-        .map((holding) => holding.symbol?.trim().toUpperCase())
-        .filter((symbol): symbol is string => Boolean(symbol)),
-    ),
-  ];
-
-  let quotes = new Map<string, Quote>();
-  let quoteFetchError: string | null = null;
-  if (symbols.length > 0) {
-    try {
-      quotes = await getQuotes(symbols);
-    } catch (error) {
-      quoteFetchError = error instanceof Error ? error.message : String(error);
-    }
-  }
-
-  const holdingsByPortfolio = new Map<string, HoldingSnapshotRow[]>();
-  for (const holding of holdings) {
-    const existing = holdingsByPortfolio.get(holding.portfolio_id) ?? [];
-    existing.push(holding);
-    holdingsByPortfolio.set(holding.portfolio_id, existing);
-  }
-
-  const snapshotRows: SnapshotWrite[] = [];
-  const quoteUpdates: HoldingQuoteUpdate[] = [];
-  const portfolioTotals = new Map<string, number>();
+  const maxPortfolios = options.maxPortfolios && options.maxPortfolios > 0
+    ? Math.floor(options.maxPortfolios)
+    : null;
+  let portfoliosScanned = 0;
+  let portfoliosSnapshotted = 0;
   let portfoliosSkipped = 0;
+  let holdingsUpdated = 0;
+  let quoteFetchError: string | null = null;
+  let lastPortfolioId: string | null = null;
 
-  for (const portfolio of portfolios) {
-    const portfolioHoldings = holdingsByPortfolio.get(portfolio.id) ?? [];
-    if (portfolioHoldings.length === 0) {
-      portfoliosSkipped += 1;
+  while (maxPortfolios === null || portfoliosScanned < maxPortfolios) {
+    const batchSize = maxPortfolios === null
+      ? PORTFOLIO_BATCH_SIZE
+      : Math.min(PORTFOLIO_BATCH_SIZE, maxPortfolios - portfoliosScanned);
+    let query = supabase.from("portfolios").select("id, user_id")
+      .order("id", { ascending: true }).limit(batchSize);
+    if (lastPortfolioId) query = query.gt("id", lastPortfolioId);
+    const { data, error: portfoliosError } = await query;
+    if (portfoliosError) {
+      errors.push(portfoliosError.message);
+      break;
+    }
+    const portfolios = (data ?? []) as PortfolioRow[];
+    if (portfolios.length === 0) break;
+    portfoliosScanned += portfolios.length;
+    lastPortfolioId = portfolios[portfolios.length - 1].id;
+
+    // Read every holding, but only for this batch. Never value a truncated portfolio.
+    const { data: holdings, error: holdingsError } = await fetchAllRows<
+      PricingHoldingRow & { portfolio_id: string }
+    >((from, to) =>
+      supabase
+        .from("holdings")
+        .select(`portfolio_id, ${PRICING_HOLDING_COLUMNS}`)
+        .in("portfolio_id", portfolios.map((portfolio) => portfolio.id))
+        .order("id", { ascending: true })
+        .range(from, to),
+    );
+    if (holdingsError) {
+      errors.push(holdingsError.message);
+      portfoliosSkipped += portfolios.length;
       continue;
     }
 
-    let totalValue = 0;
-    let costBasis = 0;
-    let weightedDayChange = 0;
-    let positionsCount = 0;
-    let quoteCurrency = "USD";
-
-    for (const holding of portfolioHoldings) {
-      const symbol = holding.symbol.trim().toUpperCase();
-      const quote = quotes.get(symbol);
-      const quantity = toNumber(holding.quantity);
-      const savedCurrentPrice = toNumber(holding.current_price);
-      const savedLegacyPrice = toNumber(holding.price);
-      const price =
-        quote?.price ??
-        (savedCurrentPrice > 0 ? savedCurrentPrice : savedLegacyPrice);
-      const positionValue =
-        quantity > 0
-          ? quantity * price
-          : toNumber(holding.current_value);
-      const positionCost =
-        quantity > 0
-          ? quantity * toNumber(holding.average_cost)
-          : toNumber(holding.cost_basis);
-
-      if (positionValue <= 0) continue;
-
-      positionsCount += 1;
-      totalValue += positionValue;
-      costBasis += positionCost;
-
-      const dailyChange = quote?.dailyChange ?? toNumber(holding.daily_change);
-      weightedDayChange += dailyChange * positionValue;
-      quoteCurrency = quote?.currency ?? holding.quote_currency ?? quoteCurrency;
-
-      if (quote) {
-        quoteUpdates.push({
-          id: holding.id,
-          portfolioId: portfolio.id,
-          price: quote.price,
-          dailyChange: quote.dailyChange,
-          currency: quote.currency ?? holding.quote_currency ?? "USD",
-          positionValue,
-        });
+    const symbols = [
+      ...new Set(
+        holdings
+          .map((holding) => holding.symbol?.trim().toUpperCase())
+          .filter((symbol): symbol is string => Boolean(symbol)),
+      ),
+    ];
+    let quotes: Map<string, PricingQuote> = new Map();
+    if (symbols.length > 0) {
+      try {
+        quotes = await getQuotes(symbols);
+      } catch (error) {
+        quoteFetchError ??= error instanceof Error ? error.message : String(error);
       }
     }
+    const fxRates = await getFxRatesToBase([
+      ...[...quotes.values()].map((quote) => quote.currency),
+      ...holdings.map((holding) => holding.quote_currency),
+    ]);
 
-    if (totalValue <= 0 || positionsCount === 0) {
-      portfoliosSkipped += 1;
-      continue;
+    const holdingsByPortfolio = new Map<string, PricingHoldingRow[]>();
+    for (const holding of holdings) {
+      const existing = holdingsByPortfolio.get(holding.portfolio_id) ?? [];
+      existing.push(holding);
+      holdingsByPortfolio.set(holding.portfolio_id, existing);
     }
 
-    portfolioTotals.set(portfolio.id, totalValue);
-    snapshotRows.push({
-      portfolio_id: portfolio.id,
-      user_id: portfolio.user_id,
-      captured_at: capturedAt,
-      bucket_start: bucketStart,
-      total_value: roundMoney(totalValue),
-      cost_basis: roundMoney(costBasis),
-      day_change_percent: roundMoney(weightedDayChange / totalValue),
-      quote_currency: quoteCurrency,
-      positions_count: positionsCount,
-      updated_at: capturedAt,
-    });
-  }
+    const snapshotRows: SnapshotWrite[] = [];
+    for (const portfolio of portfolios) {
+      const portfolioHoldings = holdingsByPortfolio.get(portfolio.id) ?? [];
+      if (portfolioHoldings.length === 0) {
+        portfoliosSkipped += 1;
+        continue;
+      }
 
-  let holdingsUpdated = 0;
-  for (const update of quoteUpdates) {
-    const portfolioTotal = portfolioTotals.get(update.portfolioId) ?? 0;
-    const allocation =
-      portfolioTotal > 0
-        ? Math.round((update.positionValue / portfolioTotal) * 10_000) / 100
-        : 0;
-    const { error } = await supabase
-      .from("holdings")
-      .update({
-        price: update.price,
-        current_price: update.price,
-        daily_change: update.dailyChange,
-        quote_currency: update.currency,
-        quote_as_of: capturedAt,
-        allocation,
-      })
-      .eq("id", update.id)
-      .eq("portfolio_id", update.portfolioId);
+      const plan = buildHoldingPricingPlan(portfolioHoldings, quotes, fxRates, capturedAt);
+      if (plan.refreshedSymbols.length > 0) {
+        const { error } = await supabase.rpc("apply_holding_price_updates", {
+          p_portfolio_id: portfolio.id,
+          p_updates: plan.updates,
+          p_sync_state: plan.syncState,
+          p_synced_at: capturedAt,
+        });
+        if (error) {
+          errors.push(`portfolio ${portfolio.id} price update: ${error.message}`);
+        } else {
+          holdingsUpdated += plan.refreshedSymbols.length;
+        }
+      }
 
-    if (error) {
-      errors.push(`holding ${update.id}: ${error.message}`);
-      continue;
+      const valuation = plan.valuation;
+      // A history point must describe the whole portfolio; skip rather than record a partial total.
+      if (valuation.status !== "complete" || valuation.totalValue <= 0) {
+        portfoliosSkipped += 1;
+        if (valuation.status === "partial") {
+          errors.push(
+            `portfolio ${portfolio.id} snapshot skipped: no value for ${valuation.unavailableSymbols.join(", ")}`,
+          );
+        }
+        continue;
+      }
+
+      snapshotRows.push({
+        portfolio_id: portfolio.id,
+        user_id: portfolio.user_id,
+        captured_at: capturedAt,
+        bucket_start: bucketStart,
+        total_value: roundMoney(valuation.totalValue),
+        cost_basis: roundMoney(valuation.costBasis),
+        day_change_percent: roundMoney(valuation.dayChangePercent ?? 0),
+        quote_currency: valuation.baseCurrency,
+        positions_count: valuation.freshCount + valuation.staleCount,
+        valuation_version: SNAPSHOT_VALUATION_VERSION,
+        updated_at: capturedAt,
+      });
     }
 
-    holdingsUpdated += 1;
-  }
-
-  const portfoliosWithQuoteUpdates = [
-    ...new Set(quoteUpdates.map((update) => update.portfolioId)),
-  ];
-  if (portfoliosWithQuoteUpdates.length > 0) {
-    const { error } = await supabase
-      .from("portfolios")
-      .update({ last_synced_at: capturedAt, sync_status: "active" })
-      .in("id", portfoliosWithQuoteUpdates);
-    if (error) errors.push(`portfolios timestamp update: ${error.message}`);
-  }
-
-  let portfoliosSnapshotted = 0;
-  if (snapshotRows.length > 0) {
-    const { error } = await supabase
-      .from("portfolio_value_snapshots")
-      .upsert(snapshotRows, { onConflict: "portfolio_id,bucket_start" });
-    if (error) {
-      errors.push(`snapshot upsert: ${error.message}`);
-    } else {
-      portfoliosSnapshotted = snapshotRows.length;
+    // Persist this batch before fetching more portfolios, quotes or holdings.
+    if (snapshotRows.length > 0) {
+      const { error } = await supabase
+        .from("portfolio_value_snapshots")
+        .upsert(snapshotRows, { onConflict: "portfolio_id,bucket_start" });
+      if (error) {
+        errors.push(`snapshot upsert: ${error.message}`);
+      } else {
+        portfoliosSnapshotted += snapshotRows.length;
+      }
     }
   }
 
@@ -347,7 +257,7 @@ export async function recordPortfolioValueSnapshots(options: {
     ran: true,
     bucketStart,
     capturedAt,
-    portfoliosScanned: portfolios.length,
+    portfoliosScanned,
     portfoliosSnapshotted,
     portfoliosSkipped,
     holdingsUpdated,

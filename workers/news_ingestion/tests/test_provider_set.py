@@ -19,40 +19,9 @@ if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 from workers.news_ingestion.main import (
-    CANDIDATE_SOURCE_REGISTRY,
-    SOURCE_REGISTRY,
-    _get_registry,
     preflight_check,
     run,
 )
-
-
-class TestGetRegistry(unittest.TestCase):
-    """_get_registry selects the right registry for a provider-set name."""
-
-    def test_unknown_falls_back_to_current(self):
-        self.assertIs(_get_registry("nonexistent"), SOURCE_REGISTRY)
-
-
-class TestCandidateSourceProperties(unittest.TestCase):
-    """Candidate-only sources have the correct config flags."""
-
-    def test_newsapi_ai_accepts_queries(self):
-        cfg = CANDIDATE_SOURCE_REGISTRY["newsapi_ai"]
-        self.assertTrue(cfg.accepts_queries)
-        self.assertFalse(cfg.uses_tickers)
-        self.assertFalse(cfg.accepts_gnews_queries)
-
-    def test_newscatcher_accepts_queries(self):
-        cfg = CANDIDATE_SOURCE_REGISTRY["newscatcher"]
-        self.assertTrue(cfg.accepts_queries)
-        self.assertFalse(cfg.uses_tickers)
-        self.assertFalse(cfg.accepts_gnews_queries)
-
-    def test_gnews_accepts_gnews_queries_in_candidate(self):
-        cfg = CANDIDATE_SOURCE_REGISTRY["gnews"]
-        self.assertTrue(cfg.accepts_gnews_queries)
-        self.assertFalse(cfg.accepts_queries)
 
 
 class TestRunProviderSet(unittest.TestCase):

@@ -10,7 +10,6 @@ export function SectionHeading({
   title: string;
   description: string;
   align?: "left" | "center";
-  theme?: "dark" | "light";
 }) {
   return (
     <div

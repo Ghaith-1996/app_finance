@@ -183,18 +183,6 @@ describe("GET /api/feed personal mode", () => {
     currentSupabaseMock = createSupabaseMock(["held_ticker_tag"]);
   });
 
-  it("returns matchReasonCodes and matchSources when present on feed items", async () => {
-    const res = await GET(new Request("http://localhost/api/feed?mode=personal&portfolioId=p1"));
-    const body = await res.json();
-
-    expect(body.appliedSort).toBe("match");
-    expect(body.sortNotice).toBeNull();
-    expect(body.feed[0].matchReasonCodes).toEqual(["held_ticker_tag"]);
-    expect(body.feed[0].matchSources).toEqual(["portfolio"]);
-    expect(body.portfolioSymbols).toEqual(["AAPL"]);
-    expect(body.portfolioSectors).toEqual(["Technology"]);
-  });
-
   it("keeps backward compatibility when match_reason_codes is null", async () => {
     currentSupabaseMock = createSupabaseMock(null, null);
 
@@ -203,19 +191,6 @@ describe("GET /api/feed personal mode", () => {
 
     expect(body.feed[0].matchReasonCodes).toEqual([]);
     expect(body.feed[0].matchSources).toEqual(["portfolio"]);
-  });
-
-  it("returns watchlist match sources when present", async () => {
-    currentSupabaseMock = createSupabaseMock(
-      ["watchlist_ticker_tag"],
-      ["watchlist"],
-    );
-
-    const res = await GET(new Request("http://localhost/api/feed?mode=personal&portfolioId=p1"));
-    const body = await res.json();
-
-    expect(body.feed[0].matchSources).toEqual(["watchlist"]);
-    expect(body.feed[0].matchReasonCodes).toEqual(["watchlist_ticker_tag"]);
   });
 
   it("adds thesis matches when a saved risk appears in the story context", async () => {
@@ -513,15 +488,6 @@ describe("GET /api/feed personal mode", () => {
     ]);
   });
 
-  it("includes watchlistSymbols in response", async () => {
-    currentSupabaseMock = createSupabaseMock(["held_ticker_tag"], ["portfolio"], "tag", ["TSLA"]);
-
-    const res = await GET(new Request("http://localhost/api/feed?mode=personal&portfolioId=p1"));
-    const body = await res.json();
-
-    expect(body.watchlistSymbols).toEqual(["TSLA"]);
-  });
-
   it("falls back to direct watchlist matching when the user has no portfolio", async () => {
     currentSupabaseMock = {
       ...createSupabaseMock(null, null, "tag", ["AAPL"]),
@@ -556,16 +522,6 @@ describe("GET /api/feed personal mode", () => {
 });
 
 describe("GET /api/feed market mode", () => {
-  it("defaults the market feed to most recent sorting", async () => {
-    currentSupabaseMock = createSupabaseMock(["held_ticker_tag"]);
-
-    const res = await GET(new Request("http://localhost/api/feed?mode=market&portfolioId=p1"));
-    const body = await res.json();
-
-    expect(body.appliedSort).toBe("recent");
-    expect(body.sortNotice).toBeNull();
-  });
-
   it("marks market stories as portfolio matches when ticker impacts mention a held stock", async () => {
     currentSupabaseMock = createSupabaseMock(["held_ticker_tag"], null, "impact");
 

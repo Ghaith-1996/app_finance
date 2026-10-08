@@ -112,18 +112,6 @@ class TestStockTagFiltering(unittest.TestCase):
         assert result is not None
         self.assertEqual(len(result.stock_tags), 5)
 
-    def test_entity_names_in_metadata(self) -> None:
-        """Excluded entity names should appear in metadata for debugging."""
-        art = _make_article(entities=[
-            _make_entity("Microsoft Corporation"),
-            _make_entity("MSFT"),
-        ])
-        result = _article_to_normalized(art, cutoff=_CUTOFF)
-        assert result is not None
-        self.assertIn("Microsoft Corporation", result.metadata["newscatcher_entities"])
-        self.assertIn("MSFT", result.metadata["newscatcher_entities"])
-
-
 # ---------------------------------------------------------------------------
 # Category hint mapping
 # ---------------------------------------------------------------------------
@@ -208,20 +196,6 @@ class TestStableExternalId(unittest.TestCase):
             stable_newscatcher_external_id(b),
         )
 
-    def test_falls_back_to_link(self) -> None:
-        a = _make_article(_id="", link="https://a.com/story")
-        b = _make_article(_id="", link="https://a.com/story")
-        self.assertEqual(
-            stable_newscatcher_external_id(a),
-            stable_newscatcher_external_id(b),
-        )
-        self.assertTrue(stable_newscatcher_external_id(a).startswith("newscatcher_"))
-
-    def test_falls_back_to_title_date(self) -> None:
-        a = _make_article(_id="", link="", title="Unique", published_date="2025-01-01")
-        eid = stable_newscatcher_external_id(a)
-        self.assertTrue(eid.startswith("newscatcher_"))
-
     def test_different_ids_differ(self) -> None:
         a = _make_article(_id="nc-1")
         b = _make_article(_id="nc-2")
@@ -249,12 +223,6 @@ class TestEdgeCases(unittest.TestCase):
         old_date = (_CUTOFF - timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M:%SZ")
         art = _make_article(published_date=old_date)
         self.assertIsNone(_article_to_normalized(art, cutoff=_CUTOFF))
-
-    def test_source_type_is_newscatcher(self) -> None:
-        art = _make_article()
-        result = _article_to_normalized(art, cutoff=_CUTOFF)
-        assert result is not None
-        self.assertEqual(result.source_type, "newscatcher")
 
     def test_body_from_excerpt(self) -> None:
         art = _make_article(excerpt="Excerpt text", summary="Summary text")

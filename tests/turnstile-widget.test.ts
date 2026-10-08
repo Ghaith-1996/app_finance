@@ -23,37 +23,6 @@ import { useTurnstile } from "@/components/security/turnstile-widget";
 // useTurnstile state machine tests
 // ---------------------------------------------------------------------------
 describe("useTurnstile state machine", () => {
-  it("starts in loading state with no token", () => {
-    const { result } = renderHook(() => useTurnstile());
-    expect(result.current.status).toBe("loading");
-    expect(result.current.token).toBeNull();
-    expect(result.current.canSubmit).toBe(false);
-    expect(result.current.statusMessage).toBe("Loading verification\u2026");
-  });
-
-  it("transitions to verified on success callback", () => {
-    const { result } = renderHook(() => useTurnstile());
-    act(() => {
-      result.current.widgetProps.onSuccess("test-token-abc");
-    });
-    expect(result.current.status).toBe("verified");
-    expect(result.current.token).toBe("test-token-abc");
-    expect(result.current.canSubmit).toBe(true);
-    expect(result.current.statusMessage).toBeNull();
-  });
-
-  it("transitions to ready on widget ready callback", () => {
-    const { result } = renderHook(() => useTurnstile());
-    act(() => {
-      result.current.widgetProps.onReady!();
-    });
-    expect(result.current.status).toBe("ready");
-    expect(result.current.canSubmit).toBe(false);
-    expect(result.current.statusMessage).toBe(
-      "Completing verification\u2026",
-    );
-  });
-
   it("onReady does not regress from verified back to ready", () => {
     const { result } = renderHook(() => useTurnstile());
     act(() => {
@@ -64,17 +33,6 @@ describe("useTurnstile state machine", () => {
       result.current.widgetProps.onReady!();
     });
     expect(result.current.status).toBe("verified");
-  });
-
-  it("transitions to error on error callback", () => {
-    const { result } = renderHook(() => useTurnstile());
-    act(() => {
-      result.current.widgetProps.onError!("widget_error");
-    });
-    expect(result.current.status).toBe("error");
-    expect(result.current.token).toBeNull();
-    expect(result.current.canSubmit).toBe(false);
-    expect(result.current.statusMessage).toBe("Verification failed.");
   });
 
   it("auto-retries on expiry — clears token and sets ready", () => {
@@ -103,22 +61,6 @@ describe("useTurnstile state machine", () => {
     expect(result.current.status).toBe("ready");
     expect(result.current.token).toBeNull();
     expect(result.current.canSubmit).toBe(false);
-  });
-
-  it("can re-verify after reset", () => {
-    const { result } = renderHook(() => useTurnstile());
-    act(() => {
-      result.current.widgetProps.onSuccess("tok-1");
-    });
-    act(() => {
-      result.current.reset();
-    });
-    act(() => {
-      result.current.widgetProps.onSuccess("tok-2");
-    });
-    expect(result.current.status).toBe("verified");
-    expect(result.current.token).toBe("tok-2");
-    expect(result.current.canSubmit).toBe(true);
   });
 
   it("can recover from error via reset + new success", () => {

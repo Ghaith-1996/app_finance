@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BrainCircuit, Clock } from "lucide-react";
+import { formatAppDateTime } from "@/lib/time/format";
 import { createClient } from "@/lib/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -126,7 +127,7 @@ export function AnalysisRunTrigger({
     : -1;
 
   const completedTimeStr = run?.completedAt
-    ? `Completed ${new Date(run.completedAt).toLocaleString()}`
+    ? `Completed ${formatAppDateTime(run.completedAt)}`
     : defaultOverview.lastAnalyzedAt !== "Never"
       ? `Last run ${defaultOverview.lastAnalyzedAt}`
       : "Not run yet";

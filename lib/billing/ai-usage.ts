@@ -237,3 +237,27 @@ export async function consumeAIQuotaForUser(input: {
     ...normalizeQuotaSummary(effectivePlanKey, row),
   };
 }
+
+/**
+ * Returns one reserved unit to the exact bucket identified by a reservation's window and reset
+ * time (audit H5: failed requests do not count). Never goes below zero.
+ */
+export async function releaseAIQuotaForUser(input: {
+  userId: string;
+  quotaWindow: AIQuotaWindow;
+  resetsAt: string;
+  surface?: string;
+}): Promise<void> {
+  const supabase = createServiceClient();
+  const { error } = await supabase.rpc("release_ai_quota", {
+    p_user_id: input.userId,
+    p_quota_window: input.quotaWindow,
+    p_resets_at: input.resetsAt,
+    p_surface: input.surface ?? AI_SHARED_SURFACE,
+    p_time_zone: AI_USAGE_TIME_ZONE,
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}

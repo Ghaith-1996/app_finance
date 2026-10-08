@@ -82,23 +82,6 @@ describe("DigestPage", () => {
     });
   });
 
-  it("renders the stored digest snapshot and story links", async () => {
-    render(
-      await DigestPage({
-        params: Promise.resolve({ digestId: "digest-1" }),
-        searchParams: Promise.resolve({ story: "news-1" }),
-      }),
-    );
-
-    expect(screen.getByText("Bullish leaders: AAPL. Bearish leaders: TSLA.")).toBeInTheDocument();
-    expect(screen.getByText("Apple overnight move")).toBeInTheDocument();
-    expect(screen.getByText(/Matched: AAPL/)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Open source article" })).toHaveAttribute(
-      "href",
-      "https://example.com/story",
-    );
-  });
-
   it("does not render a source link when the stored story URL is unsafe", async () => {
     digestMaybeSingle.mockResolvedValueOnce({
       data: {

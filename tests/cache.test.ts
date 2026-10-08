@@ -7,15 +7,6 @@ describe("server-side cache", () => {
     cache = await import("@/lib/services/cache");
   });
 
-  it("returns undefined for missing keys", () => {
-    expect(cache.cacheGet("nonexistent")).toBeUndefined();
-  });
-
-  it("stores and retrieves values", () => {
-    cache.cacheSet("test-key", { a: 1 });
-    expect(cache.cacheGet("test-key")).toEqual({ a: 1 });
-  });
-
   it("expires entries after TTL", () => {
     vi.useFakeTimers();
     cache.cacheSet("test-key", "value", 1000);

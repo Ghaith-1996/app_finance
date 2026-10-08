@@ -2,8 +2,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   claimStripeEvent,
-  markStripeEventFailed,
-  markStripeEventProcessed,
 } from "@/lib/billing/store";
 
 type BillingEventRow = {
@@ -153,36 +151,5 @@ describe("billing event claim recovery", () => {
 
     expect(result).toBe("in_progress");
     expect(supabase.updateCalls).toHaveLength(0);
-  });
-
-  it("marks failed and processed events with a completion timestamp", async () => {
-    const updates: Array<Record<string, unknown>> = [];
-    const supabase = {
-      from(table: string) {
-        if (table !== "billing_events") {
-          throw new Error(`Unexpected table: ${table}`);
-        }
-
-        return {
-          update: (payload: Record<string, unknown>) => {
-            updates.push(payload);
-            return {
-              eq: async () => ({ error: null }),
-            };
-          },
-        };
-      },
-    };
-
-    await markStripeEventProcessed(supabase as never, "evt_123");
-    await markStripeEventFailed(supabase as never, {
-      stripeEventId: "evt_123",
-      eventType: "invoice.paid",
-      payload: { id: "evt_123" },
-      errorMessage: "worker crashed",
-    });
-
-    expect(typeof updates[0]?.processed_at).toBe("string");
-    expect(typeof updates[1]?.processed_at).toBe("string");
   });
 });

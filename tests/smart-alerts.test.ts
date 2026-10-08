@@ -14,6 +14,7 @@ function makeSupabase(seed: Record<string, Row[]>) {
       in: [] as Array<[string, unknown[]]>,
       gte: [] as Array<[string, unknown]>,
       limit: null as number | null,
+      offset: 0,
     };
 
     const api = {
@@ -36,6 +37,11 @@ function makeSupabase(seed: Record<string, Row[]>) {
         state.limit = value;
         return api;
       },
+      range: (from: number, to: number) => {
+        state.offset = from;
+        state.limit = to - from + 1;
+        return api;
+      },
       maybeSingle: async () => {
         const rows = applyFilters(db[table] ?? [], state);
         return { data: rows[0] ?? null, error: null };
@@ -50,7 +56,7 @@ function makeSupabase(seed: Record<string, Row[]>) {
         resolve: (value: { data: Row[]; error: null }) => void,
       ) => {
         let rows = applyFilters(db[table] ?? [], state);
-        if (state.limit != null) rows = rows.slice(0, state.limit);
+        if (state.limit != null) rows = rows.slice(state.offset, state.offset + state.limit);
         resolve({ data: rows, error: null });
       },
     };

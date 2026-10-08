@@ -20,7 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 const inputClass =
-  "w-full rounded-xl border border-white/10 bg-[#0d1520] px-3 py-2 text-sm text-white outline-none placeholder:text-slate-600 focus:border-brand focus:ring-1 focus:ring-brand";
+  "w-full rounded-xl border border-white/10 bg-surface-input px-3 py-2 text-sm text-white outline-none placeholder:text-slate-600 focus:border-brand focus:ring-1 focus:ring-brand";
 
 const textAreaClass = cn(inputClass, "min-h-24 resize-y leading-6");
 
@@ -70,6 +70,7 @@ export function InvestmentThesisPanel({
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [unavailable, setUnavailable] = useState(false);
   const [isPending, startTransition] = useTransition();
   const thesisId = useId();
   const risksId = useId();
@@ -82,12 +83,14 @@ export function InvestmentThesisPanel({
     setLoading(true);
     setMessage(null);
     setError(null);
+    setUnavailable(false);
 
     getInvestmentThesisState({ symbol, portfolioId, scope }).then((result) => {
       if (cancelled) return;
       setLoading(false);
       if (!result.ok) {
         setError(result.error);
+        setUnavailable(Boolean(result.unavailable));
         return;
       }
 
@@ -128,6 +131,7 @@ export function InvestmentThesisPanel({
 
       if (!result.ok) {
         setError(result.error);
+        setUnavailable(Boolean(result.unavailable));
         return;
       }
 
@@ -283,11 +287,15 @@ export function InvestmentThesisPanel({
             </label>
           </div>
 
-          {error ? <p className="text-sm font-medium text-amber-400">{error}</p> : null}
+          {error ? (
+            <p role="alert" className="text-sm font-medium text-amber-400">
+              {error}
+            </p>
+          ) : null}
           {message ? <p className="text-sm font-medium text-brand">{message}</p> : null}
 
           <div className="flex flex-wrap gap-2">
-            <Button type="button" onClick={handleSave} disabled={isPending}>
+            <Button type="button" onClick={handleSave} disabled={isPending || unavailable}>
               <Save className="mr-2 h-4 w-4" />
               {isPending ? "Saving..." : "Save thesis"}
             </Button>
@@ -295,7 +303,7 @@ export function InvestmentThesisPanel({
               <button
                 type="button"
                 onClick={handleDelete}
-                disabled={isPending}
+                disabled={isPending || unavailable}
                 className={buttonStyles({
                   variant: "ghost",
                   className: "text-slate-400 hover:text-rose-300",

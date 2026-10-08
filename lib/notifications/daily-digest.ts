@@ -2,6 +2,7 @@ import "server-only";
 
 import { getAppBaseUrl } from "@/lib/billing/stripe";
 import { createLogger } from "@/lib/logger";
+import { fetchAllRows } from "@/lib/supabase/paginate";
 import { createServiceClient } from "@/lib/supabase/service";
 import { sanitizeExternalUrl } from "@/lib/security/external-url";
 import { resolveDirectStockMatch } from "@/lib/services/news/direct-match";
@@ -9,6 +10,8 @@ import type { MatchSource, NewsCategory, StockEffect, TickerImpact } from "@/lib
 import { sendDigestEmail, sendDigestSms } from "@/lib/notifications/delivery";
 import {
   DAILY_DIGEST_TIME_ZONE,
+  mapDigestRow,
+  type DailyDigestRow,
   type DailyDigestBuildResult,
   type DailyDigestCronRunResult,
   type DailyDigestDeliveryResult,
@@ -26,6 +29,7 @@ import {
 const log = createLogger("daily-digest");
 const MAX_DIGEST_STORIES = 10;
 const STALE_PENDING_DELIVERY_MS = 10 * 60 * 1000;
+const MAX_DELIVERY_ATTEMPTS = 3;
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
@@ -90,23 +94,6 @@ type WatchlistNewsRow = {
   global_summary: string | null;
 };
 
-type DigestRow = {
-  id: string;
-  user_id: string;
-  digest_date: string;
-  time_zone: string;
-  window_start: string;
-  window_end: string;
-  source_mode: DigestSourceMode;
-  portfolio_id: string | null;
-  portfolio_name: string | null;
-  summary_line: string;
-  bullish_symbols: string[] | null;
-  bearish_symbols: string[] | null;
-  top_stories: unknown;
-  created_at: string;
-};
-
 type DeliveryRow = {
   id: string;
   digest_id: string;
@@ -125,7 +112,7 @@ type DigestRecipient = {
 };
 
 type DeliveryAttemptDecision =
-  | { action: "send" }
+  | { action: "send"; claimToken: string }
   | { action: "skip"; resultStatus: "skipped" | "uncertain" };
 
 function shouldRunDailyDigestCronAt(now: Date): boolean {
@@ -295,43 +282,51 @@ function mapWatchlistStory(
   };
 }
 
-function mapDigestRow(row: DigestRow): DailyDigestSnapshot {
-  return {
-    id: row.id,
-    userId: row.user_id,
-    digestDate: row.digest_date,
-    timeZone: row.time_zone,
-    windowStart: row.window_start,
-    windowEnd: row.window_end,
-    sourceMode: row.source_mode,
-    portfolioId: row.portfolio_id,
-    portfolioName: row.portfolio_name,
-    summaryLine: row.summary_line,
-    bullishSymbols: row.bullish_symbols ?? [],
-    bearishSymbols: row.bearish_symbols ?? [],
-    topStories: Array.isArray(row.top_stories)
-      ? (row.top_stories as DigestSnapshotStory[])
-      : [],
-    createdAt: row.created_at,
-  };
-}
-
 async function loadDigestRecipients(supabase: ServiceClient): Promise<DigestRecipient[]> {
-  const { data, error } = await supabase
-    .from("user_notification_preferences")
-    .select("user_id, email_digest_enabled, sms_digest_enabled, phone_number");
+  // Audit H1: filter in the database and read every page, so opted-in users beyond the
+  // response row cap are not silently skipped.
+  const { data, error } = await fetchAllRows<PreferenceRow>((from, to) =>
+    supabase
+      .from("user_notification_preferences")
+      .select("user_id, email_digest_enabled, sms_digest_enabled, phone_number")
+      .or("email_digest_enabled.eq.true,sms_digest_enabled.eq.true")
+      .order("user_id", { ascending: true })
+      .range(from, to),
+  );
 
   if (error) {
     throw new Error(error.message);
   }
 
-  return ((data ?? []) as PreferenceRow[])
-    .map((row) => ({
-      userId: row.user_id,
-      emailDigestEnabled: Boolean(row.email_digest_enabled),
-      smsDigestEnabled: Boolean(row.sms_digest_enabled),
-      phoneNumber: row.phone_number?.trim() ?? "",
-    }))
+  // Audit H2: SMS goes only to a number the user proved they control. The preferences row is
+  // owner-writable, so the proof is the server-written verified_phone_numbers row, and it must
+  // match the saved number exactly (changing the number requires verifying again).
+  const verifiedPhones = new Map<string, string>();
+  if (data.some((row) => row.sms_digest_enabled)) {
+    const verified = await fetchAllRows<{ user_id: string; phone_number: string }>((from, to) =>
+      supabase
+        .from("verified_phone_numbers")
+        .select("user_id, phone_number")
+        .order("user_id", { ascending: true })
+        .range(from, to),
+    );
+    if (verified.error) {
+      throw new Error(verified.error.message);
+    }
+    for (const row of verified.data) verifiedPhones.set(row.user_id, row.phone_number);
+  }
+
+  return data
+    .map((row) => {
+      const phoneNumber = row.phone_number?.trim() ?? "";
+      return {
+        userId: row.user_id,
+        emailDigestEnabled: Boolean(row.email_digest_enabled),
+        smsDigestEnabled:
+          Boolean(row.sms_digest_enabled) && phoneNumber !== "" && verifiedPhones.get(row.user_id) === phoneNumber,
+        phoneNumber,
+      };
+    })
     .filter((row) => row.emailDigestEnabled || row.smsDigestEnabled);
 }
 
@@ -351,7 +346,7 @@ async function loadExistingDigest(
     throw new Error(error.message);
   }
 
-  return data ? mapDigestRow(data as DigestRow) : null;
+  return data ? mapDigestRow(data as DailyDigestRow) : null;
 }
 
 async function loadUserPortfolios(
@@ -508,7 +503,7 @@ async function insertDigestSnapshot(
     throw new Error(error.message);
   }
 
-  return mapDigestRow(data as DigestRow);
+  return mapDigestRow(data as DailyDigestRow);
 }
 
 export async function buildDailyDigestSnapshotForUser(input: {
@@ -613,80 +608,61 @@ async function loadDelivery(
   return (data as DeliveryRow | null) ?? null;
 }
 
-function isStalePending(row: DeliveryRow): boolean {
-  if (row.status !== "pending") return false;
-  return Date.now() - new Date(row.updated_at).getTime() > STALE_PENDING_DELIVERY_MS;
-}
-
-async function markDeliveryStatus(
-  supabase: ServiceClient,
-  digestId: string,
-  channel: DeliveryChannel,
-  status: DeliveryStatus,
-  providerMessageId: string | null,
-  errorText: string | null,
-): Promise<void> {
-  const { error } = await supabase
-    .from("notification_deliveries")
-    .upsert(
-      {
-        digest_id: digestId,
-        channel,
-        status,
-        provider_message_id: providerMessageId,
-        error_text: errorText,
-        sent_at: status === "sent" ? new Date().toISOString() : null,
-      },
-      { onConflict: "digest_id,channel" },
-    );
-
-  if (error) {
-    throw new Error(error.message);
-  }
-}
-
-async function beginDeliveryAttempt(
+/**
+ * Atomically decides whether this worker may contact the provider (audit J5). Exactly one
+ * concurrent caller receives a claim token; confirmed failures are retried up to the attempt cap,
+ * uncertain sends are never replayed, and a stale SMS claim becomes uncertain.
+ */
+async function claimDelivery(
   supabase: ServiceClient,
   digestId: string,
   channel: DeliveryChannel,
 ): Promise<DeliveryAttemptDecision> {
-  const existing = await loadDelivery(supabase, digestId, channel);
-  if (!existing) {
-    await markDeliveryStatus(supabase, digestId, channel, "pending", null, null);
-    return { action: "send" };
+  const { data, error } = await supabase.rpc("claim_notification_delivery", {
+    p_digest_id: digestId,
+    p_channel: channel,
+    p_max_attempts: MAX_DELIVERY_ATTEMPTS,
+    p_stale_after: `${Math.round(STALE_PENDING_DELIVERY_MS / 1000)} seconds`,
+  });
+  if (error) {
+    throw new Error(error.message);
   }
 
-  if (channel === "sms") {
-    if (existing.status === "pending" && isStalePending(existing)) {
-      await markDeliveryStatus(
-        supabase,
-        digestId,
-        channel,
-        "uncertain",
-        existing.provider_message_id,
-        existing.error_text ??
-          "SMS delivery state became stale before confirmation; automatic resend was blocked to avoid duplicates.",
-      );
-      return { action: "skip", resultStatus: "uncertain" };
-    }
-
-    return { action: "skip", resultStatus: "skipped" };
+  const row = (Array.isArray(data) ? data[0] : data) as
+    | { action: string; claim_token: string | null; status: string }
+    | null;
+  if (row?.action === "send" && row.claim_token) {
+    return { action: "send", claimToken: row.claim_token };
   }
+  return { action: "skip", resultStatus: row?.status === "uncertain" ? "uncertain" : "skipped" };
+}
 
-  if (
-    existing.status === "sent" ||
-    existing.status === "skipped" ||
-    existing.status === "uncertain"
-  ) {
-    return { action: "skip", resultStatus: "skipped" };
+/** Records the outcome only if this worker still holds the claim. */
+async function completeDelivery(
+  supabase: ServiceClient,
+  digestId: string,
+  channel: DeliveryChannel,
+  claimToken: string,
+  result: { status: DeliveryStatus; providerMessageId: string | null; errorText: string | null },
+): Promise<void> {
+  const { data, error } = await supabase.rpc("complete_notification_delivery", {
+    p_digest_id: digestId,
+    p_channel: channel,
+    p_claim_token: claimToken,
+    p_status: result.status,
+    p_provider_message_id: result.providerMessageId,
+    p_error_text: result.errorText,
+  });
+  if (error) {
+    throw new Error(error.message);
   }
-
-  if (existing.status === "pending" && !isStalePending(existing)) {
-    return { action: "skip", resultStatus: "skipped" };
+  if (data !== true) {
+    log.warn("Delivery outcome not recorded: claim was taken over by another worker", {
+      digestId,
+      channel,
+      status: result.status,
+    });
   }
-
-  await markDeliveryStatus(supabase, digestId, channel, "pending", null, null);
-  return { action: "send" };
 }
 
 async function deliverChannel(input: {
@@ -697,11 +673,7 @@ async function deliverChannel(input: {
   phoneNumber?: string | null;
   baseUrl: string;
 }): Promise<DailyDigestDeliveryResult> {
-  const decision = await beginDeliveryAttempt(
-    input.supabase,
-    input.digest.id,
-    input.channel,
-  );
+  const decision = await claimDelivery(input.supabase, input.digest.id, input.channel);
   if (decision.action === "skip") {
     const existing = await loadDelivery(input.supabase, input.digest.id, input.channel);
     return {
@@ -713,8 +685,9 @@ async function deliverChannel(input: {
     };
   }
 
+  let result: DailyDigestDeliveryResult;
   try {
-    const result =
+    result =
       input.channel === "email"
         ? await sendDigestEmail({
             digest: input.digest,
@@ -726,27 +699,10 @@ async function deliverChannel(input: {
             phoneNumber: input.phoneNumber,
             baseUrl: input.baseUrl,
           });
-
-    await markDeliveryStatus(
-      input.supabase,
-      input.digest.id,
-      input.channel,
-      result.status,
-      result.providerMessageId,
-      result.errorText,
-    );
-    return result;
   } catch (error) {
+    // Thrown before the provider accepted anything (e.g. missing configuration): confirmed failure.
     const message = error instanceof Error ? error.message : String(error);
-    await markDeliveryStatus(
-      input.supabase,
-      input.digest.id,
-      input.channel,
-      "failed",
-      null,
-      message,
-    );
-    return {
+    result = {
       channel: input.channel,
       status: "failed",
       digestId: input.digest.id,
@@ -754,6 +710,9 @@ async function deliverChannel(input: {
       errorText: message,
     };
   }
+
+  await completeDelivery(input.supabase, input.digest.id, input.channel, decision.claimToken, result);
+  return result;
 }
 
 export async function runDailyDigestCron(input?: {

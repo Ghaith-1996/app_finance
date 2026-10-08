@@ -2,7 +2,6 @@ import Link from "next/link";
 
 import {
   ArrowRight,
-  CheckCircle2,
   Newspaper,
   NotebookPen,
   ShieldCheck,
@@ -19,6 +18,7 @@ import { buttonStyles } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { getTranslations } from "@/lib/i18n/server";
+import { LEGAL_CONTACT_EMAIL } from "@/lib/legal/constants";
 import {
   faqs,
   painPoints,
@@ -79,6 +79,22 @@ export default async function Home() {
             <Link href="/portfolio" className="transition hover:text-primary">
               {t("landing.footerPortfolio")}
             </Link>
+            {/* Audit D11: cost, sign-in, legal and support are reachable without signing in. */}
+            <Link href="/pricing" className="transition hover:text-primary">
+              {t("landing.footerPricing")}
+            </Link>
+            <Link href="/login" className="transition hover:text-primary">
+              {t("landing.footerSignIn")}
+            </Link>
+            <Link href="/terms" className="transition hover:text-primary">
+              {t("landing.footerTerms")}
+            </Link>
+            <Link href="/privacy" className="transition hover:text-primary">
+              {t("landing.footerPrivacy")}
+            </Link>
+            <a href={`mailto:${LEGAL_CONTACT_EMAIL}`} className="transition hover:text-primary">
+              {t("landing.footerContact")}
+            </a>
           </div>
         </div>
       </footer>
@@ -93,7 +109,7 @@ function ProblemSection() {
         <SectionHeading
           eyebrow="Why this product exists"
           title="Financial products feel smarter when they remember what the user owns"
-          description="This first pass keeps the finance workflow approachable: one place to connect a portfolio, understand what changed, and open a feed that already knows what matters."
+          description="Pulsefolio keeps the finance workflow approachable: one place to add a portfolio, understand what changed, and open a feed that already knows what matters."
         />
         <div className="grid gap-4 lg:grid-cols-3">
           {painPoints.map((painPoint) => (
@@ -168,7 +184,7 @@ function PlatformSection() {
             })}
           </div>
           <div className="grid gap-4">
-            <Panel className="space-y-6 bg-[#0d1520] p-7">
+            <Panel className="theme-inverse space-y-6 bg-[#0d1520] p-7">
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <Badge tone="brand">
@@ -200,12 +216,13 @@ function PlatformSection() {
                 <div className="flex items-center gap-3 text-brand">
                   <ShieldCheck className="h-5 w-5" />
                   <p className="text-sm font-semibold uppercase tracking-[0.2em]">
-                    Trust story
+                    Read-only
                   </p>
                 </div>
                 <p className="mt-4 text-sm leading-7 text-slate-300">
-                  Pulsefolio frames broker connections as read-only and
-                  sets up a clean path for secure syncing later.
+                  Pulsefolio never places trades or moves money. Holdings come
+                  from your CSV import or manual entry; live broker syncing is
+                  not available yet.
                 </p>
               </div>
             </Panel>
@@ -239,28 +256,24 @@ function ProofSection() {
     <section className="px-6 py-20 lg:px-8">
       <div className="mx-auto max-w-7xl space-y-12">
         <SectionHeading
-          eyebrow="What makes it feel current"
-          title="A warmer, more personal finance language"
-          description="Direct but reassuring, product-led, and centered on helping people feel more in control of their money."
+          eyebrow="Who it's for"
+          title="Built for self-directed investors"
+          description="Illustrative scenarios of the questions Pulsefolio is designed to answer. They are examples, not customer reviews."
           align="center"
         />
         <div className="grid gap-4 lg:grid-cols-2">
           {testimonials.map((testimonial) => (
             <Panel
-              key={testimonial.name}
+              key={testimonial.role}
               className="space-y-5 p-6"
             >
               <Badge tone="neutral">
-                Product sentiment
+                Illustrative scenario
               </Badge>
               <p className="text-xl leading-8 text-white">
                 &ldquo;{testimonial.quote}&rdquo;
               </p>
-              <div className="flex items-center gap-3 text-sm text-slate-500">
-                <CheckCircle2 className="h-4 w-4 text-brand" />
-                <span>{testimonial.name}</span>
-                <span>{testimonial.role}</span>
-              </div>
+              <p className="text-sm text-slate-500">{testimonial.role}</p>
             </Panel>
           ))}
         </div>
@@ -290,7 +303,7 @@ function FaqSection() {
         <SectionHeading
           eyebrow="FAQ"
           title="Questions Pulsefolio helps answer"
-          description="The experience is shaped around broker sync, AI analysis, and a personalized feed — so the answers start from what you own."
+          description="The experience is shaped around your imported holdings, AI analysis, and a personalized feed — so the answers start from what you own."
         />
         <div className="grid gap-4 lg:grid-cols-2">
           {faqs.map((faq) => (
@@ -314,17 +327,17 @@ function FinalCallToAction() {
       <div className="mx-auto max-w-7xl">
         <Panel
           glow
-          className="flex flex-col gap-8 bg-[#0d1520] p-8 lg:flex-row lg:items-center lg:justify-between lg:p-10"
+          className="theme-inverse flex flex-col gap-8 bg-[#0d1520] p-8 lg:flex-row lg:items-center lg:justify-between lg:p-10"
         >
           <div className="max-w-2xl space-y-4">
             <Badge tone="brand">
-              Next phase ready
+              Get started
             </Badge>
             <h2 className="text-4xl font-semibold tracking-tight text-white">
               Your intelligent portfolio home starts here.
             </h2>
             <p className="text-lg leading-8 text-slate-400">
-              Connect a portfolio, run the AI analysis, and open a daily brief
+              Add a portfolio, run the AI analysis, and open a daily brief
               that already knows what matters — all in one place.
             </p>
           </div>

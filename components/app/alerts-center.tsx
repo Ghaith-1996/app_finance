@@ -12,6 +12,7 @@ import {
   ShieldAlert,
 } from "lucide-react";
 
+import { formatRelativeTime } from "@/lib/time/format";
 import { markAlertRead, markAllAlertsRead } from "@/lib/actions/alerts";
 import type { AlertCenterItem, AlertCenterSummary } from "@/lib/server/alerts";
 import { Badge } from "@/components/ui/badge";
@@ -78,13 +79,7 @@ function severityTone(severity: string): "brand" | "warning" | "danger" | "neutr
 }
 
 function formatAlertTime(iso: string): string {
-  const time = new Date(iso).getTime();
-  if (Number.isNaN(time)) return "Unknown time";
-  const minutes = Math.max(0, Math.floor((Date.now() - time) / 60_000));
-  if (minutes < 1) return "Just now";
-  if (minutes < 60) return `${minutes}m ago`;
-  if (minutes < 1440) return `${Math.floor(minutes / 60)}h ago`;
-  return `${Math.floor(minutes / 1440)}d ago`;
+  return formatRelativeTime(iso, new Date(), "Unknown time");
 }
 
 export function AlertsCenter({

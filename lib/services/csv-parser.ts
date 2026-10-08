@@ -111,7 +111,9 @@ export function detectColumnMapping(headers: string[]): ColumnMapping {
   }
 
   const unmapped = headers.filter((_, i) => !matched.has(i));
-  const isTransactionFile = mapping.side != null || mapping.date != null;
+  // Audit B6: only a buy/sell side column makes a file transaction history. A date column alone is
+  // common in dated position snapshots and must not reroute them into the transaction parser.
+  const isTransactionFile = mapping.side != null;
   const hasSymbol = mapping.symbol != null;
   const hasQuantity = mapping.quantity != null;
   const needsManualMapping = !hasSymbol || (!hasQuantity && !isTransactionFile);
@@ -125,21 +127,62 @@ function parseNumber(val: string): number {
   return isNaN(num) ? 0 : num;
 }
 
-export function normalizeRows(
+export type SkippedCsvRow = { rowNumber: number; reason: string };
+
+export type NormalizedCsvResult = {
+  drafts: HoldingDraft[];
+  skippedRows: SkippedCsvRow[];
+  /** Set when non-empty input produced no holdings, so the caller never reports an empty import as success. */
+  error: string | null;
+};
+
+function isBlankRow(row: string[]): boolean {
+  return row.every((cell) => !cell?.trim());
+}
+
+function summarizeSkips(skippedRows: SkippedCsvRow[]): string {
+  const counts = new Map<string, number>();
+  for (const skip of skippedRows) counts.set(skip.reason, (counts.get(skip.reason) ?? 0) + 1);
+  return [...counts.entries()].map(([reason, count]) => `${count} ${reason}`).join("; ");
+}
+
+/** Normalizes rows and reports every skipped row with a reason (audit B6). */
+export function normalizeRowsWithReport(
   rows: string[][],
   mapping: Partial<Record<FieldKey, number>>,
   isTransactionFile: boolean,
-): HoldingDraft[] {
-  if (isTransactionFile) {
-    return aggregateTransactions(rows, mapping);
+): NormalizedCsvResult {
+  const skippedRows: SkippedCsvRow[] = [];
+  const dataRows = rows
+    .map((row, index) => ({ row, rowNumber: index + 2 }))
+    .filter(({ row }) => !isBlankRow(row));
+
+  const drafts = isTransactionFile
+    ? aggregateTransactions(dataRows, mapping, skippedRows)
+    : normalizePositionRows(dataRows, mapping, skippedRows);
+
+  let error: string | null = null;
+  if (dataRows.length > 0 && drafts.length === 0) {
+    error = isTransactionFile
+      ? `No holdings could be built from ${dataRows.length} transaction row(s): ${summarizeSkips(skippedRows) || "every position was fully sold"}. If this file lists current positions rather than trades, map it as a positions file.`
+      : `No holdings could be read from ${dataRows.length} row(s): ${summarizeSkips(skippedRows)}. Check the column mapping.`;
   }
 
-  return rows
-    .filter((row) => {
+  return { drafts, skippedRows, error };
+}
+
+function normalizePositionRows(
+  dataRows: Array<{ row: string[]; rowNumber: number }>,
+  mapping: Partial<Record<FieldKey, number>>,
+  skippedRows: SkippedCsvRow[],
+): HoldingDraft[] {
+  return dataRows
+    .filter(({ row, rowNumber }) => {
       const sym = mapping.symbol != null ? row[mapping.symbol]?.trim() : "";
-      return sym && sym.length > 0;
+      if (!sym) skippedRows.push({ rowNumber, reason: "row(s) without a symbol" });
+      return Boolean(sym);
     })
-    .map((row, i) => {
+    .map(({ row }, i) => {
       const symbol = (mapping.symbol != null ? row[mapping.symbol] : "").trim().toUpperCase();
       const company = (mapping.company != null ? row[mapping.company] : "").trim();
       const quantity = mapping.quantity != null ? parseNumber(row[mapping.quantity] ?? "0") : 0;
@@ -186,14 +229,18 @@ interface Transaction {
 }
 
 function aggregateTransactions(
-  rows: string[][],
+  dataRows: Array<{ row: string[]; rowNumber: number }>,
   mapping: Partial<Record<FieldKey, number>>,
+  skippedRows: SkippedCsvRow[],
 ): HoldingDraft[] {
   const transactions: Transaction[] = [];
 
-  for (const row of rows) {
+  for (const { row, rowNumber } of dataRows) {
     const symbol = (mapping.symbol != null ? row[mapping.symbol] : "").trim().toUpperCase();
-    if (!symbol) continue;
+    if (!symbol) {
+      skippedRows.push({ rowNumber, reason: "row(s) without a symbol" });
+      continue;
+    }
 
     const company = (mapping.company != null ? row[mapping.company] : "").trim();
     const quantity = mapping.quantity != null ? parseNumber(row[mapping.quantity] ?? "0") : 0;
@@ -208,6 +255,7 @@ function aggregateTransactions(
     else if (sideRaw.includes("sell") || sideRaw.includes("sale")) side = "sell";
 
     if (side === "unknown") {
+      skippedRows.push({ rowNumber, reason: "row(s) without a recognizable buy/sell side" });
       continue;
     }
 

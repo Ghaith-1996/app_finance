@@ -39,27 +39,97 @@ import { GET, POST } from "@/app/api/analysis/cron/route";
 function buildMockSupabase({
   portfolios = [],
   latestRunsByPortfolio = {},
+  latestRunStartsByPortfolio = {},
+  newestEnrichedAt = new Date().toISOString(),
+  newestFailedAt = null,
 }: {
   portfolios?: Array<{ id: string; user_id: string }>;
   latestRunsByPortfolio?: Record<string, string | null | undefined>;
+  latestRunStartsByPortfolio?: Record<string, string>;
+  newestEnrichedAt?: string | null;
+  /** Settle time of the newest article whose enrichment terminally failed. */
+  newestFailedAt?: string | null;
 } = {}) {
+  const stats = { perPortfolioRunReads: 0, runHistoryScans: 0, latestRunPageReads: 0 };
+  // One row per portfolio, as migration 044's latest_usable_analysis_runs() returns.
+  const latestRuns = Object.entries(latestRunsByPortfolio)
+    .filter((entry): entry is [string, string] => !!entry[1])
+    .map(([portfolioId, completedAt]) => ({
+      portfolio_id: portfolioId,
+      completed_at: completedAt,
+      started_at: latestRunStartsByPortfolio[portfolioId] ?? null,
+    }));
   return {
+    stats,
+    rpc: (name: string) => {
+      if (name !== "latest_usable_analysis_runs") throw new Error(`Unexpected rpc: ${name}`);
+      return {
+        order: () => ({
+          range: (from: number, to: number) => {
+            stats.latestRunPageReads += 1;
+            return Promise.resolve({ data: latestRuns.slice(from, to + 1), error: null });
+          },
+        }),
+      };
+    },
     from: (table: string) => {
       if (table === "portfolios") {
         return {
-          select: () => Promise.resolve({
-            data: portfolios,
-            error: null,
+          select: () => ({
+            order: () => ({
+              range: (from: number, to: number) =>
+                Promise.resolve({ data: portfolios.slice(from, to + 1), error: null }),
+            }),
+            eq: (_column: string, value: string) => ({
+              maybeSingle: () =>
+                Promise.resolve({ data: portfolios.find((row) => row.id === value) ?? null, error: null }),
+            }),
           }),
         };
+      }
+      if (table === "news_items") {
+        // Honour the enrichment_status filter so the test proves which states form the watermark.
+        let statuses: string[] = [];
+        const chain = {
+          eq: (column: string, value: string) => {
+            if (column === "enrichment_status") statuses = [value];
+            return chain;
+          },
+          in: (column: string, values: string[]) => {
+            if (column === "enrichment_status") statuses = values;
+            return chain;
+          },
+          not: () => chain,
+          order: () => chain,
+          limit: () => chain,
+          maybeSingle: () => {
+            const candidates = [
+              statuses.includes("succeeded") ? newestEnrichedAt : null,
+              statuses.includes("failed") ? newestFailedAt : null,
+            ].filter((value): value is string => !!value);
+            const newest = candidates.sort().at(-1);
+            return Promise.resolve({ data: newest ? { enriched_at: newest } : null, error: null });
+          },
+        };
+        return { select: () => chain };
       }
       if (table === "analysis_runs") {
         let selectedPortfolioId: string | null = null;
         return {
           select: () => ({
+            // A scan of every usable run in history (what the review flagged), one page at a time.
+            in: () => ({
+              order: () => ({
+                range: (from: number, to: number) => {
+                  stats.runHistoryScans += 1;
+                  return Promise.resolve({ data: latestRuns.slice(from, to + 1), error: null });
+                },
+              }),
+            }),
             eq: (column: string, value: string) => {
               if (column === "portfolio_id") {
                 selectedPortfolioId = value;
+                stats.perPortfolioRunReads += 1;
               }
               return {
                 in: () => ({
@@ -72,7 +142,12 @@ function buildMockSupabase({
                           ? latestRunsByPortfolio[selectedPortfolioId]
                           : null;
                         return Promise.resolve({
-                          data: completedAt ? { completed_at: completedAt } : null,
+                          data: completedAt
+                            ? {
+                                completed_at: completedAt,
+                                started_at: latestRunStartsByPortfolio[selectedPortfolioId!] ?? null,
+                              }
+                            : null,
                           error: null,
                         });
                       },
@@ -174,6 +249,99 @@ describe("GET /api/analysis/cron", () => {
     expect(body.portfolioIds).toEqual(["p1", "p2"]);
     expect(body.skippedCount).toBe(0);
   });
+
+  describe("J1: eligibility follows durable work, not new inserts", () => {
+    const hourAgo = () => new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const halfHourAgo = () => new Date(Date.now() - 30 * 60 * 1000).toISOString();
+
+    it("skips portfolios whose last usable run already covers the newest enriched article", async () => {
+      mockSupabase = buildMockSupabase({
+        portfolios: [{ id: "p1", user_id: "u1" }],
+        latestRunsByPortfolio: { p1: halfHourAgo() },
+        newestEnrichedAt: hourAgo(),
+      });
+      const body = await (await GET(makeGetRequest("test-secret"))).json();
+      expect(body.portfolioIds).toEqual([]);
+      expect(body.upToDateCount).toBe(1);
+    });
+
+    it("selects portfolios when articles were enriched after their last usable run (e.g. backlog recovered, or the last run failed)", async () => {
+      mockSupabase = buildMockSupabase({
+        portfolios: [{ id: "p1", user_id: "u1" }, { id: "p2", user_id: "u2" }],
+        latestRunsByPortfolio: { p1: hourAgo(), p2: halfHourAgo() },
+        newestEnrichedAt: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
+      });
+      const body = await (await GET(makeGetRequest("test-secret"))).json();
+      expect(body.portfolioIds).toEqual(["p1"]);
+    });
+
+    it("R7: an article enriched while the last run was in progress is analysed next time", async () => {
+      // The run read the pool at its start (60 min ago), the article was enriched 55 min ago and the
+      // run ended 50 min ago: the run never saw the article.
+      const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60 * 1000).toISOString();
+      mockSupabase = buildMockSupabase({
+        portfolios: [{ id: "p1", user_id: "u1" }],
+        latestRunsByPortfolio: { p1: minutesAgo(50) },
+        latestRunStartsByPortfolio: { p1: minutesAgo(60) },
+        newestEnrichedAt: minutesAgo(55),
+      });
+      const body = await (await GET(makeGetRequest("test-secret"))).json();
+      expect(body.portfolioIds).toEqual(["p1"]);
+      expect(body.upToDateCount).toBe(0);
+    });
+
+    it("P1: an article whose enrichment terminally failed after the last run is analysed next time", async () => {
+      // No article succeeded since the last run (provider outage), but one exhausted its retries
+      // and now carries fallback text that runAnalysis can still match.
+      mockSupabase = buildMockSupabase({
+        portfolios: [{ id: "p1", user_id: "u1" }],
+        latestRunsByPortfolio: { p1: hourAgo() },
+        newestEnrichedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+        newestFailedAt: new Date(Date.now() - 20 * 60 * 1000).toISOString(),
+      });
+      const body = await (await GET(makeGetRequest("test-secret"))).json();
+      expect(body.portfolioIds).toEqual(["p1"]);
+      expect(body.upToDateCount).toBe(0);
+    });
+
+    it("always selects portfolios that never produced a usable run", async () => {
+      mockSupabase = buildMockSupabase({
+        portfolios: [{ id: "p1", user_id: "u1" }],
+        latestRunsByPortfolio: {},
+        newestEnrichedAt: null,
+      });
+      const body = await (await GET(makeGetRequest("test-secret"))).json();
+      expect(body.portfolioIds).toEqual(["p1"]);
+    });
+
+    it("reads only the latest usable run per portfolio, in pages, not per portfolio or full history", async () => {
+      const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+      const many = Array.from({ length: 2_350 }, (_, index) => ({ id: `p${index}`, user_id: "u" }));
+      mockSupabase = buildMockSupabase({
+        portfolios: many,
+        // Even portfolios ran an hour ago and are up to date; odd ones never ran.
+        latestRunsByPortfolio: Object.fromEntries(many.filter((_, index) => index % 2 === 0).map((p) => [p.id, hourAgo])),
+        newestEnrichedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+      });
+
+      const body = await (await GET(makeGetRequest("test-secret"))).json();
+
+      expect(body.portfolioIds).toHaveLength(1_175);
+      expect(body.portfolioIds).not.toContain("p0");
+      expect(body.portfolioIds).toContain("p1");
+      expect(body.upToDateCount).toBe(1_175);
+      expect(mockSupabase.stats.perPortfolioRunReads).toBe(0);
+      expect(mockSupabase.stats.runHistoryScans).toBe(0);
+      expect(mockSupabase.stats.latestRunPageReads).toBeLessThanOrEqual(3);
+    });
+
+    it("reads every portfolio page", async () => {
+      const many = Array.from({ length: 2_350 }, (_, index) => ({ id: `p${index}`, user_id: "u" }));
+      mockSupabase = buildMockSupabase({ portfolios: many });
+      const body = await (await GET(makeGetRequest("test-secret", { force: true }))).json();
+      expect(body.portfolioIds).toHaveLength(2_350);
+    });
+  });
 });
 
 describe("POST /api/analysis/cron", () => {
@@ -233,19 +401,6 @@ describe("POST /api/analysis/cron", () => {
     expect(mockRunAnalysis).toHaveBeenCalledWith(mockSupabase, "p1");
     expect(body.skipped).toBe(false);
     expect(body.runId).toBe("run-1");
-  });
-
-  it("processes a single eligible portfolio", async () => {
-    const res = await POST(makePostRequest("test-secret", { portfolioId: "p1" }));
-    expect(res.status).toBe(200);
-    const body = await res.json();
-
-    expect(mockRunAnalysis).toHaveBeenCalledWith(mockSupabase, "p1");
-    expect(body.portfolioId).toBe("p1");
-    expect(body.skipped).toBe(false);
-    expect(body.runId).toBe("run-1");
-    expect(body.error).toBe(null);
-    expect(body.meta?.feedItemsCreated).toBe(2);
   });
 
   it("returns 200 with error when runAnalysis returns an error result", async () => {

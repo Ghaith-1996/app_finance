@@ -7,6 +7,9 @@
 
 # testing
 /coverage
+/e2e-results/
+/test-results/
+/playwright-report/
 
 # Python bytecode
 __pycache__/

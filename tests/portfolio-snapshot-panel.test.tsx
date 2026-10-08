@@ -62,7 +62,9 @@ describe("PortfolioSnapshotPanel", () => {
 
     expect(await screen.findByText("$21,500")).toBeTruthy();
     expect(screen.getByText("+1.50%")).toBeTruthy();
-    expect(screen.getByText("+4.20%")).toBeTruthy();
+    // monthlyChange is not computed by any loader yet, so the panel shows unknown instead of a number.
+    expect(screen.getByText("—")).toBeTruthy();
+    expect(screen.queryByText("+4.20%")).toBeNull();
     expect(screen.getByText("Just now")).toBeTruthy();
     expect(screen.getByText("9 high-signal stories")).toBeTruthy();
     expect(mocked.routerRefresh).not.toHaveBeenCalled();

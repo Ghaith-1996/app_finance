@@ -1,4 +1,69 @@
+import type { Holding } from "@/lib/types";
 import type { SupabaseClient } from "@supabase/supabase-js";
+
+import {
+  summarizeValuation,
+  VALUATION_HOLDING_COLUMNS,
+  valuationInputFromHoldingRow,
+  valuePortfolio,
+  type PortfolioValuationSummary,
+} from "@/lib/services/valuation";
+import { formatRelativeTime } from "@/lib/time/format";
+
+export type PortfolioHoldingRow = {
+  id: string;
+  symbol: string;
+  company: string;
+  sector: string;
+  market: string;
+  source: string;
+  price: number | string | null;
+  daily_change: number | string | null;
+  allocation: number | string | null;
+  thesis: string | null;
+  quantity: number | string | null;
+  average_cost: number | string | null;
+  cost_basis: number | string | null;
+  current_price: number | string | null;
+  current_value: number | string | null;
+  unrealized_gain_amount: number | string | null;
+  unrealized_gain_percent: number | string | null;
+  quote_currency: string | null;
+  quote_as_of: string | null;
+  import_source: string | null;
+  previous_close?: number | string | null;
+  fx_rate_to_usd?: number | string | null;
+};
+
+export function mapHoldingFromDb(row: PortfolioHoldingRow): Holding {
+  return {
+    id: row.id,
+    symbol: row.symbol,
+    company: row.company,
+    sector: row.sector,
+    market: row.market,
+    source: row.source,
+    price: Number(row.price ?? 0),
+    dailyChange: Number(row.daily_change ?? 0),
+    allocation: Number(row.allocation ?? 0),
+    thesis: row.thesis ?? "",
+    quantity: Number(row.quantity ?? 0),
+    averageCost: Number(row.average_cost ?? 0),
+    costBasis: Number(row.cost_basis ?? 0),
+    currentPrice: Number(row.current_price ?? 0),
+    currentValue: Number(row.current_value ?? 0),
+    unrealizedGainAmount: Number(row.unrealized_gain_amount ?? 0),
+    unrealizedGainPercent: Number(row.unrealized_gain_percent ?? 0),
+    quoteCurrency: row.quote_currency ?? "USD",
+    quoteAsOf: row.quote_as_of ?? null,
+    importSource: row.import_source ?? "manual",
+    previousClose: row.previous_close == null ? null : Number(row.previous_close),
+    fxRateToUsd: row.fx_rate_to_usd == null ? null : Number(row.fx_rate_to_usd),
+    latestEarningsReportUrl: null,
+    latestEarningsReportSource: null,
+    latestEarningsReportDate: null,
+  };
+}
 
 export interface PortfolioOverviewResult {
   totalValue: number;
@@ -8,6 +73,7 @@ export interface PortfolioOverviewResult {
   lastAnalyzedAt: string;
   coverage: string;
   primaryGoal: string;
+  valuation: PortfolioValuationSummary;
 }
 
 export async function computePortfolioOverview(
@@ -16,34 +82,10 @@ export async function computePortfolioOverview(
 ): Promise<PortfolioOverviewResult> {
   const { data: holdings } = await supabase
     .from("holdings")
-    .select("symbol, price, daily_change, allocation, quantity, current_price, average_cost")
+    .select(VALUATION_HOLDING_COLUMNS)
     .eq("portfolio_id", portfolioId);
 
-  const rows = holdings ?? [];
-
-  const enriched = rows.map((h) => {
-    const qty = Number(h.quantity ?? 0);
-    const price = Number(h.current_price ?? h.price ?? 0);
-    const dailyChange = Number(h.daily_change ?? 0);
-
-    return {
-      price,
-      dailyChange,
-      quantity: qty,
-      allocation: Number(h.allocation ?? 0),
-      value: qty > 0 ? qty * price : price * (Number(h.allocation ?? 0) / 100) * 1000,
-    };
-  });
-
-  const totalValue = enriched.reduce((sum, h) => sum + h.value, 0);
-
-  const weightedDayChange =
-    totalValue > 0
-      ? enriched.reduce(
-          (sum, h) => sum + h.dailyChange * (h.value / totalValue),
-          0
-        )
-      : 0;
+  const valuation = valuePortfolio((holdings ?? []).map(valuationInputFromHoldingRow));
 
   const { data: portfolioRow } = await supabase
     .from("portfolios")
@@ -73,20 +115,17 @@ export async function computePortfolioOverview(
     : "—";
 
   return {
-    totalValue: Math.round(totalValue),
-    dayChange: Math.round(weightedDayChange * 100) / 100,
+    totalValue: Math.round(valuation.totalValue),
+    dayChange: Math.round((valuation.dayChangePercent ?? 0) * 100) / 100,
     monthlyChange: 0,
     lastSyncedAt,
     lastAnalyzedAt,
     coverage: `${feedCount ?? 0} high-signal stories`,
     primaryGoal: "Compound around quality holdings and resilient names.",
+    valuation: summarizeValuation(valuation),
   };
 }
 
 function formatTimeAgo(iso: string): string {
-  const min = Math.floor((Date.now() - new Date(iso).getTime()) / 60_000);
-  if (min < 1) return "Just now";
-  if (min < 60) return `${min} minutes ago`;
-  if (min < 1440) return `${Math.floor(min / 60)} hours ago`;
-  return `${Math.floor(min / 1440)} days ago`;
+  return formatRelativeTime(iso);
 }

@@ -1,6 +1,8 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { runAnalysis } from "@/lib/services/analysis";
 import { createLogger } from "@/lib/logger";
+import { fetchAllRows } from "@/lib/supabase/paginate";
+import { fetchLatestUsableRuns } from "@/lib/services/latest-analysis-runs";
 
 const log = createLogger("cron-analysis");
 
@@ -37,11 +39,28 @@ async function authorizeCron(request: Request) {
 }
 
 async function getPortfolios(supabase: ReturnType<typeof createServiceClient>) {
-  const { data: portfolios } = await supabase
-    .from("portfolios")
-    .select("id, user_id");
+  const { data: portfolios, error } = await fetchAllRows<PortfolioRow>((from, to) =>
+    supabase.from("portfolios").select("id, user_id").order("id", { ascending: true }).range(from, to),
+  );
+  if (error) throw new Error(`Could not load portfolios: ${error.message}`);
+  return portfolios;
+}
 
-  return (portfolios ?? []) as PortfolioRow[];
+// Review P1: terminal failures count as work too. They carry fallback text that runAnalysis can
+// still match, and during a provider outage they may be the only articles that settle.
+const SETTLED_ENRICHMENT_STATUSES = ["succeeded", "failed"];
+
+async function getNewestEnrichedAt(supabase: ReturnType<typeof createServiceClient>) {
+  const { data, error } = await supabase
+    .from("news_items")
+    .select("enriched_at")
+    .in("enrichment_status", SETTLED_ENRICHMENT_STATUSES)
+    .not("enriched_at", "is", null)
+    .order("enriched_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(`Could not read enrichment freshness: ${error.message}`);
+  return (data?.enriched_at as string | null | undefined) ?? null;
 }
 
 async function getLatestCompletedRun(
@@ -50,14 +69,24 @@ async function getLatestCompletedRun(
 ) {
   const { data: latestRun } = await supabase
     .from("analysis_runs")
-    .select("completed_at")
+    .select("completed_at, started_at")
     .eq("portfolio_id", portfolioId)
     .in("status", ["complete", "degraded"])
     .order("completed_at", { ascending: false })
     .limit(1)
     .maybeSingle();
 
-  return latestRun as { completed_at?: string | null } | null;
+  return latestRun as { completed_at?: string | null; started_at?: string | null } | null;
+}
+
+/**
+ * Latest usable run per portfolio: one row each from migration 044's RPC, read in pages, instead of
+ * one sequential query per portfolio or a scan of the whole run history.
+ */
+async function getLatestCompletedRunsByPortfolio(supabase: ReturnType<typeof createServiceClient>) {
+  const { data: runs, error } = await fetchLatestUsableRuns(supabase);
+  if (error) throw new Error(`Could not load analysis runs: ${error.message}`);
+  return new Map(runs.map((run) => [run.portfolio_id, run]));
 }
 
 async function getEligiblePortfolioIds(
@@ -65,21 +94,39 @@ async function getEligiblePortfolioIds(
   opts?: { force?: boolean },
 ) {
   const portfolios = await getPortfolios(supabase);
+  const newestEnrichedAt = opts?.force ? null : await getNewestEnrichedAt(supabase);
+  const latestRuns = opts?.force ? null : await getLatestCompletedRunsByPortfolio(supabase);
   const portfolioIds: string[] = [];
   let skippedCount = 0;
+  let upToDateCount = 0;
 
+  // Audit J1: a portfolio needs analysis when it has never produced a usable run, or when
+  // articles were enriched after its last usable run — not merely when this run inserted rows.
+  // A failed run leaves the last usable run older than the news, so it is retried next time.
   for (const portfolio of portfolios) {
-    if (!opts?.force) {
-      const latestRun = await getLatestCompletedRun(supabase, portfolio.id);
-      if (isInCooldown(latestRun?.completed_at)) {
+    if (latestRuns) {
+      const latestRun = latestRuns.get(portfolio.id);
+      const completedAt = latestRun?.completed_at ?? null;
+      if (isInCooldown(completedAt)) {
         skippedCount++;
+        continue;
+      }
+      // Review R7: the run read the news pool after it started, so only articles enriched before
+      // its start are certainly covered. Comparing with its end would treat an article enriched
+      // mid-run (after the pool was read) as already analysed.
+      const coveredUntil = latestRun?.started_at ?? completedAt;
+      const hasNewWork =
+        !completedAt ||
+        (newestEnrichedAt !== null && Date.parse(newestEnrichedAt) > Date.parse(coveredUntil!));
+      if (!hasNewWork) {
+        upToDateCount++;
         continue;
       }
     }
     portfolioIds.push(portfolio.id);
   }
 
-  return { portfolioIds, skippedCount };
+  return { portfolioIds, skippedCount, upToDateCount };
 }
 
 async function runListEligiblePortfolios(request: Request) {
@@ -90,17 +137,27 @@ async function runListEligiblePortfolios(request: Request) {
   const force = url.searchParams.get("force") === "true";
 
   const supabase = createServiceClient();
-  const { portfolioIds, skippedCount } = await getEligiblePortfolioIds(supabase, { force });
+  let eligibility: Awaited<ReturnType<typeof getEligiblePortfolioIds>>;
+  try {
+    eligibility = await getEligiblePortfolioIds(supabase, { force });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    log.error("Analysis cron eligibility failed", { error: message });
+    return json({ error: message }, 503);
+  }
+  const { portfolioIds, skippedCount, upToDateCount } = eligibility;
 
   log.info("Analysis cron eligible portfolios computed", {
     eligible: portfolioIds.length,
     skippedCount,
+    upToDateCount,
     force,
   });
 
   return json({
     portfolioIds,
     skippedCount,
+    upToDateCount,
   });
 }
 
@@ -131,9 +188,15 @@ async function runAnalysisCron(request: Request) {
   }
 
   const supabase = createServiceClient();
-  const portfolios = await getPortfolios(supabase);
-  const portfolio = portfolios.find((row) => row.id === portfolioId);
+  const { data: portfolio, error: portfolioError } = await supabase
+    .from("portfolios")
+    .select("id")
+    .eq("id", portfolioId)
+    .maybeSingle();
 
+  if (portfolioError) {
+    return json({ error: portfolioError.message }, 503);
+  }
   if (!portfolio) {
     return json({ error: "Portfolio not found" }, 404);
   }

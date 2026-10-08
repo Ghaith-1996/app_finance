@@ -9,12 +9,17 @@ import { getTranslations } from "@/lib/i18n/server";
 import { getBillingSummaryForUser } from "@/lib/billing/subscriptions";
 import { getCurrentUserProfile, saveCurrentUserProfile } from "@/lib/actions/profile";
 import {
+  confirmPhoneVerificationCode,
   getCurrentUserNotificationPreferences,
+  getCurrentUserVerifiedPhoneNumber,
   saveCurrentUserNotificationPreferences,
+  sendPhoneVerificationCode,
 } from "@/lib/actions/notifications";
 import { isAdminUser } from "@/lib/security/admin";
 import { loadOnboardingNavState } from "@/lib/server/page-loaders";
 import { createClient } from "@/lib/supabase/server";
+
+export const metadata = { title: "Settings" };
 
 export default async function SettingsPage({
   searchParams,
@@ -31,11 +36,14 @@ export default async function SettingsPage({
   }
 
   const profile = await getCurrentUserProfile();
-  const notificationPreferences = await getCurrentUserNotificationPreferences();
+  const [notificationPreferences, verifiedPhoneNumber] = await Promise.all([
+    getCurrentUserNotificationPreferences(),
+    getCurrentUserVerifiedPhoneNumber(),
+  ]);
   const { t } = await getTranslations();
   const showOnboardingNav = await loadOnboardingNavState();
   const showAdminLink = isAdminUser(user);
-  const billingSummary = await getBillingSummaryForUser(user.id, user.email);
+  const billingSummary = await getBillingSummaryForUser(user.id, user.email, user);
   const sp = searchParams ? await searchParams : {};
   const billingMessage =
     typeof sp.billing === "string" ? sp.billing : Array.isArray(sp.billing) ? sp.billing[0] : null;
@@ -61,7 +69,10 @@ export default async function SettingsPage({
         <BillingSettingsPanel billingSummary={billingSummary} />
         <NotificationSettingsPanel
           initialPreferences={notificationPreferences}
+          initialVerifiedPhoneNumber={verifiedPhoneNumber}
           onSubmit={saveCurrentUserNotificationPreferences}
+          onSendCode={sendPhoneVerificationCode}
+          onConfirmCode={confirmPhoneVerificationCode}
         />
         <PreferencesPanel />
 

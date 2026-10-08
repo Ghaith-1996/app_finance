@@ -1,5 +1,5 @@
 import type { PortfolioInsight } from "@/lib/types";
-import { NEWS_CATEGORIES } from "@/lib/types";
+import { parseArticleAnalysis } from "./provider";
 import type {
   ArticleAnalysis,
   ArticleChatContext,
@@ -12,6 +12,7 @@ import { assertNonEmptyArticleChatReply } from "./ai-chat-errors";
 import {
   ARTICLE_CHAT_MAX_TOKENS,
   PORTFOLIO_COPILOT_MAX_TOKENS,
+  AI_REQUEST_TIMEOUT_MS,
 } from "./constants";
 import { stubAIProvider } from "./stub-provider";
 import { parsePortfolioMatchAssessment } from "./portfolio-match";
@@ -34,6 +35,7 @@ async function ask(
 ): Promise<string | null> {
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
+    signal: AbortSignal.timeout(AI_REQUEST_TIMEOUT_MS),
     headers: {
       "Content-Type": "application/json",
       "x-api-key": key,
@@ -55,7 +57,15 @@ async function ask(
 
 export function createAnthropicProvider(): IAIProvider {
   const key = process.env.ANTHROPIC_API_KEY;
-  if (!key) return stubAIProvider;
+  if (!key) {
+    return {
+      ...stubAIProvider,
+      // Enrichment must fail (and stay retryable), not record stub output as succeeded.
+      async analyzeArticle() {
+        throw new Error("Anthropic is misconfigured: ANTHROPIC_API_KEY is missing.");
+      },
+    };
+  }
 
   return {
     async generateSummary(article, holdings) {
@@ -101,29 +111,12 @@ export function createAnthropicProvider(): IAIProvider {
       return stubAIProvider.generateInsights(holdings, newsContexts);
     },
 
+    // No stub fallback: enrichment must see provider failures so the article stays retryable.
     async analyzeArticle(headline, content, hintTickers): Promise<ArticleAnalysis> {
-      try {
-        const p = articleEnrichmentPrompt(headline, content, hintTickers);
-        const raw = await ask(key, `${p.system}\n\nHeadline: ${headline}\n\n${(content ?? "").slice(0, 4000)}`, 500);
-        if (raw) {
-          const parsed = JSON.parse(raw.replace(/```json?\s*|\s*```/g, "").trim());
-          return {
-            category: NEWS_CATEGORIES.includes(parsed.category) ? parsed.category : "other",
-            globalSummary: parsed.globalSummary || headline,
-            overallEffect: ["bullish", "bearish", "neutral"].includes(parsed.overallEffect) ? parsed.overallEffect : "neutral",
-            stockTags: Array.isArray(parsed.stockTags) ? parsed.stockTags.map((t: string) => String(t).toUpperCase()) : (hintTickers ?? []),
-            tickerImpacts: Array.isArray(parsed.tickerImpacts)
-              ? parsed.tickerImpacts
-                  .filter((i: { symbol?: string; effect?: string }) => i.symbol && i.effect)
-                  .map((i: { symbol: string; effect: string }) => ({
-                    symbol: i.symbol.toUpperCase(),
-                    effect: ["bullish", "bearish", "neutral"].includes(i.effect) ? i.effect : "neutral",
-                  }))
-              : [],
-          } as ArticleAnalysis;
-        }
-      } catch { /* fallback */ }
-      return stubAIProvider.analyzeArticle(headline, content, hintTickers);
+      const p = articleEnrichmentPrompt(headline, content, hintTickers);
+      const raw = await ask(key, `${p.system}\n\nHeadline: ${headline}\n\n${(content ?? "").slice(0, 4000)}`, 500);
+      if (!raw) throw new Error("Anthropic returned an empty article analysis");
+      return parseArticleAnalysis(raw, headline, hintTickers, { dropEmptyStockTags: false });
     },
 
     async answerArticleQuestion(context: ArticleChatContext) {
@@ -136,18 +129,15 @@ export function createAnthropicProvider(): IAIProvider {
       return assertNonEmptyArticleChatReply(text);
     },
 
+    // Failures surface as errors (503 + quota refund), never as a canned stub answer.
     async answerPortfolioQuestion(context: PortfolioCopilotContext) {
-      try {
-        const p = portfolioCopilotPrompt(context);
-        const text = await ask(
-          key,
-          `${p.system}\n\n${p.user}`,
-          PORTFOLIO_COPILOT_MAX_TOKENS,
-        );
-        return text ?? (await stubAIProvider.answerPortfolioQuestion(context));
-      } catch {
-        return stubAIProvider.answerPortfolioQuestion(context);
-      }
+      const p = portfolioCopilotPrompt(context);
+      const text = await ask(
+        key,
+        `${p.system}\n\n${p.user}`,
+        PORTFOLIO_COPILOT_MAX_TOKENS,
+      );
+      return assertNonEmptyArticleChatReply(text);
     },
   };
 }

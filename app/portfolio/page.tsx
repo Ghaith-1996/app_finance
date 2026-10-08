@@ -3,18 +3,16 @@ import { ArrowRight, Bookmark } from "lucide-react";
 
 import { AppShell } from "@/components/app/app-shell";
 import { PortfolioValueCard } from "@/components/app/portfolio-value-card";
+import { formatRelativeTime } from "@/lib/time/format";
 import { loadPortfolioPageData } from "@/lib/server/page-loaders";
 import type { Holding, PortfolioFeedHighlight } from "@/lib/types";
+import { storyHref } from "@/lib/feed/constants";
 import { categoryLabel } from "@/lib/utils";
 
+export const metadata = { title: "Portfolio" };
+
 function formatStoryTime(iso: string): string {
-  const t = new Date(iso).getTime();
-  if (Number.isNaN(t)) return "";
-  const min = Math.floor((Date.now() - t) / 60_000);
-  if (min < 1) return "Just now";
-  if (min < 60) return `${min} min ago`;
-  if (min < 1440) return `${Math.floor(min / 60)} hours ago`;
-  return `${Math.floor(min / 1440)} days ago`;
+  return formatRelativeTime(iso, new Date(), "");
 }
 
 function storyTickerTag(h: PortfolioFeedHighlight): string {
@@ -188,7 +186,7 @@ export default async function PortfolioPage() {
                 return (
                   <Link
                     key={`${story.headline}-${i}`}
-                    href="/feed"
+                    href={storyHref(story.newsItemId)}
                     className="group flex flex-col overflow-hidden rounded-2xl border border-white/[0.06] bg-surface-raised transition-transform duration-200 hover:-translate-y-0.5 hover:border-white/10"
                   >
                     <div

@@ -4,6 +4,10 @@ import type {
 } from "@/lib/notifications/types";
 
 const E164_RE = /^\+[1-9]\d{7,14}$/;
+
+export function isE164PhoneNumber(value: string): boolean {
+  return E164_RE.test(value);
+}
 const DEFAULT_PRICE_MOVE_ALERT_THRESHOLD_PERCENT = 5;
 const DEFAULT_CONCENTRATION_ALERT_THRESHOLD_PERCENT = 35;
 const MIN_PRICE_MOVE_ALERT_THRESHOLD_PERCENT = 1;

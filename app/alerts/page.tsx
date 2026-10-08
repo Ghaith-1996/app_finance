@@ -2,6 +2,8 @@ import { AlertsCenter } from "@/components/app/alerts-center";
 import { AppShell } from "@/components/app/app-shell";
 import { loadAlertsPageData } from "@/lib/server/alerts";
 
+export const metadata = { title: "Alerts" };
+
 export default async function AlertsPage() {
   const { showOnboardingNav, showAdminLink, alerts, summary } =
     await loadAlertsPageData();

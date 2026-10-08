@@ -3,7 +3,14 @@
 import { revalidatePath } from "next/cache";
 
 import {
+  confirmPhoneVerificationCodeForUser,
+  sendPhoneVerificationCodeForUser,
+  type ConfirmCodeResult,
+  type SendCodeResult,
+} from "@/lib/notifications/phone-verification";
+import {
   defaultNotificationPreferences,
+  isE164PhoneNumber,
   validateNotificationPreferenceInput,
 } from "@/lib/notifications/preferences";
 import type {
@@ -85,6 +92,14 @@ export async function saveCurrentUserNotificationPreferences(
     return { ok: false, error: "Unauthorized" };
   }
 
+  // Audit H2: SMS can only be enabled for a number the user has proved they control.
+  if (validation.value.smsDigestEnabled) {
+    const verified = await loadVerifiedPhoneNumber(supabase, user.id);
+    if (verified !== validation.value.phoneNumber) {
+      return { ok: false, error: "Verify this phone number before enabling SMS digests." };
+    }
+  }
+
   const { error } = await supabase
     .from("user_notification_preferences")
     .upsert(
@@ -109,4 +124,63 @@ export async function saveCurrentUserNotificationPreferences(
 
   revalidatePath("/settings");
   return { ok: true };
+}
+
+async function loadVerifiedPhoneNumber(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+): Promise<string | null> {
+  const { data } = await supabase
+    .from("verified_phone_numbers")
+    .select("phone_number")
+    .eq("user_id", userId)
+    .maybeSingle();
+  return (data as { phone_number?: string } | null)?.phone_number ?? null;
+}
+
+export async function getCurrentUserVerifiedPhoneNumber(): Promise<string | null> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  return user ? loadVerifiedPhoneNumber(supabase, user.id) : null;
+}
+
+export async function sendPhoneVerificationCode(phoneNumber: string): Promise<SendCodeResult> {
+  const phone = String(phoneNumber ?? "").trim();
+  if (!isE164PhoneNumber(phone)) {
+    return { ok: false, error: "Phone number must use E.164 format, for example +14165551234." };
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { ok: false, error: "Unauthorized" };
+  }
+
+  return sendPhoneVerificationCodeForUser(user.id, phone);
+}
+
+export async function confirmPhoneVerificationCode(
+  phoneNumber: string,
+  code: string,
+): Promise<ConfirmCodeResult> {
+  const phone = String(phoneNumber ?? "").trim();
+  if (!isE164PhoneNumber(phone)) {
+    return { ok: false, error: "Phone number must use E.164 format, for example +14165551234." };
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { ok: false, error: "Unauthorized" };
+  }
+
+  const result = await confirmPhoneVerificationCodeForUser(user.id, phone, String(code ?? ""));
+  if (result.ok) revalidatePath("/settings");
+  return result;
 }

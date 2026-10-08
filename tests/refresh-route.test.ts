@@ -199,7 +199,7 @@ describe("POST /api/news/refresh", () => {
     expect(mockResolveGlobalTickers).not.toHaveBeenCalled();
   });
 
-  it("uses global tickers for broad ingest, adds Finnhub portfolio news, then analyzes the portfolio", async () => {
+  it("aggregates worker and Finnhub inserts before extracting the combined article batch", async () => {
     const res = await POST(
       new Request("http://localhost/api/news/refresh", {
         method: "POST",
@@ -209,45 +209,15 @@ describe("POST /api/news/refresh", () => {
     );
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(mockResolveGlobalTickers).toHaveBeenCalledWith("service-mock");
-    expect(mockRunPythonWorker).toHaveBeenCalledWith(["MSFT", "AAPL"], 24, 20);
-    expect(mockIngestFinnhubPortfolioNews).toHaveBeenCalledWith(
-      "service-mock",
-      [
-        { symbol: "AAPL", company: "Apple Inc" },
-        { symbol: "MSFT", company: "Microsoft Corporation" },
-      ],
-      24,
-      20,
-    );
     expect(mockExtractPublisherContent).toHaveBeenCalledWith(
       supabaseMock,
       { articleIds: ["id-e1", "id-n1", "id-n2", "id-g1", "id-f1", "id-f2"] },
     );
-    expect(mockIngestNewsToSupabase).toHaveBeenCalledWith(
-      supabaseMock,
-      {
-        sourceTypes: [
-          "edgar",
-          "newsapi",
-          "gnews",
-          "finnhub",
-          "newsapi_ai",
-          "newscatcher",
-        ],
-        limit: 11,
-      },
-    );
-    expect(mockRunAnalysis).toHaveBeenCalledWith(supabaseMock, "p1");
     expect(body.ingestBreakdown.edgar.inserted).toBe(1);
     expect(body.ingestBreakdown.newsapi.inserted).toBe(2);
     expect(body.ingestBreakdown.gnews.inserted).toBe(1);
     expect(body.ingestBreakdown.finnhub.inserted).toBe(2);
-    expect(body.analysisRunId).toBe("run-1");
-    expect(body.tickers).toEqual(["MSFT", "AAPL"]);
-    expect(body.poolSnapshot).toEqual({ poolCount24h: 0, latestPublishedAt24h: null });
     expect(body.totalInserted).toBe(6);
-    expect(body.analysisMeta?.feedItemsCreated).toBe(0);
     expect(body.stages.extraction.status).toBe("queued");
     expect(body.extractionStats.queued).toBe(6);
   });

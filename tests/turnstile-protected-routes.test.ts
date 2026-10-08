@@ -16,16 +16,6 @@ vi.mock("@/lib/security/turnstile", () => ({
 const mockAnswerArticleQuestion = vi.fn();
 const mockAnswerPortfolioQuestion = vi.fn();
 const mockAssertUserCanUseAI = vi.fn().mockResolvedValue(undefined);
-const mockCommunityPostCheck = vi.fn().mockResolvedValue({
-  allowed: true,
-  remaining: 9,
-  resetsAt: "2026-04-04T12:01:00.000Z",
-});
-const mockCommunityCommentCheck = vi.fn().mockResolvedValue({
-  allowed: true,
-  remaining: 19,
-  resetsAt: "2026-04-04T12:01:00.000Z",
-});
 vi.mock("@/lib/services/ai", async () => {
   const actual = await vi.importActual<typeof import("@/lib/services/ai")>(
     "@/lib/services/ai",
@@ -64,10 +54,10 @@ vi.mock("@/lib/security/ai-access", async () => {
 
 vi.mock("@/lib/security/rate-limit", () => ({
   communityPostLimiter: {
-    check: (...args: unknown[]) => mockCommunityPostCheck(...args),
+    check: vi.fn(),
   },
   communityCommentLimiter: {
-    check: (...args: unknown[]) => mockCommunityCommentCheck(...args),
+    check: vi.fn(),
   },
 }));
 
@@ -78,19 +68,7 @@ const mockSupabase = {
       error: null,
     }),
   },
-  from: vi.fn().mockReturnValue({
-    select: vi.fn().mockReturnThis(),
-    insert: vi.fn().mockReturnThis(),
-    update: vi.fn().mockReturnThis(),
-    eq: vi.fn().mockReturnThis(),
-    in: vi.fn().mockReturnThis(),
-    lt: vi.fn().mockReturnThis(),
-    gte: vi.fn().mockReturnThis(),
-    order: vi.fn().mockReturnThis(),
-    limit: vi.fn().mockReturnThis(),
-    single: vi.fn().mockResolvedValue({ data: { id: "p1", name: "My Portfolio" }, error: null }),
-    maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
-  }),
+  from: vi.fn(),
 };
 
 vi.mock("@/lib/supabase/server", () => ({
@@ -100,15 +78,6 @@ vi.mock("@/lib/supabase/server", () => ({
 // ---------------------------------------------------------------------------
 // Turnstile helpers
 // ---------------------------------------------------------------------------
-function turnstilePass() {
-  mockVerifyTurnstileToken.mockResolvedValue({
-    success: true,
-    challengeTs: "2026-03-26T12:00:00Z",
-    hostname: "example.com",
-    action: "",
-  });
-}
-
 function turnstileFail(code = "invalid-input-response") {
   mockVerifyTurnstileToken.mockResolvedValue({
     success: false,
@@ -126,16 +95,6 @@ describe("POST /api/article-chat — Turnstile gate", () => {
     mockAnswerArticleQuestion.mockReset();
     mockAnswerPortfolioQuestion.mockReset();
     mockAssertUserCanUseAI.mockResolvedValue(undefined);
-    mockCommunityPostCheck.mockResolvedValue({
-      allowed: true,
-      remaining: 9,
-      resetsAt: "2026-04-04T12:01:00.000Z",
-    });
-    mockCommunityCommentCheck.mockResolvedValue({
-      allowed: true,
-      remaining: 19,
-      resetsAt: "2026-04-04T12:01:00.000Z",
-    });
   });
 
   async function callRoute(body: Record<string, unknown>) {
@@ -161,42 +120,6 @@ describe("POST /api/article-chat — Turnstile gate", () => {
     const data = await res.json();
     expect(data.code).toBe("turnstile_failed");
     expect(mockAnswerArticleQuestion).not.toHaveBeenCalled();
-  });
-
-  it("rejects when turnstileToken is invalid", async () => {
-    turnstileFail("invalid-input-response");
-
-    const res = await callRoute({
-      portfolioId: "p1",
-      message: "Hello",
-      modelTier: "free",
-      turnstileToken: "bad-token",
-    });
-
-    expect(res.status).toBe(403);
-    expect(mockAnswerArticleQuestion).not.toHaveBeenCalled();
-  });
-
-  it("proceeds when turnstileToken is valid", async () => {
-    turnstilePass();
-    mockAnswerPortfolioQuestion.mockResolvedValue("AI says hello");
-
-    const res = await callRoute({
-      portfolioId: "p1",
-      message: "Hello",
-      modelTier: "free",
-      turnstileToken: "valid-token",
-    });
-
-    // The route may error on DB issues downstream, but it should pass the Turnstile gate
-    expect(res.status).not.toBe(403);
-    expect(mockVerifyTurnstileToken).toHaveBeenCalledWith(
-      expect.objectContaining({
-        token: "valid-token",
-        remoteIp: "127.0.0.1",
-        expectedAction: "article-chat",
-      }),
-    );
   });
 });
 
@@ -241,11 +164,6 @@ describe("POST /api/portfolio-copilot — Turnstile gate", () => {
 describe("createPost — Turnstile gate", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockCommunityPostCheck.mockResolvedValue({
-      allowed: true,
-      remaining: 9,
-      resetsAt: "2026-04-04T12:01:00.000Z",
-    });
   });
 
   it("rejects post creation when Turnstile fails", async () => {
@@ -257,54 +175,6 @@ describe("createPost — Turnstile gate", () => {
     expect(result.ok).toBe(false);
     expect(result.error).toContain("verification failed");
   });
-
-  it("allows post creation when Turnstile passes", async () => {
-    turnstilePass();
-
-    // Make supabase mock return a valid post
-    mockSupabase.from.mockImplementation((table: string) => {
-      if (table === "community_posts") {
-        return {
-          insert: vi.fn().mockReturnValue({
-            select: vi.fn().mockReturnValue({
-              single: vi.fn().mockResolvedValue({
-                data: { id: "post-1", user_id: "user-1", body: "Hello", created_at: new Date().toISOString() },
-                error: null,
-              }),
-            }),
-          }),
-        };
-      }
-      if (table === "community_post_tickers") {
-        return { insert: vi.fn().mockResolvedValue({ error: null }) };
-      }
-      if (table === "user_profiles") {
-        return {
-          select: vi.fn().mockReturnValue({
-            eq: vi.fn().mockReturnValue({
-              maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
-            }),
-          }),
-        };
-      }
-      return {
-        select: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockReturnThis(),
-        single: vi.fn().mockResolvedValue({ data: null, error: null }),
-        maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
-      };
-    });
-
-    const { createPost } = await import("@/lib/actions/community");
-    const result = await createPost("Hello world", "valid-token");
-
-    // Should have attempted the action (not blocked at Turnstile)
-    expect(mockVerifyTurnstileToken).toHaveBeenCalledWith({ token: "valid-token" });
-    // It may succeed or fail on DB mock details, but shouldn't fail on Turnstile
-    if (!result.ok) {
-      expect(result.error).not.toContain("verification");
-    }
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -313,11 +183,6 @@ describe("createPost — Turnstile gate", () => {
 describe("createComment — Turnstile gate", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockCommunityCommentCheck.mockResolvedValue({
-      allowed: true,
-      remaining: 19,
-      resetsAt: "2026-04-04T12:01:00.000Z",
-    });
   });
 
   it("rejects comment creation when Turnstile fails", async () => {

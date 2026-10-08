@@ -17,7 +17,6 @@ import {
 } from "@/lib/actions/portfolio";
 import type {
   HoldingDraft,
-  HoldingResolutionCandidate,
   SaveMode,
 } from "@/lib/types";
 import { cn, formatPrice } from "@/lib/utils";
@@ -93,14 +92,16 @@ export function PortfolioCsvImportFlow({
 
     try {
       const result = await previewCSVImport(content);
-      if (result.error) {
-        setError(result.error);
-        return;
-      }
       if (result.needsMapping) {
+        // Show why (e.g. every row was skipped) alongside the mapping step that can fix it.
+        setError(result.error);
         setNeedsMapping(true);
         setCsvHeaders(result.headers);
         setSuggestedMapping(result.suggestedMapping);
+        return;
+      }
+      if (result.error) {
+        setError(result.error);
         return;
       }
       setDrafts(result.drafts);
@@ -132,40 +133,6 @@ export function PortfolioCsvImportFlow({
     } finally {
       setLoading(false);
     }
-  }
-
-  function toggleStatus(tempId: string) {
-    setDrafts((prev) =>
-      prev.map((d) => {
-        if (d.tempId !== tempId) return d;
-        if (d.status === "skipped") {
-          return {
-            ...d,
-            status: d.issues.length > 0 ? ("unresolved" as const) : ("confirmed" as const),
-          };
-        }
-        return { ...d, status: "skipped" as const };
-      }),
-    );
-  }
-
-  function selectCandidate(tempId: string, candidate: HoldingResolutionCandidate) {
-    setDrafts((prev) =>
-      prev.map((d) => {
-        if (d.tempId !== tempId) return d;
-        const newIssues = d.issues.filter((i) => i.field !== "symbol");
-        return {
-          ...d,
-          symbol: candidate.symbol,
-          company: candidate.name,
-          market: candidate.exchange,
-          exchange: candidate.exchange,
-          candidates: [],
-          issues: newIssues,
-          status: newIssues.length > 0 ? ("unresolved" as const) : ("confirmed" as const),
-        };
-      }),
-    );
   }
 
   async function handleSave() {
@@ -350,8 +317,7 @@ export function PortfolioCsvImportFlow({
 
           <HoldingsReviewTable
             drafts={drafts}
-            onToggleStatus={toggleStatus}
-            onSelectCandidate={selectCandidate}
+            onDraftsChange={setDrafts}
           />
 
           {confirmedCount > 0 ? (

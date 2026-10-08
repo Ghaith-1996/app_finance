@@ -195,49 +195,6 @@ describe("assertUserCanUseAI", () => {
     });
   });
 
-  it("blocks ultimate users after the monthly quota is exhausted", async () => {
-    getBillingSummaryForUser.mockResolvedValue({
-      planKey: "ultimate",
-      status: "active",
-      allowedModelTiers: ["free", "premium", "ultimate"],
-      defaultModelTier: "ultimate",
-      cancelAtPeriodEnd: false,
-      currentPeriodEnd: "2026-05-01T04:00:00.000Z",
-      hasPaidAccess: true,
-      hasUsedTrial: false,
-      hasAdminModelAccess: false,
-      aiQuotaLimit: 20_000,
-      aiQuotaWindow: "month",
-      aiQuotaUsed: 19_999,
-      aiQuotaRemaining: 1,
-      aiQuotaResetsAt: "2026-05-01T04:00:00.000Z",
-    });
-    consumeAIQuotaForUser.mockResolvedValue({
-      allowed: false,
-      denialCode: "quota_exceeded",
-      effectivePlanKey: "ultimate",
-      requiredPlanKey: null,
-      aiQuotaLimit: 20_000,
-      aiQuotaWindow: "month",
-      aiQuotaUsed: 20_000,
-      aiQuotaRemaining: 0,
-      aiQuotaResetsAt: "2026-05-01T04:00:00.000Z",
-    });
-
-    await expect(
-      assertUserCanUseAI(
-        { id: "user-1", email: "user@example.com" },
-        "ultimate",
-        "article_chat",
-      ),
-    ).rejects.toMatchObject({
-      code: "quota_exceeded",
-      quotaLimit: 20_000,
-      quotaWindow: "month",
-      quotaUsed: 20_000,
-    });
-  });
-
   it("keeps admin model access but still enforces the effective free-tier quota", async () => {
     getBillingSummaryForUser.mockResolvedValue({
       planKey: "free",

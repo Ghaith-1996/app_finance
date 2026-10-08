@@ -19,6 +19,7 @@ except ImportError:
 from supabase import create_client
 
 from .main import run as run_worker
+from .pagination import fetch_all_rows
 from .schema import NormalizedArticle
 from .upsert import upsert_articles
 
@@ -40,16 +41,16 @@ def _unique_upper(values):
 
 
 def resolve_global_tickers(client) -> list[str]:
-    holdings = client.table("holdings").select("symbol").execute().data or []
-    watchlist = client.table("watchlist_items").select("symbol").execute().data or []
+    holdings = fetch_all_rows(client, "holdings", "symbol")
+    watchlist = fetch_all_rows(client, "watchlist_items", "symbol")
     return _unique_upper(
         [row.get("symbol") for row in holdings] + [row.get("symbol") for row in watchlist]
     )
 
 
 def resolve_finnhub_targets(client) -> list[dict]:
-    holdings = client.table("holdings").select("symbol, company").execute().data or []
-    watchlist = client.table("watchlist_items").select("symbol, company").execute().data or []
+    holdings = fetch_all_rows(client, "holdings", "symbol, company")
+    watchlist = fetch_all_rows(client, "watchlist_items", "symbol, company")
     merged = {}
     for row in holdings + watchlist:
         symbol = str(row.get("symbol") or "").strip().upper()

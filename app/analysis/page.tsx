@@ -11,6 +11,8 @@ import { Panel } from "@/components/ui/panel";
 import { getTranslations } from "@/lib/i18n/server";
 import { loadAnalysisPageData } from "@/lib/server/page-loaders";
 
+export const metadata = { title: "Analysis" };
+
 export default async function AnalysisPage({
   searchParams,
 }: {
@@ -51,7 +53,7 @@ export default async function AnalysisPage({
     >
       <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
         <div className="space-y-6">
-          <Panel glow className="space-y-6 border-white/[0.06] bg-[#0d1520] p-8">
+          <Panel glow className="space-y-6 border-white/[0.06] bg-surface-panel p-8">
             {portfolioId ? (
               <AnalysisRunTrigger
                 portfolioId={portfolioId}

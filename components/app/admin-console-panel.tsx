@@ -25,6 +25,14 @@ type ActionState = {
 
 const ACTIONS: AdminAction[] = [
   {
+    id: "job-health",
+    label: "Job health",
+    description: "Backlog, freshness, failed analyses, stale quotes and failed/uncertain deliveries from stored job state.",
+    method: "GET",
+    path: "/api/admin/job-health",
+    icon: Activity,
+  },
+  {
     id: "health",
     label: "News health",
     description: "Checks the admin-only diagnostics route for current worker and pipeline readiness.",
@@ -162,7 +170,7 @@ export function AdminConsolePanel() {
           <p className="text-sm text-rose-400">{state.error}</p>
         ) : null}
 
-        <pre className="max-h-[480px] overflow-auto rounded-2xl border border-white/[0.06] bg-[#0a1119] p-4 text-xs leading-6 text-slate-300">
+        <pre className="max-h-[480px] overflow-auto rounded-2xl border border-white/[0.06] bg-surface-input p-4 text-xs leading-6 text-slate-300">
           {state.output ?? "Run an admin action to inspect the response here."}
         </pre>
       </Panel>

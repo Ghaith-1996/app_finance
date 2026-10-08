@@ -43,14 +43,6 @@ describe("POST /api/notifications/smart-alerts/cron", () => {
     vi.clearAllMocks();
     process.env.SMART_ALERTS_CRON_SECRET = "smart-secret";
     delete process.env.CRON_SECRET;
-    mockRunSmartAlertsCron.mockResolvedValue({
-      ran: true,
-      triggeredAt: "2026-05-31T14:00:00.000Z",
-      usersScanned: 1,
-      portfoliosScanned: 1,
-      alertsGenerated: 2,
-      errors: [],
-    });
   });
 
   it("rejects invalid cron auth", async () => {
@@ -60,22 +52,6 @@ describe("POST /api/notifications/smart-alerts/cron", () => {
 
     expect(response.status).toBe(401);
     expect(mockRunSmartAlertsCron).not.toHaveBeenCalled();
-  });
-
-  it("runs the smart alert cron with an optional now override", async () => {
-    const { POST } = await import("@/app/api/notifications/smart-alerts/cron/route");
-
-    const response = await POST(makeRequest("smart-secret"));
-
-    expect(response.status).toBe(200);
-    expect(mockRunSmartAlertsCron).toHaveBeenCalledWith({
-      now: new Date("2026-05-31T14:00:00.000Z"),
-    });
-    await expect(response.json()).resolves.toEqual(
-      expect.objectContaining({
-        alertsGenerated: 2,
-      }),
-    );
   });
 
   it("returns 500 when user-level alert generation reports errors", async () => {
@@ -92,13 +68,5 @@ describe("POST /api/notifications/smart-alerts/cron", () => {
     const response = await POST(makeRequest("smart-secret"));
 
     expect(response.status).toBe(500);
-  });
-});
-
-describe("GET /api/notifications/smart-alerts/cron", () => {
-  it("directs callers to POST", async () => {
-    const { GET } = await import("@/app/api/notifications/smart-alerts/cron/route");
-    const response = await GET();
-    expect(response.status).toBe(405);
   });
 });

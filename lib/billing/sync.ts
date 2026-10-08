@@ -7,8 +7,9 @@ import { planFromStripePriceId, getStripe } from "@/lib/billing/stripe";
 import {
   loadBillingCustomerByStripeCustomerId,
   loadBillingCustomerByUserId,
+  loadSubscriptionsForUser,
   upsertBillingCustomer,
-  upsertSubscriptionRow,
+  writeSubscriptionRowIfCurrent,
 } from "@/lib/billing/store";
 import { deriveStripeCustomerName } from "@/lib/billing/subscriptions";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -171,6 +172,64 @@ export async function syncStripeCustomerRecord(
   });
 }
 
+function isEntitledState(status: string, periodEndMs: number | null, nowMs: number): boolean {
+  if (status === "trialing" || status === "active") return true;
+  return status === "past_due" && periodEndMs !== null && periodEndMs > nowMs;
+}
+
+function subscriptionPeriodEndMs(subscription: Stripe.Subscription): number | null {
+  const end = subscription.items.data[0]?.current_period_end;
+  return typeof end === "number" ? end * 1000 : null;
+}
+
+export function isStripeSubscriptionEntitled(subscription: Stripe.Subscription, nowMs = Date.now()): boolean {
+  return isEntitledState(subscription.status, subscriptionPeriodEndMs(subscription), nowMs);
+}
+
+/**
+ * Deterministic choice of the subscription that defines a customer's access (audit B7):
+ * entitled subscriptions win over non-entitled ones, then the most recently created, then id.
+ * Event arrival order therefore cannot decide entitlement.
+ */
+export function selectAuthoritativeSubscription(
+  subscriptions: Stripe.Subscription[],
+  nowMs = Date.now(),
+): Stripe.Subscription | null {
+  return (
+    [...subscriptions].sort((left, right) => {
+      const entitledDelta =
+        Number(isStripeSubscriptionEntitled(right, nowMs)) - Number(isStripeSubscriptionEntitled(left, nowMs));
+      if (entitledDelta !== 0) return entitledDelta;
+      if (right.created !== left.created) return right.created - left.created;
+      return right.id.localeCompare(left.id);
+    })[0] ?? null
+  );
+}
+
+async function reconcileAgainstStoredSubscription(
+  customerId: string,
+  incoming: Stripe.Subscription,
+  stored: { status: string; current_period_end: string | null },
+): Promise<Stripe.Subscription | null> {
+  try {
+    const listed = await getStripe().subscriptions.list({ customer: customerId, status: "all", limit: 100 });
+    const candidates = listed.data.some((candidate) => candidate.id === incoming.id)
+      ? listed.data
+      : [...listed.data, incoming];
+    return selectAuthoritativeSubscription(candidates);
+  } catch (error) {
+    // Stripe unreachable: never let a different, non-entitled subscription replace stored access.
+    const storedEnd = stored.current_period_end ? Date.parse(stored.current_period_end) : null;
+    if (!isEntitledState(stored.status, storedEnd, Date.now())) return incoming;
+    if (!isStripeSubscriptionEntitled(incoming)) return null;
+    // Two entitled subscriptions cannot be ordered without Stripe (an older Premium event must not
+    // downgrade a newer Ultimate one): fail so Stripe redelivers the event once it can be reconciled.
+    throw new Error("Could not reconcile subscriptions with Stripe; retry later", { cause: error });
+  }
+}
+
+const SUBSCRIPTION_WRITE_ATTEMPTS = 3;
+
 export async function syncSubscriptionFromStripeSubscription(
   subscription: Stripe.Subscription,
 ): Promise<void> {
@@ -185,7 +244,29 @@ export async function syncSubscriptionFromStripeSubscription(
     user_id: userId,
     stripe_customer_id: customerId,
   });
-  await upsertSubscriptionRow(serviceSupabase, normalizeSubscription(userId, subscription));
+
+  // One row per user: an event for a different subscription than the stored one (e.g. a late
+  // cancellation of an old subscription) must not overwrite the current one (audit B7). The write is
+  // conditional on the row read here, so two concurrent events for different subscriptions cannot
+  // overwrite each other's decision (review R2): the loser re-reads and reconciles again.
+  for (let attempt = 0; attempt < SUBSCRIPTION_WRITE_ATTEMPTS; attempt += 1) {
+    const stored = (await loadSubscriptionsForUser(serviceSupabase, userId))[0] ?? null;
+    let target: Stripe.Subscription | null = subscription;
+    if (stored?.stripe_subscription_id && stored.stripe_subscription_id !== subscription.id) {
+      target = await reconcileAgainstStoredSubscription(customerId, subscription, stored);
+    }
+    if (!target) return;
+
+    const written = await writeSubscriptionRowIfCurrent(
+      serviceSupabase,
+      normalizeSubscription(userId, target),
+      stored?.stripe_subscription_id ?? null,
+    );
+    if (written) return;
+  }
+
+  // Failing the webhook makes Stripe redeliver it later, when the competing write has settled.
+  throw new Error("Subscription row kept changing during sync; retry later");
 }
 
 export async function syncSubscriptionById(subscriptionId: string): Promise<void> {

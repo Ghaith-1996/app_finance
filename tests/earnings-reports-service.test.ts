@@ -13,6 +13,9 @@ type MockTables = Record<TableName, Array<Record<string, unknown>>>;
 
 type FailureValue = string | null | undefined;
 
+/** PostgREST-style response cap: a single read never returns more than this many rows. */
+const mockLimits = { maxRows: Number.POSITIVE_INFINITY };
+
 type MockFailures = {
   select?: Partial<Record<TableName, FailureValue | FailureValue[]>>;
   upsert?: Partial<Record<TableName, FailureValue | FailureValue[]>>;
@@ -41,6 +44,7 @@ function createQueryBuilder(
   errorMessage?: string,
 ) {
   const filters: Array<(row: Record<string, unknown>) => boolean> = [];
+  let window: [number, number] | null = null;
 
   const builder = {
     eq(column: string, value: unknown) {
@@ -50,6 +54,13 @@ function createQueryBuilder(
     in(column: string, values: unknown[]) {
       const allowed = new Set(values);
       filters.push((row) => allowed.has(row[column]));
+      return builder;
+    },
+    order() {
+      return builder;
+    },
+    range(from: number, to: number) {
+      window = [from, to];
       return builder;
     },
     then<TResult1 = { data: Array<Record<string, unknown>>; error: null }, TResult2 = never>(
@@ -63,8 +74,9 @@ function createQueryBuilder(
         }).then(onfulfilled, onrejected);
       }
 
-      const data = rows
-        .filter((row) => filters.every((filter) => filter(row)))
+      const matched = rows.filter((row) => filters.every((filter) => filter(row)));
+      const data = (window ? matched.slice(window[0], window[1] + 1) : matched)
+        .slice(0, mockLimits.maxRows)
         .map((row) => pickColumns(row, columns));
 
       return Promise.resolve({ data, error: null }).then(onfulfilled, onrejected);
@@ -473,6 +485,8 @@ describe("earnings report service", () => {
       secFallbacks: 1,
       missing: 0,
       inactivated: 0,
+      failed: 0,
+      stale: 0,
     });
     expect(supabase.tables.ticker_earnings_reports).toEqual([
       expect.objectContaining({
@@ -569,17 +583,11 @@ describe("earnings report service", () => {
       }),
     ).rejects.toThrow("Failed to upsert earnings report row for AAPL: write failed");
 
-    expect(supabase.tables.ticker_earnings_reports).toEqual([
-      expect.objectContaining({
-        symbol: "AAPL",
-        preferred_url: null,
-        url_source: null,
-        error: "Failed to upsert earnings report row for AAPL: write failed",
-      }),
-    ]);
+    // Audit J6: a failed write is surfaced without a second write that nulls report data.
+    expect(supabase.tables.ticker_earnings_reports).toEqual([]);
   });
 
-  it("surfaces error-row upsert failures when fallback persistence also fails", async () => {
+  it("surfaces the write failure when recording a failed lookup cannot be persisted", async () => {
     const supabase = createMockSupabase(
       {
         holdings: [{ symbol: "AAPL" }],
@@ -599,7 +607,7 @@ describe("earnings report service", () => {
         discoverCompanyEarningsLink: async () => null,
         resolveLatestSecEarningsReport: async () => null,
       }),
-    ).rejects.toThrow("Failed to upsert earnings report error row for AAPL: write failed");
+    ).rejects.toThrow("Failed to upsert earnings report row for AAPL: write failed");
 
     expect(supabase.tables.ticker_earnings_reports).toHaveLength(0);
   });
@@ -751,5 +759,120 @@ describe("earnings report service", () => {
     expect(
       supabase.tables.ticker_earnings_reports.find((row) => row.symbol === "MSFT"),
     ).toEqual(expect.objectContaining({ is_active: false }));
+  });
+});
+
+describe("earnings report last-known-good (audit J6)", () => {
+  const cached = {
+    symbol: "AAPL",
+    is_active: true,
+    preferred_url: "https://investor.example.com/earnings-q3",
+    url_source: "company",
+    company_url: "https://investor.example.com/earnings-q3",
+    sec_url: null,
+    report_date: "2026-07-30",
+    filing_form: null,
+    title: "Q3 results",
+    error: null,
+  };
+
+  it("keeps a valid cached report when both discovery sources fail, and records the failure", async () => {
+    const supabase = createMockSupabase({ holdings: [{ symbol: "AAPL" }], ticker_earnings_reports: [{ ...cached }] });
+
+    const result = await syncTrackedEarningsReports(supabase as never, {
+      now: () => new Date("2026-10-01T09:17:00.000Z"),
+      getCompanyWebsiteSeed: async () => {
+        throw new Error("company seed timeout");
+      },
+      discoverCompanyEarningsLink: async () => null,
+      resolveLatestSecEarningsReport: async () => {
+        throw new Error("SEC temporarily unavailable");
+      },
+    });
+
+    expect(result).toMatchObject({ processed: 1, resolved: 0, missing: 0, failed: 1, stale: 1 });
+    const row = supabase.tables.ticker_earnings_reports[0];
+    expect(row).toMatchObject({
+      preferred_url: "https://investor.example.com/earnings-q3",
+      report_date: "2026-07-30",
+      title: "Q3 results",
+      last_checked_at: "2026-10-01T09:17:00.000Z",
+    });
+    expect(String(row.error)).toMatch(/Refresh failed; showing the last known report\. SEC temporarily unavailable; company seed timeout/);
+  });
+
+  it("replaces the cached report once a newer one is verified", async () => {
+    const supabase = createMockSupabase({ holdings: [{ symbol: "AAPL" }], ticker_earnings_reports: [{ ...cached }] });
+
+    const result = await syncTrackedEarningsReports(supabase as never, {
+      getCompanyWebsiteSeed: async () => null,
+      discoverCompanyEarningsLink: async () => null,
+      resolveLatestSecEarningsReport: async () => ({
+        url: "https://www.sec.gov/Archives/edgar/data/320193/q4.htm",
+        reportDate: "2026-10-30",
+        filingDate: "2026-10-31",
+        filingForm: "8-K",
+        title: "Q4 results",
+        sortDate: "2026-10-30",
+        score: 100,
+        acceptedAt: "20261031160000",
+      }),
+    });
+
+    expect(result).toMatchObject({ resolved: 1, failed: 0, stale: 0 });
+    expect(supabase.tables.ticker_earnings_reports[0]).toMatchObject({
+      preferred_url: "https://www.sec.gov/Archives/edgar/data/320193/q4.htm",
+      report_date: "2026-10-30",
+      error: null,
+    });
+  });
+
+  it("a symbol with no cached report and failing sources is recorded as missing with the error", async () => {
+    const supabase = createMockSupabase({ holdings: [{ symbol: "MSFT" }] });
+
+    const result = await syncTrackedEarningsReports(supabase as never, {
+      getCompanyWebsiteSeed: async () => null,
+      discoverCompanyEarningsLink: async () => null,
+      resolveLatestSecEarningsReport: async () => {
+        throw new Error("SEC down");
+      },
+    });
+
+    expect(result).toMatchObject({ missing: 1, failed: 1, stale: 0 });
+    expect(supabase.tables.ticker_earnings_reports[0]).toMatchObject({ symbol: "MSFT", preferred_url: null, error: "SEC down" });
+  });
+
+  it("R8: keeps the cached report of a symbol beyond the first 1,000-row response page", async () => {
+    // 1,001 cached rows; only the last one is still tracked, and both providers fail for it.
+    const others = Array.from({ length: 1_000 }, (_, index) => ({
+      ...cached,
+      symbol: `OLD${String(index).padStart(4, "0")}`,
+    }));
+    const last = { ...cached, symbol: "ZZZZ" };
+    const supabase = createMockSupabase({
+      holdings: [{ symbol: "ZZZZ" }],
+      ticker_earnings_reports: [...others, last],
+    });
+
+    mockLimits.maxRows = 1_000;
+    try {
+      const result = await syncTrackedEarningsReports(supabase as never, {
+        getCompanyWebsiteSeed: async () => null,
+        discoverCompanyEarningsLink: async () => null,
+        resolveLatestSecEarningsReport: async () => {
+          throw new Error("SEC down");
+        },
+      });
+      expect(result).toMatchObject({ failed: 1, stale: 1, missing: 0 });
+    } finally {
+      mockLimits.maxRows = Number.POSITIVE_INFINITY;
+    }
+
+    expect(supabase.tables.ticker_earnings_reports.find((row) => row.symbol === "ZZZZ")).toMatchObject({
+      is_active: true,
+      preferred_url: cached.preferred_url,
+      report_date: cached.report_date,
+      title: cached.title,
+    });
   });
 });

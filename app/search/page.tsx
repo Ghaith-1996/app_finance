@@ -5,6 +5,8 @@ import { AppShell } from "@/components/app/app-shell";
 import { Badge } from "@/components/ui/badge";
 import { loadGlobalSearchPageData } from "@/lib/server/global-search";
 
+export const metadata = { title: "Search" };
+
 type SearchPageProps = {
   searchParams: Promise<{ q?: string | string[] }>;
 };

@@ -275,7 +275,7 @@ function WatchlistRow({
           {menuOpen && (
             <div
               role="menu"
-              className="absolute right-0 top-full z-50 mt-1 min-w-[160px] overflow-hidden rounded-xl border border-white/[0.08] bg-[#0d1520] py-1 shadow-xl shadow-black/40"
+              className="absolute right-0 top-full z-50 mt-1 min-w-[160px] overflow-hidden rounded-xl border border-white/[0.08] bg-surface-input py-1 shadow-xl shadow-black/40"
             >
               <button
                 type="button"

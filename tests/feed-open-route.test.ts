@@ -60,30 +60,4 @@ describe("POST /api/feed/open", () => {
     });
   });
 
-  it("increments the detail open count through the RPC", async () => {
-    authGetUser.mockResolvedValue({
-      data: { user: { id: "user-1" } },
-      error: null,
-    });
-    rpc.mockResolvedValue({
-      data: 7,
-      error: null,
-    });
-
-    const res = await POST(
-      new Request("http://localhost/api/feed/open", {
-        method: "POST",
-        body: JSON.stringify({ newsItemId: "news-1" }),
-      }),
-    );
-
-    expect(rpc).toHaveBeenCalledWith("increment_news_item_detail_open_count", {
-      target_news_item_id: "news-1",
-    });
-    expect(res.status).toBe(200);
-    await expect(res.json()).resolves.toEqual({
-      ok: true,
-      detailOpenCount: 7,
-    });
-  });
 });

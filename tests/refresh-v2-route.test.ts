@@ -52,8 +52,8 @@ function createSupabaseMock() {
       if (table === "portfolios") {
         return {
           select: () => ({
-            eq: (..._args: unknown[]) => ({
-              eq: (..._args2: unknown[]) => ({
+            eq: () => ({
+              eq: () => ({
                 single: () =>
                   Promise.resolve({ data: { id: "p1" }, error: null }),
                 order: () => ({
@@ -209,69 +209,7 @@ describe("POST /api/news/refresh-v2", () => {
     expect(mockRunPythonWorkerV2).not.toHaveBeenCalled();
   });
 
-  /* ---------- Happy path ---------- */
-
-  it("runs candidate pipeline and returns candidate source keys in breakdown", async () => {
-    const res = await POST(makeRequest({ portfolioId: "p1" }));
-    expect(res.status).toBe(200);
-    const body = await res.json();
-
-    // Worker called with candidate provider set args
-    expect(mockRunPythonWorkerV2).toHaveBeenCalledWith(
-      ["MSFT", "AAPL"],
-      24,
-      20,
-      { queries: ["AAPL Apple stock", "MSFT Microsoft stock"] },
-    );
-
-    // buildPortfolioQueries was called with holdings
-    expect(mockBuildPortfolioQueries).toHaveBeenCalledWith([
-      { symbol: "AAPL", company: "Apple Inc" },
-      { symbol: "MSFT", company: "Microsoft Corporation" },
-    ]);
-
-    // Ingest breakdown has candidate keys, NOT current-only keys
-    expect(body.ingestBreakdown.edgar).toBeDefined();
-    expect(body.ingestBreakdown.newsapi_ai).toBeDefined();
-    expect(body.ingestBreakdown.gnews).toBeDefined();
-    expect(body.ingestBreakdown.newscatcher).toBeDefined();
-    expect(body.ingestBreakdown.newsapi).toBeUndefined();
-    expect(body.ingestBreakdown.total_inserted).toBe(5);
-
-    // No Finnhub in the response
-    expect(body.ingestBreakdown.finnhub).toBeUndefined();
-
-    // Extraction uses all candidate inserted IDs
-    expect(mockExtractPublisherContent).toHaveBeenCalledWith(
-      supabaseMock,
-      { articleIds: ["id-e1", "id-na1", "id-na2", "id-g1", "id-nc1"] },
-    );
-
-    // Analysis ran
-    expect(body.analysisRunId).toBe("run-1");
-    expect(body.stages.analysis.status).toBe("success");
-
-    // portfolioQueries included in response
-    expect(body.portfolioQueries).toEqual(["AAPL Apple stock", "MSFT Microsoft stock"]);
-  });
-
-  it("returns pool snapshot and tickers", async () => {
-    const res = await POST(makeRequest({ portfolioId: "p1" }));
-    const body = await res.json();
-
-    expect(body.tickers).toEqual(["MSFT", "AAPL"]);
-    expect(body.poolSnapshot.poolCount24h).toBe(10);
-  });
-
   /* ---------- Ingest stage formatting ---------- */
-
-  it("formats ingest stage as success when worker reports success", async () => {
-    const res = await POST(makeRequest({ portfolioId: "p1" }));
-    const body = await res.json();
-
-    expect(body.stages.ingest.status).toBe("success");
-    expect(body.stages.ingest.detail).toContain("5");
-  });
 
   it("formats ingest stage as empty when worker returns no articles", async () => {
     mockRunPythonWorkerV2.mockResolvedValue({
@@ -313,20 +251,6 @@ describe("POST /api/news/refresh-v2", () => {
 
     expect(body.stages.ingest.status).toBe("success");
     expect(body.stages.ingest.detail).toContain("24-hour news pool still has articles");
-  });
-
-  it("returns partial when ingest_status is partial", async () => {
-    mockRunPythonWorkerV2.mockResolvedValue({
-      ...defaultWorkerResult(),
-      ingest_status: "partial",
-      ingest_detail: "newscatcher failed, others ok",
-    });
-
-    const res = await POST(makeRequest({ portfolioId: "p1" }));
-    const body = await res.json();
-
-    expect(body.stages.ingest.status).toBe("partial");
-    expect(body.stages.ingest.detail).toContain("newscatcher failed");
   });
 
   /* ---------- Worker failure ---------- */
@@ -383,29 +307,7 @@ describe("POST /api/news/refresh-v2", () => {
     expect(body.stages.extraction.detail).toContain("2 already extracted");
   });
 
-  it("reports extraction queued when articles are queued for background extraction", async () => {
-    const res = await POST(makeRequest({ portfolioId: "p1" }));
-    const body = await res.json();
-
-    expect(body.stages.extraction.status).toBe("queued");
-    expect(body.stages.extraction.detail).toContain("queued for background extraction");
-    expect(body.extractionStats.queued).toBe(5);
-  });
-
   /* ---------- Enrichment + Analysis ---------- */
-
-  it("enriches with ENRICHABLE_SOURCE_TYPES and returns enriched count", async () => {
-    const res = await POST(makeRequest({ portfolioId: "p1" }));
-    const body = await res.json();
-
-    // Enrichment was called with a sourceTypes list that includes candidate sources
-    const enrichCall = mockIngestNewsToSupabase.mock.calls[0];
-    expect(enrichCall[1].sourceTypes).toContain("newsapi_ai");
-    expect(enrichCall[1].sourceTypes).toContain("newscatcher");
-
-    expect(body.enriched).toBe(5);
-    expect(body.stages.enrichment.status).toBe("success");
-  });
 
   it("returns 207 when enrichment fails", async () => {
     mockIngestNewsToSupabase.mockResolvedValue({

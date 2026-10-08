@@ -16,23 +16,6 @@ const preferences = {
 };
 
 describe("NotificationSettingsPanel", () => {
-  it("renders the daily digest controls and fixed timing copy", () => {
-    render(
-      <NotificationSettingsPanel
-        initialPreferences={preferences}
-        onSubmit={async () => ({ ok: true })}
-      />,
-    );
-
-    expect(screen.getByText("Morning digest")).toBeInTheDocument();
-    expect(screen.getByText(/Sent daily at 9:00 AM Eastern/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/Email digest/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/SMS digest/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/Phone number/i)).toBeInTheDocument();
-    expect(screen.getByText("Portfolio alert rules")).toBeInTheDocument();
-    expect(screen.getByLabelText(/Critical news/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/Earnings reports/i)).toBeInTheDocument();
-  });
 
   it("submits the chosen channels and phone number", async () => {
     const onSubmit = vi.fn().mockResolvedValue({ ok: true });

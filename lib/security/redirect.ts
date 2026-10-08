@@ -10,6 +10,7 @@ const ALLOWED_PREFIXES = [
   "/analysis",
   "/feed",
   "/home",
+  "/community",
   "/alerts",
   "/search",
   "/saved",

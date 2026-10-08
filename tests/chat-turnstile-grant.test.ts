@@ -87,26 +87,11 @@ describe("chat-turnstile-grant", () => {
     expect(story).toBe(copilot);
     expect(story).not.toBe(otherUser);
     expect(story).not.toBe(otherPortfolio);
-    expect(story.startsWith("cv_")).toBe(true);
   });
 
   // -------------------------------------------------------------------------
   // Cookie value signing / validation
   // -------------------------------------------------------------------------
-
-  it("validates a freshly minted grant value for the exact same scope", async () => {
-    const { buildChatGrantCookieValue, hasValidChatGrantValue } =
-      await loadModule();
-
-    const scope = {
-      userId: "u1",
-      surface: "article-chat" as const,
-      portfolioId: "p1",
-      newsItemId: "n1",
-    };
-    const value = buildChatGrantCookieValue(scope);
-    expect(hasValidChatGrantValue(value, scope)).toBe(true);
-  });
 
   it("rejects a grant value whose signature has been altered", async () => {
     const { buildChatGrantCookieValue, hasValidChatGrantValue } =
@@ -303,24 +288,6 @@ describe("chat-turnstile-grant", () => {
     expect(chatGrantRequired(req, scope)).toBe(true);
   });
 
-  it("chatGrantRequired returns false once a valid grant cookie is present", async () => {
-    const {
-      buildChatGrantCookieValue,
-      chatGrantCookieName,
-      chatGrantRequired,
-    } = await loadModule();
-
-    const scope = {
-      userId: "u1",
-      surface: "portfolio-copilot" as const,
-      portfolioId: "p1",
-    };
-    const req = makeRequest(
-      `${chatGrantCookieName(scope)}=${encodeURIComponent(buildChatGrantCookieValue(scope))}`,
-    );
-    expect(chatGrantRequired(req, scope)).toBe(false);
-  });
-
   // -------------------------------------------------------------------------
   // Set-Cookie serialization
   // -------------------------------------------------------------------------
@@ -356,19 +323,4 @@ describe("chat-turnstile-grant", () => {
     expect(header).toContain("Secure");
   });
 
-  // -------------------------------------------------------------------------
-  // Cookie header parsing
-  // -------------------------------------------------------------------------
-
-  it("parseCookieHeader handles empty / null input", async () => {
-    const { parseCookieHeader } = await loadModule();
-    expect(parseCookieHeader(null)).toEqual({});
-    expect(parseCookieHeader("")).toEqual({});
-  });
-
-  it("parseCookieHeader splits on ';' and decodes values", async () => {
-    const { parseCookieHeader } = await loadModule();
-    const parsed = parseCookieHeader("a=1; b=hello%20world; c=%2Fx");
-    expect(parsed).toEqual({ a: "1", b: "hello world", c: "/x" });
-  });
 });

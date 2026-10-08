@@ -106,17 +106,35 @@ export async function loadSubscriptionsForUser(
   return (data as SubscriptionRow[] | null) ?? [];
 }
 
-export async function upsertSubscriptionRow(
+/**
+ * Compare-and-swap write of the user's single subscription row (review R2). The write applies only
+ * while the stored row still points at `expectedSubscriptionId` (null = no row yet), so a webhook that
+ * decided from a stale read cannot overwrite a row another webhook changed meanwhile.
+ * Returns false on conflict; the caller re-reads and decides again.
+ */
+export async function writeSubscriptionRowIfCurrent(
   supabase: BillingSupabaseClient,
   row: SubscriptionRow,
-): Promise<void> {
-  const { error } = await supabase
+  expectedSubscriptionId: string | null,
+): Promise<boolean> {
+  if (expectedSubscriptionId === null) {
+    const { error } = await supabase.from("subscriptions").insert(row);
+    if (!error) return true;
+    if (error.code === "23505") return false;
+    throw new Error(error.message);
+  }
+
+  const { data, error } = await supabase
     .from("subscriptions")
-    .upsert(row, { onConflict: "user_id" });
+    .update(row)
+    .eq("user_id", row.user_id)
+    .eq("stripe_subscription_id", expectedSubscriptionId)
+    .select("user_id");
 
   if (error) {
     throw new Error(error.message);
   }
+  return (data?.length ?? 0) > 0;
 }
 
 export async function claimStripeEvent(

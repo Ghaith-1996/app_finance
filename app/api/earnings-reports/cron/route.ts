@@ -45,7 +45,9 @@ export async function POST(request: Request) {
       ...result,
     });
 
-    return json(result);
+    // HTTP 200 must not hide a run where every lookup failed (audit J6/H8).
+    const allFailed = result.processed > 0 && result.failed === result.processed;
+    return json({ ...result, partial: result.failed > 0 }, allFailed ? 502 : 200);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     log.error("Earnings report sync failed", {

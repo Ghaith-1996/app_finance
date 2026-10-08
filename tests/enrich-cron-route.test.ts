@@ -2,11 +2,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   mockIngestNewsToSupabase,
+  mockCountDueEnrichmentBacklog,
   mockLoggerInfo,
   mockLoggerWarn,
   mockLoggerError,
 } = vi.hoisted(() => ({
   mockIngestNewsToSupabase: vi.fn(),
+  mockCountDueEnrichmentBacklog: vi.fn(),
   mockLoggerInfo: vi.fn(),
   mockLoggerWarn: vi.fn(),
   mockLoggerError: vi.fn(),
@@ -22,6 +24,7 @@ vi.mock("@/lib/security/timing", () => ({
 
 vi.mock("@/lib/services/news", () => ({
   ingestNewsToSupabase: (...args: unknown[]) => mockIngestNewsToSupabase(...args),
+  countDueEnrichmentBacklog: (...args: unknown[]) => mockCountDueEnrichmentBacklog(...args),
 }));
 
 vi.mock("@/lib/logger", () => ({
@@ -84,24 +87,6 @@ describe("POST /api/news/cron/enrich", () => {
     expect(body.error).toContain("max batch size");
   });
 
-  it("calls ingestNewsToSupabase with exactly the provided batch", async () => {
-    mockIngestNewsToSupabase.mockResolvedValue({ enriched: 3, skipped: 0 });
-
-    const ids = ["id-a", "id-b", "id-c"];
-    const res = await POST(makeRequest("test-secret", { articleIds: ids }));
-    expect(res.status).toBe(200);
-    const body = await res.json();
-
-    expect(mockIngestNewsToSupabase).toHaveBeenCalledOnce();
-    expect(mockIngestNewsToSupabase).toHaveBeenCalledWith(
-      expect.anything(),
-      { articleIds: ["id-a", "id-b", "id-c"] },
-    );
-    expect(body.requested).toBe(3);
-    expect(body.enriched).toBe(3);
-    expect(body.error).toBeNull();
-  });
-
   it("returns 5xx when enrichment returns error", async () => {
     mockIngestNewsToSupabase.mockResolvedValue({
       enriched: 0,
@@ -121,5 +106,28 @@ describe("POST /api/news/cron/enrich", () => {
     const ids = Array.from({ length: 10 }, (_, i) => `id-${i}`);
     const res = await POST(makeRequest("test-secret", { articleIds: ids }));
     expect(res.status).toBe(200);
+  });
+
+  describe("backlog mode (audit J1)", () => {
+    it("enriches due backlog without article IDs and reports what remains", async () => {
+      mockIngestNewsToSupabase.mockResolvedValue({ enriched: 3, retrying: 1, failed: 0, skipped: 0 });
+      mockCountDueEnrichmentBacklog.mockResolvedValue({ count: 7 });
+
+      const res = await POST(makeRequest("test-secret", { backlog: true, limit: 50 }));
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ enriched: 3, retrying: 1, failed: 0, skipped: 0, remaining: 7, error: null });
+      expect(mockIngestNewsToSupabase).toHaveBeenCalledWith(expect.anything(), { limit: 10 });
+    });
+
+    it("returns 5xx when the backlog cannot be read", async () => {
+      mockIngestNewsToSupabase.mockResolvedValue({ enriched: 0, retrying: 0, failed: 0, skipped: 0, error: "db down" });
+      mockCountDueEnrichmentBacklog.mockResolvedValue({ count: 0 });
+
+      const res = await POST(makeRequest("test-secret", { backlog: true }));
+
+      expect(res.status).toBe(500);
+      expect((await res.json()).error).toBe("db down");
+    });
   });
 });

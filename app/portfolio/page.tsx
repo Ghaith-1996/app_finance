@@ -189,10 +189,6 @@ export default async function PortfolioPage() {
                     href={storyHref(story.newsItemId)}
                     className="group flex flex-col overflow-hidden rounded-2xl border border-white/[0.06] bg-surface-raised transition-transform duration-200 hover:-translate-y-0.5 hover:border-white/10"
                   >
-                    <div
-                      className="h-[140px] w-full shrink-0 bg-gradient-to-br from-brand/10 via-surface-raised to-surface-hover"
-                      aria-hidden
-                    />
                     <div className="flex flex-1 flex-col p-6">
                       <div className="mb-4 flex flex-wrap gap-2">
                         <span className="rounded-md bg-white/5 px-2 py-0.5 text-[10px] font-bold tracking-widest text-slate-500">

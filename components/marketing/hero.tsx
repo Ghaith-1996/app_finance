@@ -24,7 +24,7 @@ export function Hero() {
 
   return (
     <section className="relative overflow-hidden px-6 pb-20 pt-16 lg:px-8 lg:pb-28 lg:pt-24">
-      <div className="mx-auto grid max-w-[90rem] gap-14 lg:grid-cols-[0.86fr_1.14fr] lg:items-center xl:grid-cols-[0.78fr_1.22fr]">
+      <div className="mx-auto grid max-w-[90rem] gap-14 lg:grid-cols-[0.86fr_1.14fr] lg:items-start xl:grid-cols-[0.78fr_1.22fr]">
         <div className="space-y-8">
           <Badge tone="brand">
             {t("landing.headerTagline")}
@@ -70,36 +70,13 @@ export function Hero() {
               Get a daily recap
             </span>
           </div>
-          <div className="grid gap-4 sm:grid-cols-3">
-            {siteStats.map((stat) => (
-              <Panel
-                key={stat.label}
-                className="space-y-2 p-5"
-              >
-                <p className="text-2xl font-semibold text-white">{stat.value}</p>
-                <p className="text-sm font-medium text-slate-300">{stat.label}</p>
-                <p className="text-sm leading-6 text-slate-500">{stat.hint}</p>
-              </Panel>
-            ))}
-          </div>
-          <div className="flex flex-wrap gap-3 text-sm text-secondary">
-            {sourceTags.map((source) => (
-              <span
-                key={source.name}
-                className="inline-flex items-center gap-2 rounded-xl border border-subtle bg-surface-raised px-3 py-2"
-              >
-                <Globe2 className="h-4 w-4 text-brand" />
-                {source.name}
-                <span className="text-muted">{source.category}</span>
-              </span>
-            ))}
-          </div>
         </div>
         <Panel
           glow
           className="relative overflow-hidden p-0"
         >
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.08),transparent_28%)]" />
+          {/* Revert: swap back to bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.08),transparent_28%)] */}
+          <div className="hero-mesh" aria-hidden="true" data-testid="hero-mesh" />
           <div className="relative grid gap-4 p-6">
             <div className="grid gap-4 sm:grid-cols-[0.88fr_1.12fr] xl:grid-cols-[0.82fr_1.18fr]">
               <Panel className="space-y-5 p-5">
@@ -236,6 +213,33 @@ export function Hero() {
             </Panel>
           </div>
         </Panel>
+      </div>
+      {/* Proof points sit beneath the hero grid so the headline and CTAs lead the first viewport. */}
+      <div className="mx-auto mt-14 max-w-[90rem] space-y-6 lg:mt-20">
+        <div className="grid gap-4 sm:grid-cols-3">
+          {siteStats.map((stat) => (
+            <Panel
+              key={stat.label}
+              className="space-y-2 p-5"
+            >
+              <p className="text-2xl font-semibold text-white">{stat.value}</p>
+              <p className="text-sm font-medium text-slate-300">{stat.label}</p>
+              <p className="text-sm leading-6 text-slate-500">{stat.hint}</p>
+            </Panel>
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-3 text-sm text-secondary">
+          {sourceTags.map((source) => (
+            <span
+              key={source.name}
+              className="inline-flex items-center gap-2 rounded-xl border border-subtle bg-surface-raised px-3 py-2"
+            >
+              <Globe2 className="h-4 w-4 text-brand" />
+              {source.name}
+              <span className="text-muted">{source.category}</span>
+            </span>
+          ))}
+        </div>
       </div>
     </section>
   );

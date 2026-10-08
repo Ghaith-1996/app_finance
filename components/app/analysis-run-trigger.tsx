@@ -38,6 +38,43 @@ const STEP_LABELS: Record<string, { title: string; detail: string }> = {
   },
 };
 
+const STATUS_LABELS: Record<string, string> = {
+  queued: "Queued",
+  processing_holdings: "Processing",
+  mapping_news: "Mapping news",
+  generating_insights: "Writing insights",
+  complete: "Complete",
+  degraded: "Limited confidence",
+  failed: "Failed",
+};
+
+const STATUS_TONES: Record<string, "brand" | "success" | "warning" | "danger"> = {
+  complete: "success",
+  degraded: "warning",
+  failed: "danger",
+};
+
+export type AnalysisStepStatus = "complete" | "current" | "upcoming" | "stopped";
+
+/**
+ * Status of one pipeline step for a run. A finished run (complete/degraded) has finished every
+ * step, including the last "Preparing the feed" step. A failed run records no failing stage
+ * (progress resets to 0), so its steps read "stopped" rather than implying they will still run.
+ */
+export function analysisStepStatus(
+  runStatus: string | undefined,
+  stepIndex: number,
+): AnalysisStepStatus {
+  if (runStatus === "complete" || runStatus === "degraded") return "complete";
+  if (runStatus === "failed") return "stopped";
+  const currentIndex = runStatus
+    ? STAGE_ORDER.indexOf(runStatus as (typeof STAGE_ORDER)[number])
+    : -1;
+  if (currentIndex > stepIndex) return "complete";
+  if (currentIndex === stepIndex) return "current";
+  return "upcoming";
+}
+
 interface RunState {
   id: string;
   status: string;
@@ -120,11 +157,8 @@ export function AnalysisRunTrigger({
     };
   }, [portfolioId, fetchRun, supabase]);
 
-  const normalizedStageStatus =
-    run?.status === "degraded" ? "complete" : run?.status;
-  const currentIndex = normalizedStageStatus
-    ? STAGE_ORDER.indexOf(normalizedStageStatus as (typeof STAGE_ORDER)[number])
-    : -1;
+  const statusLabel = run?.status ? (STATUS_LABELS[run.status] ?? run.status) : "Idle";
+  const statusTone = (run?.status && STATUS_TONES[run.status]) || "brand";
 
   const completedTimeStr = run?.completedAt
     ? `Completed ${formatAppDateTime(run.completedAt)}`
@@ -136,9 +170,9 @@ export function AnalysisRunTrigger({
     <>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="space-y-3">
-          <Badge tone="brand">
+          <Badge tone={statusTone}>
             <BrainCircuit className="h-3.5 w-3.5" />
-            {run?.status ?? "idle"}
+            {statusLabel}
           </Badge>
           <h2 className="text-3xl font-semibold text-white">
             {run?.status === "complete"
@@ -158,11 +192,11 @@ export function AnalysisRunTrigger({
                 ? "The latest run finished, but enough AI steps failed that results may be incomplete. Re-run later for a cleaner output."
               : isRunActive
                 ? "Fetching news, enriching articles, and generating insights."
-                : "Your feed updates automatically every 20 minutes. No manual refresh needed."}
+                : "Analysis re-runs automatically when new stories arrive. No manual refresh needed."}
           </p>
           <div className="mt-2 flex items-center gap-2 text-sm text-slate-400">
             <Clock className="h-4 w-4" />
-            <span>Updates automatically every 20 minutes</span>
+            <span>New stories are checked every 20 minutes; analysis re-runs only when there are new ones</span>
           </div>
         </div>
         <div className="rounded-3xl border border-white/10 bg-white/6 p-5">
@@ -187,14 +221,7 @@ export function AnalysisRunTrigger({
       <div className="grid gap-3">
         {STAGE_ORDER.map((stage, index) => {
           const meta = STEP_LABELS[stage] ?? { title: stage, detail: "" };
-          const stepStatus =
-            currentIndex > index
-              ? "complete"
-              : currentIndex === index
-                ? run?.status === "failed"
-                  ? "upcoming"
-                  : "current"
-                : "upcoming";
+          const stepStatus = analysisStepStatus(run?.status, index);
           return (
             <div
               key={stage}
@@ -230,7 +257,7 @@ export function AnalysisRunTrigger({
       {!isRunActive && !run?.status && (
         <div className="rounded-2xl border border-white/10 bg-white/4 p-5">
           <p className="text-sm text-slate-400">
-            Your feed is built from a shared news pool that refreshes automatically
+            Your feed is built from a shared news pool that is checked for new stories
             every 20 minutes. Articles are matched against your portfolio holdings
             and watchlist symbols.
           </p>

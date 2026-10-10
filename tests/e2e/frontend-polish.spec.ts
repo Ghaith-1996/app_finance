@@ -153,6 +153,21 @@ test("E2E-00: real use-case timers stop after pointer selection and keyboard foc
   proof("real observer/timers: advance after entering viewport; hover unchanged; pointer choice and keyboard focus stop cycling; mesh responds to theme, width and OS preference", true);
 });
 
+test("E2E-00: enabling reduced motion stops an already running use-case cycle", async ({ page, proof }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.goto("/");
+  const section = await revealCases(page);
+  const cards = section.locator("button[aria-pressed]:visible");
+  await expect(cards.nth(1)).toHaveAttribute("aria-pressed", "true", { timeout: 6500 });
+  // Chromium changes the actual media query and dispatches its native change event.
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  expect(await page.getByTestId("hero-mesh").evaluate((element) => getComputedStyle(element, "::before").animationName)).toBe("none");
+  await page.waitForTimeout(4500);
+  await expect(cards.nth(1)).toHaveAttribute("aria-pressed", "true");
+  proof("a native reduced-motion preference change after the first real interval tick stops subsequent cycling", true);
+});
+
 test("E2E-05: reduced-motion feed deep links and pagination perform native instant scrolling", async ({ page, context, users, proof }) => {
   test.setTimeout(120_000);
   await page.setViewportSize({ width: 1100, height: 900 });

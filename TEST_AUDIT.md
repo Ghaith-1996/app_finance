@@ -33,6 +33,12 @@ Le nouveau commentaire de revue est reproduit par un septième parcours : focus 
 
 La même commande qualifie les sept parcours après correction (namespace vert `pf-e2e-b8979f42-25c`, HEAD `c39e9363c7a2e041a5b465433916bb94f47e60af` avec patch fingerprint `ae55aa0546db07bb3b5922d76ad2fc90b03d6864b2922131094195a4361c4383`). Le focus est natif, l'ordre est contrôlé avec l'option navigateur `preventScroll` ; observer et timers ne sont pas simulés. Le cas existant continue de vérifier le cycle sans interaction et l'arrêt après révélation. Couches et limites du runner restent celles déclarées ci-dessus ; aucun nouveau cas unitaire n'est ajouté ni retiré.
 
+### Suivi : changement de préférence pendant le cycle
+
+Un huitième parcours attend le premier tick du vrai timer, active ensuite la préférence reduced-motion dans Chromium et vérifie que la carte sélectionnée reste stable pendant un intervalle complet. Avant correction, la carte suivante devient active (namespace rouge `pf-e2e-a464da5d-5a1`). Le cycle écoute désormais l'événement natif `change` de MediaQueryList et retire ce listener à la destruction de l'effet.
+
+Les huit parcours passent avec la même commande après correction : namespace vert `pf-e2e-bc1056a2-e91`, HEAD `0118e494fe70b573fdf2f448c61c4950b53b8667` avec patch fingerprint `33b7a875f35921d29596f455253a9da68ffc6c7dbc4c6ad2711546c5c73a7056`. Préférence, événement et timer sont réels ; aucun nouveau cas unitaire n'est ajouté ou retiré. Cette preuve Chromium ne qualifie pas les autres moteurs de navigateur.
+
 ## Vitest decisions
 
 Filenames are relative to tests/. Counts compare the intake suite with the retained suite; renamed cases retain their count.

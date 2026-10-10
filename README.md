@@ -164,7 +164,7 @@ It does not yet fully report billing reconciliation drift or per-portfolio analy
 
 ### Isolated local E2E
 
-`npm run test:e2e` builds a disposable Node22/Python3.11/Chromium image, starts a fresh Supabase2.119.0 stack, applies all44 migrations in lexical order, and runs the production Next app and Playwright. Docker's `default` context must be available. Set `E2E_SUPABASE_BIN` to the installed2.119.0 CLI executable; install that CLI outside this checkout. On Windows use its native `supabase.exe`. Set `E2E_RESULTS_DIR` to choose an external proof directory.
+`npm run test:e2e` builds a disposable Node22/Python3.11/Chromium image, starts a fresh Supabase2.119.0 stack, applies all47 migrations in lexical order, and runs the production Next app and Playwright. Docker's `default` context must be available. Set `E2E_SUPABASE_BIN` to the installed2.119.0 CLI executable; install that CLI outside this checkout. On Windows use its native `supabase.exe`. Set `E2E_RESULTS_DIR` to choose an external proof directory.
 
 The runner supplies fictitious provider credentials and locally generated Auth credentials. It does not load the project `.env`. External provider HTTP is intercepted; the app, Auth, PostgREST, RLS, RPCs, SDKs, parsers and Python subprocesses execute normally. The internal Docker network blocks external egress during scenarios. OAuth redirects and real provider services still require the separately authorized staging checks below.
 

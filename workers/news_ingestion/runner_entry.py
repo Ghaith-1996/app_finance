@@ -12,6 +12,7 @@ import ipaddress
 import json
 import logging
 import os
+import signal
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -219,6 +220,11 @@ def process_manifest(path: Path, *, index: int, workers: int) -> dict:
             "assigned": len(selected), "inserted": inserted, "skipped": skipped}
 
 
+def _exit_on_sigterm(signum, frame):
+    logger.warning("Received SIGTERM; stopping worker")
+    raise SystemExit(128 + signum)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Local Pulsefolio Runner adapter")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -255,6 +261,10 @@ def main(argv: list[str] | None = None) -> int:
         raw_index = args.index if args.index is not None else os.environ.get("JOB_COMPLETION_INDEX")
         if raw_index is None:
             raise ValueError("Missing Kubernetes JOB_COMPLETION_INDEX")
+        # As container PID 1, Python ignores SIGTERM unless a handler exists; without it a
+        # deleted/cancelled Pod keeps inserting until SIGKILL. Inserts are idempotent, so
+        # stopping mid-partition is safe and the retried index resumes.
+        signal.signal(signal.SIGTERM, _exit_on_sigterm)
         summary = process_manifest(args.manifest, index=int(raw_index), workers=args.workers)
         print(json.dumps(summary, separators=(",", ":")), flush=True)
         return 0

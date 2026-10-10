@@ -101,6 +101,29 @@ for (const width of [1440, 390]) {
   });
 }
 
+test("E2E-00: focus before reveal prevents a later use-case timer from starting", async ({ page, proof }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.goto("/");
+  // Exercise a hydrated control without scrolling the use-case section into view.
+  const mesh = page.getByTestId("hero-mesh");
+  const initialBackground = await mesh.evaluate((element) => getComputedStyle(element, "::before").backgroundImage);
+  await page.getByRole("button", { name: /theme/i }).click();
+  await expect.poll(() => mesh.evaluate((element) => getComputedStyle(element, "::before").backgroundImage)).not.toBe(initialBackground);
+  const section = page.locator("#use-cases");
+  const firstCard = section.locator("button[aria-pressed]:visible").first();
+  await expect(section.locator(".uc-animate-fade-up")).toHaveCount(0);
+  expect(await section.evaluate((element) => element.getBoundingClientRect().top)).toBeGreaterThanOrEqual(900);
+  // Native focus dispatches the real focus event; preventScroll makes its ordering explicit.
+  await firstCard.evaluate((element: HTMLElement) => element.focus({ preventScroll: true }));
+  await expect(firstCard).toBeFocused();
+  await expect(section.locator(".uc-animate-fade-up")).toHaveCount(0);
+  await revealCases(page); // Trigger the actual IntersectionObserver after interaction.
+  await page.waitForTimeout(4500);
+  await expect(firstCard).toHaveAttribute("aria-pressed", "true");
+  proof("native focus before the real observer reveals the section permanently prevents subsequent cycling; no observer or timer mocks", true);
+});
+
 test("E2E-00: real use-case timers stop after pointer selection and keyboard focus", async ({ page, proof }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.emulateMedia({ reducedMotion: "no-preference" });

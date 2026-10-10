@@ -27,6 +27,8 @@ export function UseCases() {
   const autoAdvanceTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const stopAutoAdvance = useCallback(() => {
+    // Remember early focus/selection even before the observer starts a timer.
+    hasAutoAdvanced.current = true;
     if (autoAdvanceTimer.current === null) return;
     clearInterval(autoAdvanceTimer.current);
     autoAdvanceTimer.current = null;

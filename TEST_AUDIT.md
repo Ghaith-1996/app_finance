@@ -27,6 +27,12 @@ Commande reproductible et prérequis : `npm run test:e2e -- --frontend`, voir RE
 
 Les fixtures créent uniquement comptes, portefeuille, articles et statuts d'analyse jetables. CSS, observer, timers, scroll, application compilée, Auth, PostgREST et RLS sont réels. HTTP fournisseurs et widget Turnstile sont simulés par le runner existant. L'absence d'API navigateur est une injection limitée, pas une qualification des anciens navigateurs. La livraison realtime est désactivée dans ce stack ; la présentation des statuts ne prouve pas une génération AI ou une livraison realtime réussie. Les captures exportées concernent uniquement les pages publiques.
 
+### Suivi : focus avant le démarrage du cycle
+
+Le nouveau commentaire de revue est reproduit par un septième parcours : focus natif sur la première carte encore hors viewport avec `preventScroll`, puis révélation par le vrai IntersectionObserver et attente d'un intervalle natif complet. Avant correction, la sélection devient `false` malgré le focus (namespace rouge `pf-e2e-424228a1-f3e`). `stopAutoAdvance` marque désormais le cycle comme déjà traité avant son retour lorsque le timer est absent ; le garde existant empêche son démarrage ultérieur.
+
+La même commande qualifie les sept parcours après correction (namespace vert `pf-e2e-b8979f42-25c`, HEAD `c39e9363c7a2e041a5b465433916bb94f47e60af` avec patch fingerprint `ae55aa0546db07bb3b5922d76ad2fc90b03d6864b2922131094195a4361c4383`). Le focus est natif, l'ordre est contrôlé avec l'option navigateur `preventScroll` ; observer et timers ne sont pas simulés. Le cas existant continue de vérifier le cycle sans interaction et l'arrêt après révélation. Couches et limites du runner restent celles déclarées ci-dessus ; aucun nouveau cas unitaire n'est ajouté ni retiré.
+
 ## Vitest decisions
 
 Filenames are relative to tests/. Counts compare the intake suite with the retained suite; renamed cases retain their count.

@@ -224,7 +224,7 @@ if os.environ.get('E2E_TRANSPORT_ONLY') != '1':
       await command(process.execPath, ["node_modules/@playwright/test/cli.js", "test", "frontend-polish"], { env, label: "browser frontend polish scenarios" });
     } else {
       await command(process.execPath, ["node_modules/@playwright/test/cli.js", "test", "session-import", "--grep-invert", "foundation:"], { env, label: "browser session/import scenarios" });
-      await command(process.execPath, ["node_modules/@playwright/test/cli.js", "test", "portfolio-feed|chat-thesis-community|billing-notifications|news-workers|frontend-polish"], { env, label: "browser remaining scenarios" });
+      await command(process.execPath, ["node_modules/@playwright/test/cli.js", "test", "portfolio-feed|chat-thesis-community|billing-notifications|news-workers|frontend-polish|ai-provider-routing"], { env, label: "browser remaining scenarios" });
     }
   } finally { next.kill("SIGTERM"); }
 }

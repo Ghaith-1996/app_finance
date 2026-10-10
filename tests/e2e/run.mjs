@@ -234,7 +234,7 @@ function failureLocation(output = "") {
   const errors = [...output.matchAll(/^\s*Error: (.+)$/gm)].map(([, line]) => {
     if (/strict mode violation/.test(line)) return `strict mode violation (${line.match(/resolved to (\d+) elements/)?.[1] ?? "?"} elements)`;
     if (/Test timeout of \d+ms exceeded/.test(line)) return "test timeout";
-    return line.match(/^expect\((?:locator|page|received)\)\.\w+\(\)/)?.[0] ?? "other";
+    return line.match(/^expect\((?:locator|page|received)\)\.\w+\((?:expected)?\)/)?.[0] ?? "other";
   });
   const received = [...output.matchAll(/^\s*Received(?: string)?: (<element\(s\) not found>|hidden|visible)\s*$/gm)].map((match) => match[1]);
   return {

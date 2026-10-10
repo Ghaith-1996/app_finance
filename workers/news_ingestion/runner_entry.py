@@ -178,9 +178,14 @@ def make_local_client():
     if not key:
         raise ValueError("Missing local SUPABASE_SERVICE_ROLE_KEY")
     validate_local_supabase_url(url)
-    from supabase import create_client
+    import httpx
+    from postgrest.constants import DEFAULT_POSTGREST_CLIENT_TIMEOUT
+    from supabase import ClientOptions, create_client
 
-    return create_client(url, key)
+    # The default clients follow redirects, which would replay the insert and the apikey
+    # header to a nonlocal target; the guard above only vets the configured URL.
+    http_client = httpx.Client(follow_redirects=False, timeout=DEFAULT_POSTGREST_CLIENT_TIMEOUT)
+    return create_client(url, key, options=ClientOptions(httpx_client=http_client))
 
 
 def process_manifest(path: Path, *, index: int, workers: int) -> dict:

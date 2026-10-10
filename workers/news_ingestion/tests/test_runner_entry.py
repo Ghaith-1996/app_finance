@@ -6,12 +6,16 @@ A real Supabase/Kubernetes integration run is still required before release.
 from __future__ import annotations
 
 import contextlib
+import importlib.util
 import io
 import json
 import os
+import shutil
 import tempfile
+import threading
 import unittest
 from datetime import datetime, timezone
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from unittest.mock import patch
 
@@ -25,6 +29,9 @@ from workers.news_ingestion.runner_entry import (
     main,
 )
 from workers.news_ingestion.schema import NormalizedArticle
+
+# Not find_spec("supabase"): the repo's SQL supabase/ folder is a namespace package.
+needs_client = unittest.skipUnless(importlib.util.find_spec("postgrest"), "supabase client not installed")
 
 
 def sample_article(external_id: str) -> NormalizedArticle:
@@ -93,6 +100,81 @@ class RunnerContractTests(unittest.TestCase):
             result = main(["discover", "--sources", "gnews"])
         self.assertEqual(result, 1)
         self.assertEqual(out.getvalue(), "")
+
+    def _serve(self, handler):
+        server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        return f"http://127.0.0.1:{server.server_address[1]}"
+
+    def _process_against(self, url):
+        folder = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, folder, True)
+        manifest_path = Path(folder) / "manifest.json"
+        manifest_path.write_text(json.dumps({"version": MANIFEST_VERSION,
+                                             "articles": [article_to_dict(sample_article("r"))]}))
+        env = {"PULSEFOLIO_RUNNER_LOCAL": "1", "SUPABASE_URL": url,
+               "SUPABASE_SERVICE_ROLE_KEY": "local-test-key"}
+        with patch.dict(os.environ, env):
+            return process_manifest(manifest_path, index=0, workers=1)
+
+    @needs_client
+    def test_insert_does_not_follow_redirects_with_service_role_key(self):
+        from postgrest.exceptions import APIError
+
+        # Real pinned client over HTTP; both statuses preserve the insert on redirect.
+        leaked = []
+
+        class Target(BaseHTTPRequestHandler):
+            def do_POST(self):
+                leaked.append(dict(self.headers))
+                self.send_response(201)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(b"[]")
+
+            def log_message(self, *args):
+                pass
+
+        target = self._serve(Target)
+
+        for status in (307, 308):
+            with self.subTest(status=status):
+                seen = []
+
+                class Redirector(Target):
+                    def do_POST(self):
+                        seen.append(self.headers.get("apikey"))
+                        self.send_response(status)
+                        self.send_header("Location", target + self.path)
+                        self.send_header("Content-Length", "0")
+                        self.end_headers()
+
+                with self.assertRaises(APIError) as error:
+                    self._process_against(self._serve(Redirector))
+                self.assertEqual(error.exception.code, status)
+                self.assertEqual(seen, ["local-test-key"])
+                self.assertEqual(leaked, [], "insert and service-role key replayed to the redirect target")
+
+    @needs_client
+    def test_insert_still_reaches_local_endpoint_with_key(self):
+        seen = []
+
+        class Local(BaseHTTPRequestHandler):
+            def do_POST(self):
+                seen.append((self.path, self.headers.get("apikey"), self.headers.get("Authorization")))
+                self.send_response(201)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(b"[]")
+
+            def log_message(self, *args):
+                pass
+
+        summary = self._process_against(self._serve(Local))
+        self.assertEqual(summary["inserted"], 1)
+        self.assertEqual(seen, [("/rest/v1/news_items", "local-test-key", "Bearer local-test-key")])
 
     def test_discover_stdout_is_exactly_one_json_document(self):
         manifest = {"version": MANIFEST_VERSION, "provider_set": "current",

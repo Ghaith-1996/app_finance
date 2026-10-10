@@ -151,12 +151,11 @@ def _is_local_address(address: ipaddress.IPv4Address | ipaddress.IPv6Address) ->
     return address.is_private or address.is_loopback
 
 
-def pin_local_supabase_url(url: str) -> str:
-    """Return url with its host replaced by a verified private/loopback address.
+def _verified_local_addresses(url: str):
+    """Return the parsed URL and every address its host reaches, all private/loopback.
 
     A local-looking name proves nothing (a dotless alias can resolve to a public
-    address), so every resolved address must be local, and the client connects
-    to the checked address instead of resolving the name again.
+    address), so every resolved address must be local.
     """
     parsed = urlsplit(url)
     host = (parsed.hostname or "").lower()
@@ -177,12 +176,34 @@ def pin_local_supabase_url(url: str) -> str:
             infos = socket.getaddrinfo(host, parsed.port or 80, type=socket.SOCK_STREAM)
         except OSError as exc:
             raise ValueError("Runner cannot resolve the Supabase host") from exc
-        addresses = [ipaddress.ip_address(info[4][0]) for info in infos]
+        addresses = list(dict.fromkeys(ipaddress.ip_address(info[4][0]) for info in infos))
     if not addresses or not all(_is_local_address(address) for address in addresses):
         raise ValueError("Runner refuses a nonlocal Supabase URL")
+    return parsed, addresses
 
-    pinned = str(addresses[0])
-    if addresses[0].version == 6:
+
+def pin_local_supabase_url(url: str, timeout: float) -> str:
+    """Return url with its host replaced by a verified private/loopback address.
+
+    The client connects to a checked address instead of resolving the name again.
+    Like socket.create_connection, it falls back across the name's answers in
+    resolver order (localhost: ::1, then 127.0.0.1 for an IPv4-only listener),
+    but only across the verified ones; the probe is a bare TCP connect, no request.
+    """
+    parsed, addresses = _verified_local_addresses(url)
+    chosen = addresses[0]
+    if len(addresses) > 1:
+        for address in addresses:
+            try:
+                with socket.create_connection((str(address), parsed.port or 80), timeout=timeout):
+                    chosen = address
+                    break
+            except OSError:
+                continue
+        # None accepted: keep the first, so the client reports the usual connection error.
+
+    pinned = str(chosen)
+    if chosen.version == 6:
         pinned = f"[{pinned}]"
     if parsed.port is not None:
         pinned = f"{pinned}:{parsed.port}"
@@ -191,7 +212,7 @@ def pin_local_supabase_url(url: str) -> str:
 
 def validate_local_supabase_url(url: str) -> str:
     """Fail closed when a runner accidentally receives a hosted Supabase URL."""
-    pin_local_supabase_url(url)
+    _verified_local_addresses(url)
     return url
 
 
@@ -202,11 +223,11 @@ def make_local_client():
     key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
     if not key:
         raise ValueError("Missing local SUPABASE_SERVICE_ROLE_KEY")
-    url = pin_local_supabase_url(url)
     import httpx
     from postgrest.constants import DEFAULT_POSTGREST_CLIENT_TIMEOUT
     from supabase import ClientOptions, create_client
 
+    url = pin_local_supabase_url(url, DEFAULT_POSTGREST_CLIENT_TIMEOUT)
     # Redirects and inherited proxies can send credentials outside the validated local endpoint.
     http_client = httpx.Client(
         follow_redirects=False, trust_env=False, timeout=DEFAULT_POSTGREST_CLIENT_TIMEOUT

@@ -30,7 +30,8 @@ and it refuses to run unless all of the following are true:
 - `SUPABASE_URL` is an HTTP local/Docker endpoint (never hosted HTTPS); IP hosts
   must be canonical private/loopback addresses (integer/hex IPv4 forms are refused),
   and every address a host name resolves to must be private/loopback; writes then
-  connect to that checked address, not to a fresh resolution of the name
+  connect to the first checked address that accepts a connection (in resolver
+  order, e.g. `::1` then `127.0.0.1`), not to a fresh resolution of the name
 - `SUPABASE_SERVICE_ROLE_KEY` is a **local** service-role key.
 
 The existing `news_items` partial unique index on `(source_type, external_id)`

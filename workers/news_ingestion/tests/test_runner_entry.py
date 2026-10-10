@@ -35,6 +35,16 @@ from workers.news_ingestion.schema import NormalizedArticle
 needs_client = unittest.skipUnless(importlib.util.find_spec("postgrest"), "supabase client not installed")
 
 
+class DrainingHandler(BaseHTTPRequestHandler):
+    """Consume the request body before replying: closing with it unread resets the client (Windows)."""
+
+    def parse_request(self):
+        parsed = super().parse_request()
+        if parsed:
+            self.rfile.read(int(self.headers.get("Content-Length") or 0))
+        return parsed
+
+
 def sample_article(external_id: str) -> NormalizedArticle:
     return NormalizedArticle(
         source_type="gnews",
@@ -103,11 +113,8 @@ class RunnerContractTests(unittest.TestCase):
                 with self.subTest(host=host), self.assertRaises(ValueError):
                     validate_local_supabase_url(f"http://{host}:8000")
 
-    @needs_client
-    def test_service_role_key_pinned_to_validated_address(self):
-        seen = []
-
-        class Local(BaseHTTPRequestHandler):
+    def _serve_ipv4_insert_target(self, seen):
+        class Local(DrainingHandler):
             def do_POST(self):
                 seen.append(self.headers.get("apikey"))
                 self.send_response(201)
@@ -118,13 +125,43 @@ class RunnerContractTests(unittest.TestCase):
             def log_message(self, *args):
                 pass
 
-        port = self._serve(Local).rsplit(":", 1)[1]
+        return self._serve(Local).rsplit(":", 1)[1]
+
+    @needs_client
+    def test_service_role_key_pinned_to_validated_address(self):
+        seen = []
+        port = self._serve_ipv4_insert_target(seen)
         # Only the validation lookup answers: a connection that re-resolves the name (and could be
         # rebound off-host) fails, so success proves the client uses the checked address.
         with self._resolving({"supabase": [["127.0.0.1"]]}):
             summary = self._process_against(f"http://supabase:{port}")
         self.assertEqual(summary["inserted"], 1)
         self.assertEqual(seen, ["local-test-key"])
+
+    @needs_client
+    def test_later_verified_address_used_when_earlier_one_refuses(self):
+        seen = []
+        port = self._serve_ipv4_insert_target(seen)
+        # An IPv4-only listener behind a name whose first local answer is ::1 (as localhost often is).
+        for url, answers in ((f"http://supabase:{port}", {"supabase": [["::1", "127.0.0.1"]]}),
+                             (f"http://localhost:{port}", {})):
+            with self.subTest(url=url):
+                seen.clear()
+                with self._resolving(answers):
+                    summary = self._process_against(url)
+                self.assertEqual(summary["inserted"], 1)
+                self.assertEqual(seen, ["local-test-key"])
+
+    @needs_client
+    def test_no_reachable_verified_address_fails_to_connect(self):
+        import httpx
+
+        with socket.socket() as unused:
+            unused.bind(("127.0.0.1", 0))
+            port = unused.getsockname()[1]
+        with self._resolving({"supabase": [["::1", "127.0.0.1"]]}), \
+             self.assertRaises(httpx.ConnectError):
+            self._process_against(f"http://supabase:{port}")
 
     def test_noncanonical_public_ipv4_hosts_rejected(self):
         # Each of these is resolved by the socket layer to public 8.8.8.8.
@@ -179,7 +216,7 @@ class RunnerContractTests(unittest.TestCase):
         # Real pinned client over HTTP; both statuses preserve the insert on redirect.
         leaked = []
 
-        class Target(BaseHTTPRequestHandler):
+        class Target(DrainingHandler):
             def do_POST(self):
                 leaked.append(dict(self.headers))
                 self.send_response(201)
@@ -214,7 +251,7 @@ class RunnerContractTests(unittest.TestCase):
     def test_insert_still_reaches_local_endpoint_with_key(self):
         seen = []
 
-        class Local(BaseHTTPRequestHandler):
+        class Local(DrainingHandler):
             def do_POST(self):
                 seen.append((self.path, self.headers.get("apikey"), self.headers.get("Authorization")))
                 self.send_response(201)
@@ -234,7 +271,7 @@ class RunnerContractTests(unittest.TestCase):
         seen = []
         proxied = []
 
-        class Local(BaseHTTPRequestHandler):
+        class Local(DrainingHandler):
             requests = seen
 
             def do_POST(self):

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Holding, PortfolioOverview } from "@/lib/types";
@@ -105,6 +105,36 @@ describe("PortfolioPricingSection", () => {
     vi.restoreAllMocks();
     mocked.refreshPortfolioPricingSnapshot.mockReset();
     mocked.routerRefresh.mockReset();
+  });
+
+  it("shows refreshed server holdings and chart after purchases and full sales without remounting", async () => {
+    mocked.refreshPortfolioPricingSnapshot.mockResolvedValue({ status: "no_quotes", overview: null, holdings: null });
+    const props = { portfolioId: "portfolio-1", portfolioCreatedAt: "2026-03-20T00:00:00.000Z", initialOverview, initialHoldings };
+    const view = render(<PortfolioPricingSection {...props} />);
+    await waitFor(() => expect(mocked.refreshPortfolioPricingSnapshot).toHaveBeenCalledTimes(1));
+    view.rerender(<PortfolioPricingSection {...props} initialOverview={refreshedOverview} initialHoldings={refreshedHoldings} />);
+    expect(screen.getByText("Chart 24000")).toBeTruthy();
+    expect(screen.getByText("Holdings 2")).toBeTruthy();
+    view.rerender(<PortfolioPricingSection {...props} initialOverview={{ ...initialOverview, totalValue: 0 }} initialHoldings={[]} />);
+    expect(screen.getByText("Chart 0")).toBeTruthy();
+    expect(screen.queryByText("Holdings 2")).toBeNull();
+    expect(screen.getByText("No holdings available yet.")).toBeTruthy();
+    expect(mocked.refreshPortfolioPricingSnapshot).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not overwrite new server holdings with an older pending auto refresh", async () => {
+    let resolveRefresh!: (value: unknown) => void;
+    mocked.refreshPortfolioPricingSnapshot.mockReturnValue(new Promise((resolve) => { resolveRefresh = resolve; }));
+    const props = { portfolioId: "portfolio-1", portfolioCreatedAt: "2026-03-20T00:00:00.000Z", initialOverview, initialHoldings };
+    const view = render(<PortfolioPricingSection {...props} />);
+    await waitFor(() => expect(mocked.refreshPortfolioPricingSnapshot).toHaveBeenCalledTimes(1));
+    const newerOverview = { ...initialOverview, totalValue: 0 };
+    const newerHoldings: Holding[] = [];
+    view.rerender(<PortfolioPricingSection {...props} initialOverview={newerOverview} initialHoldings={newerHoldings} />);
+    await act(async () => { resolveRefresh({ status: "updated", overview: refreshedOverview, holdings: refreshedHoldings }); });
+    expect(screen.getByText("Chart 0")).toBeTruthy();
+    expect(screen.queryByText("Holdings 2")).toBeNull();
+    expect(screen.queryByText("Auto-refreshing...")).toBeNull();
   });
 
   it("triggers one silent auto refresh on mount and updates chart and holdings", async () => {

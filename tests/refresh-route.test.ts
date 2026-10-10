@@ -210,7 +210,7 @@ describe("POST /api/news/refresh", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(mockExtractPublisherContent).toHaveBeenCalledWith(
-      supabaseMock,
+      "service-mock",
       { articleIds: ["id-e1", "id-n1", "id-n2", "id-g1", "id-f1", "id-f2"] },
     );
     expect(body.ingestBreakdown.edgar.inserted).toBe(1);

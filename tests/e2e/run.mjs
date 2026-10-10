@@ -37,14 +37,30 @@ async function freePort() {
   return port;
 }
 
+const excludedSourceDirectories = new Set([".git", ".codex", ".agents", ".aws", ".claude", "node_modules", ".next", ".temp", "__pycache__", ".venv", ".pytest_cache", ".ruff_cache", "coverage", "e2e-results", "test-results", "playwright-report", ".edgar_data", ".yfinance_data", ".yfinance_tmp", ".yfinance_local"]);
+function excludedSourcePath(path) {
+  return path.split("/").some((part) => excludedSourceDirectories.has(part) || part.startsWith(".env")) || /\.(tsbuildinfo|pyc|pem|key)$/.test(path);
+}
+async function sourceFiles(directory = root, prefix = "") {
+  const paths = [];
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const path = prefix + entry.name;
+    if (excludedSourcePath(path)) continue;
+    if (entry.isDirectory()) paths.push(...await sourceFiles(join(directory, entry.name), `${path}/`));
+    else if (entry.isFile()) paths.push(path);
+  }
+  return paths;
+}
+
 async function outsideRun() {
+  const keepDiagnostic = process.env.E2E_KEEP_DIAGNOSTIC === "1";
   const temp = await mkdtemp(join(tmpdir(), `${owned}-`));
   const resultDir = resolve(process.env.E2E_RESULTS_DIR ?? join(root, "e2e-results"), owned);
   await mkdir(resultDir, { recursive: true });
   const cli = process.env.E2E_SUPABASE_BIN ?? "supabase";
   const docker = (args, options) => command("docker", args, options);
   const supabase = (args) => command(cli, [...args, "--workdir", temp], { cwd: temp });
-  const proof = { namespace: owned, status: "blocked", gates: [], migrations: [], qualifiedScenarios: [], removedTests: 0 };
+  const proof = { namespace: owned, status: "blocked", gates: [], migrations: [], qualifiedScenarios: [], executedScenarioFamilies: [], subOracleStatus: "See external L-E2E-sub-oracles.md; an executed family does not qualify every sub-oracle", removedTests: 0 };
   let started = false;
   let network = false;
   let image = false;
@@ -57,6 +73,15 @@ async function outsideRun() {
     assert.equal(migrations.length, 47, "Review the migration manifest before changing expected count");
     proof.hashes = {};
     for (const path of ["package-lock.json", "requirements.lock", "next.config.ts", ...migrations.map((name) => `supabase/migrations/${name}`)]) proof.hashes[path] = createHash("sha256").update(await readFile(join(root, path))).digest("hex");
+    const trackedPaths = (await command("git", ["ls-files", "--cached", "-z"])).split("\0").filter(Boolean);
+    const sourcePaths = [...new Set([...trackedPaths, ...await sourceFiles()])].sort();
+    proof.sourceManifest = {};
+    for (const path of sourcePaths) {
+      if (excludedSourcePath(path)) continue;
+      try { proof.sourceManifest[path] = createHash("sha256").update(await readFile(join(root, path))).digest("hex"); }
+      catch (error) { if (error.code === "ENOENT") proof.sourceManifest[path] = "deleted"; else throw error; }
+    }
+    proof.patchFingerprint = createHash("sha256").update(JSON.stringify(proof.sourceManifest)).digest("hex");
     console.log("E2E: building dependencies before isolated execution");
     await docker(["buildx", "build", "--load", "--label", `pulsefolio.e2e.owner=${owned}`, "-t", owned, "-f", "tests/e2e/Dockerfile", "."], { label: "dependency image build" });
     image = true;
@@ -68,6 +93,13 @@ async function outsideRun() {
     console.log("E2E: starting fresh owned Supabase stack");
     started = true;
     await supabase(["start", "-x", "realtime,storage-api,imgproxy,mailpit,postgres-meta,studio,edge-runtime,logflare,vector,supavisor"]);
+    const serviceNames = (await docker(["ps", "--format", "{{.Names}}"])).trim().split("\n").filter((name) => name.startsWith("supabase_") && name.endsWith(`_${owned}`)).sort();
+    proof.supabaseImages = [];
+    for (const name of serviceNames) {
+      const observed = JSON.parse((await docker(["inspect", "--format", '{"name":{{json .Name}},"imageId":{{json .Image}},"imageReference":{{json .Config.Image}}}', name])).trim());
+      observed.repoDigests = JSON.parse((await docker(["image", "inspect", "--format", "{{json .RepoDigests}}", observed.imageId])).trim()) ?? [];
+      proof.supabaseImages.push(observed);
+    }
     const status = JSON.parse(await supabase(["status", "-o", "json"]));
     assert.ok(status.ANON_KEY && status.SERVICE_ROLE_KEY);
     const db = `supabase_db_${owned}`;
@@ -89,6 +121,8 @@ async function outsideRun() {
       NEXT_PUBLIC_TURNSTILE_SITE_KEY: "1x00000000000000000000AA", TURNSTILE_SECRET_KEY: "e2e-fictitious",
       ADMIN_USER_EMAILS: `a-${owned}@example.invalid`, FINNHUB_API_KEY: "e2e-fictitious",
       CRON_SECRET: "e2e-fictitious-cron", DIGEST_CRON_SECRET: "e2e-fictitious-digest",
+      TWILIO_ACCOUNT_SID: "ACe2efictitious", TWILIO_AUTH_TOKEN: "e2e-fictitious", TWILIO_MESSAGING_SERVICE_SID: "MGe2efictitious",
+      RESEND_API_KEY: "re_e2e_fictitious", RESEND_FROM_EMAIL: "Fixture <fixture@example.invalid>",
       STRIPE_PREMIUM_PRICE_ID: "price_e2e_premium", STRIPE_ULTIMATE_PRICE_ID: "price_e2e_ultimate",
       AI_PROVIDER: "openrouter", OPENROUTER_API_KEY: "sk-or-e2e-fixture", OPENROUTER_MODEL: "stepfun/step-3.5-flash:free",
       OPENAI_API_KEY: "sk-e2e-fixture", ANTHROPIC_API_KEY: "sk-ant-e2e-fixture",
@@ -100,7 +134,9 @@ async function outsideRun() {
     proof.network = { internal: JSON.parse(await docker(["network", "inspect", owned]))[0].Internal, testContainer: `${owned}-tests`, gateway: `supabase_kong_${owned}` };
     assert.equal(proof.network.internal, true);
     console.log("E2E: running transport, authentication and browser gates");
-    await docker(["run", "--rm", "--name", `${owned}-tests`, "--label", `pulsefolio.e2e.owner=${owned}`, "--network", owned, "--env-file", envFile, "--mount", `type=bind,source=${resultDir},target=/proof`, owned], { label: "isolated E2E execution" });
+    await docker(["run", ...(keepDiagnostic ? [] : ["--rm"]), "--name", `${owned}-tests`, "--label", `pulsefolio.e2e.owner=${owned}`, "--network", owned, "--env-file", envFile, "--mount", `type=bind,source=${resultDir},target=/proof`, owned], { label: "isolated E2E execution" });
+    const assertions = (await readFile(join(resultDir, "assertions.jsonl"), "utf8")).split("\n").filter(Boolean).map((line) => JSON.parse(line));
+    proof.executedScenarioFamilies = [...new Set(assertions.map((row) => row.scenario.match(/^E2E-\d{2}/)?.[0]).filter(Boolean))].sort();
     proof.status = "passed";
   } catch (error) {
     proof.failure = error.message;
@@ -110,12 +146,16 @@ async function outsideRun() {
     }
     process.exitCode = 1;
   } finally {
-    if (started) {
+    if (keepDiagnostic) {
+      proof.diagnosticOnly = true;
+      console.log(`E2E: retained owned diagnostic resources ${owned}; private workdir ${temp}`);
+    }
+    if (started && !keepDiagnostic) {
       await docker(["rm", "-f", `${owned}-tests`]).catch(() => {});
       await supabase(["stop", "--no-backup"]).catch(() => { proof.cleanupFailure = true; });
     }
-    if (network) await docker(["network", "rm", owned]).catch(() => { proof.cleanupFailure = true; });
-    if (image) await docker(["image", "rm", owned]).catch(() => { proof.cleanupFailure = true; });
+    if (network && !keepDiagnostic) await docker(["network", "rm", owned]).catch(() => { proof.cleanupFailure = true; });
+    if (image && !keepDiagnostic) await docker(["image", "rm", owned]).catch(() => { proof.cleanupFailure = true; });
     await rm(join(temp, "container.env"), { force: true });
     await writeFile(join(resultDir, "runner.json"), JSON.stringify(proof, null, 2));
     console.log(`E2E: ${proof.status}; sanitized proof ${resultDir}`);
@@ -125,7 +165,7 @@ async function outsideRun() {
 async function insideRun() {
   assert.equal(process.env.NEXT_PUBLIC_SUPABASE_URL, "http://supabase:8000");
   const transportOnly = process.argv.includes("--transport-only");
-  const env = { ...process.env, E2E_TRANSPORT_ONLY: transportOnly ? "1" : "0", NODE_OPTIONS: "--import=/work/tests/e2e/external-http.mjs" };
+  const env = { ...process.env, TWELVE_DATA_API_KEY: "e2e-fictitious", NEWSAPI_KEY: "e2e-fictitious", NEWSAPI_AI_API_KEY: "e2e-fictitious", NEWSCATCHER_API_KEY: "e2e-fictitious", EDGAR_IDENTITY: "Local Fixture fixture@example.invalid", E2E_TRANSPORT_ONLY: transportOnly ? "1" : "0", NODE_OPTIONS: "--import=/work/tests/e2e/external-http.mjs" };
   const yahooResult = { quotes: [{ symbol: "AAA", shortname: "Fixture Alpha", exchange: "NMS", quoteType: "EQUITY", typeDisp: "equity", score: 1, index: "quotes", isYahooFinance: true }], news: [], nav: [], lists: [], explains: [], researchReports: [], screenerFieldResults: [], totalTime: 1, timeTakenForQuotes: 1, timeTakenForNews: 1, timeTakenForAlgowatchlist: 1, timeTakenForPredefinedScreener: 1, timeTakenForCrunchbase: 1, timeTakenForNav: 1, timeTakenForResearchReports: 1, timeTakenForScreenerField: 1, timeTakenForCulturalAssets: 1, timeTakenForSearchLists: 1, count: 1 };
   await writeFile(process.env.E2E_HTTP_FIXTURES, JSON.stringify({ scenario: "foundation", responses: [
     { origin: "https://transport.e2e.invalid", method: "GET", path: "/canary", body: { ok: true } },
@@ -163,9 +203,11 @@ if os.environ.get('E2E_TRANSPORT_ONLY') != '1':
     assert requests.get('http://supabase:8000/auth/v1/health', headers={'apikey':os.environ['NEXT_PUBLIC_SUPABASE_ANON_KEY']}).status_code == 200
 `;
   await command("python", ["-c", python + `\nsubprocess.run([sys.executable, '-c', ${JSON.stringify(python)}], check=True)\n`], { env, label: "Python requests/httpx/urllib/child gate" });
-  await writeFile("/proof/gates.json", JSON.stringify({ node: process.version, python: (await command("python", ["--version"], { env })).trim(), transport: ["node-fetch", "stripe-sdk", "yahoo-sdk", "python-requests", "python-httpx", "python-async-httpx", "python-urllib", "python-child"], authHealth: !transportOnly, unknownHttpRefused: true, scenariosQualified: false }, null, 2));
+  const { chromium } = await import("@playwright/test");
+  const chromiumVersion = (await command(chromium.executablePath(), ["--version"], { env, label: "observed Chromium version" })).trim();
+  await writeFile("/proof/gates.json", JSON.stringify({ node: process.version, python: (await command("python", ["--version"], { env })).trim(), chromium: chromiumVersion, versionSource: "executed binaries; locked package versions are separately hashed in runner.json", transport: ["node-fetch", "stripe-sdk", "yahoo-sdk", "python-requests", "python-httpx", "python-async-httpx", "python-urllib", "python-child"], authHealth: !transportOnly, unknownHttpRefused: true, scenariosQualified: false }, null, 2));
   if (transportOnly) return;
-  await command(process.execPath, ["node_modules/next/dist/bin/next", "build"], { env, label: "production Next build" });
+  if (!process.argv.includes("--reuse-build")) await command(process.execPath, ["node_modules/next/dist/bin/next", "build"], { env, label: "production Next build" });
   const next = spawn(process.execPath, ["node_modules/next/dist/bin/next", "start", "--hostname", "127.0.0.1"], { env, stdio: "ignore" });
   try {
     let ready = false;
@@ -176,13 +218,36 @@ if os.environ.get('E2E_TRANSPORT_ONLY') != '1':
     }
     assert.ok(ready, "Next production server did not become ready");
     await command(process.execPath, ["node_modules/@playwright/test/cli.js", "test", "session-import", "--grep", "foundation:"], { env, label: "browser foundation gate" });
-    await command(process.execPath, ["node_modules/@playwright/test/cli.js", "test", "--grep-invert", "foundation:"], { env, label: "browser scenarios" });
+    await command(process.execPath, ["node_modules/@playwright/test/cli.js", "test", "session-import", "--grep-invert", "foundation:"], { env, label: "browser session/import scenarios" });
+    await command(process.execPath, ["node_modules/@playwright/test/cli.js", "test", "portfolio-feed|chat-thesis-community|billing-notifications|news-workers"], { env, label: "browser remaining scenarios" });
   } finally { next.kill("SIGTERM"); }
+}
+
+// Sanitized pointer to a failing browser test for the exported proof: Playwright test titles and
+// spec source positions only, never assertion values, page content, headers or credentials.
+function failureLocation(output = "") {
+  const tests = [...output.matchAll(/^\s*\d+\) (?:\[[^\]]+\] › )?((?:[\w.-]+\/)*[\w.-]+\.spec\.ts:\d+:\d+) › (.+?)[\s─]*$/gm)]
+    .map((match) => `${match[1]} › ${match[2]}`);
+  // Stack-trace frames only: the reporter's progress lines also name every passing test's position.
+  const positions = [...output.matchAll(/^\s*at .*?tests\/e2e\/([\w.-]+\.spec\.ts:\d+:\d+)/gm)].map((match) => match[1]);
+  // Error category from a fixed vocabulary; matcher arguments and received values are dropped.
+  const errors = [...output.matchAll(/^\s*Error: (.+)$/gm)].map(([, line]) => {
+    if (/strict mode violation/.test(line)) return `strict mode violation (${line.match(/resolved to (\d+) elements/)?.[1] ?? "?"} elements)`;
+    if (/Test timeout of \d+ms exceeded/.test(line)) return "test timeout";
+    return line.match(/^expect\((?:locator|page|received)\)\.\w+\((?:expected)?\)/)?.[0] ?? "other";
+  });
+  const received = [...output.matchAll(/^\s*Received(?: string)?: (<element\(s\) not found>|hidden|visible)\s*$/gm)].map((match) => match[1]);
+  return {
+    tests: [...new Set(tests)],
+    positions: [...new Set(positions)].slice(0, 10),
+    errors: [...new Set(errors)].slice(0, 5),
+    received: [...new Set(received)],
+  };
 }
 
 try { await (inside ? insideRun() : outsideRun()); }
 catch (error) {
-  if (inside) await writeFile("/proof/failure.json", JSON.stringify({ stage: error.message }));
+  if (inside) await writeFile("/proof/failure.json", JSON.stringify({ stage: error.message, ...failureLocation(error.privateOutput) }));
   console.error(error.message);
   // Captured only into runner-owned private TEMP, never the exported proof directory.
   if (error.privateOutput) console.error(error.privateOutput);

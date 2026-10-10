@@ -118,10 +118,13 @@ export async function extractPublisherContent(
 
     if (!toQueue.length) return stats;
 
-    const { error: updateError } = await supabase
+    // Recheck eligibility in the write: extraction can finish after the select above.
+    const { data: queuedRows, error: updateError } = await supabase
       .from("news_items")
       .update({ extraction_status: "queued" })
-      .in("id", toQueue);
+      .in("id", toQueue)
+      .or("extraction_status.is.null,extraction_status.neq.complete")
+      .select("id");
 
     if (updateError) {
       stats.errors.push(updateError.message);
@@ -129,10 +132,12 @@ export async function extractPublisherContent(
       return stats;
     }
 
-    stats.queued = toQueue.length;
-    stats.attempted = toQueue.length;
-    stats.processedArticleIds = toQueue;
-    spawnArticleExtractionWorker(toQueue);
+    const queuedIds = (queuedRows ?? []).map((row) => row.id as string);
+    stats.skipped += toQueue.length - queuedIds.length;
+    stats.queued = queuedIds.length;
+    stats.attempted = queuedIds.length;
+    stats.processedArticleIds = queuedIds;
+    if (queuedIds.length) spawnArticleExtractionWorker(queuedIds);
     return stats;
   }
 
@@ -184,10 +189,12 @@ export async function extractPublisherContent(
 
   if (!ids.length) return stats;
 
-  const { error: updateError } = await supabase
+  const { data: queuedRows, error: updateError } = await supabase
     .from("news_items")
     .update({ extraction_status: "queued" })
-    .in("id", ids);
+    .in("id", ids)
+    .or("extraction_status.is.null,extraction_status.neq.complete")
+    .select("id");
 
   if (updateError) {
     stats.errors.push(updateError.message);
@@ -195,10 +202,12 @@ export async function extractPublisherContent(
     return stats;
   }
 
-  stats.queued = ids.length;
-  stats.attempted = ids.length;
-  stats.processedArticleIds = ids;
-  spawnArticleExtractionWorker(ids);
+  const queuedIds = (queuedRows ?? []).map((row) => row.id as string);
+  stats.skipped += ids.length - queuedIds.length;
+  stats.queued = queuedIds.length;
+  stats.attempted = queuedIds.length;
+  stats.processedArticleIds = queuedIds;
+  if (queuedIds.length) spawnArticleExtractionWorker(queuedIds);
 
   return stats;
 }

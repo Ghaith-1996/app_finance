@@ -74,3 +74,27 @@ jobs:
       # Rebuilds the schema from every migration in a disposable Supabase Postgres container,
       # replays upgrade seeds, and runs supabase/tests/*.test.sql (including concurrency races).
       - run: bash scripts/db/validate-migrations.sh
+
+  e2e:
+    name: Real local browser, Auth and workers
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install the pinned local CLI outside the checkout
+        run: |
+          npm install --prefix "$RUNNER_TEMP/e2e-cli" --no-save supabase@2.119.0
+          echo "E2E_SUPABASE_BIN=$RUNNER_TEMP/e2e-cli/node_modules/.bin/supabase" >> "$GITHUB_ENV"
+      - name: Run the isolated stack
+        run: node tests/e2e/run.mjs
+      - name: Upload sanitized proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-proof
+          retention-days: 7
+          path: e2e-results/
+          if-no-files-found: warn

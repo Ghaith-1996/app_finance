@@ -9,6 +9,7 @@ import assert from "node:assert/strict";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const inside = process.argv.includes("--inside");
+const frontendOnly = process.argv.includes("--frontend");
 const owned = `pf-e2e-${randomUUID().slice(0, 12)}`;
 const hostEnv = Object.fromEntries(["PATH", "Path", "SystemRoot", "WINDIR", "TEMP", "TMP", "HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "PROGRAMDATA", "ProgramFiles", "ProgramFiles(x86)", "ProgramW6432"].filter((key) => process.env[key]).map((key) => [key, process.env[key]]));
 Object.assign(hostEnv, { DOCKER_CONTEXT: "default", DO_NOT_TRACK: "1", SUPABASE_TELEMETRY_DISABLED: "1", SUPABASE_EXPERIMENTAL_STACK: "0" });
@@ -60,7 +61,7 @@ async function outsideRun() {
   const cli = process.env.E2E_SUPABASE_BIN ?? "supabase";
   const docker = (args, options) => command("docker", args, options);
   const supabase = (args) => command(cli, [...args, "--workdir", temp], { cwd: temp });
-  const proof = { namespace: owned, status: "blocked", gates: [], migrations: [], qualifiedScenarios: [], executedScenarioFamilies: [], subOracleStatus: "See external L-E2E-sub-oracles.md; an executed family does not qualify every sub-oracle", removedTests: 0 };
+  const proof = { namespace: owned, status: "blocked", selection: frontendOnly ? "frontend-polish" : "all", gates: [], migrations: [], qualifiedScenarios: [], executedScenarioFamilies: [], subOracleStatus: "See external L-E2E-sub-oracles.md; an executed family does not qualify every sub-oracle", removedTests: 0 };
   let started = false;
   let network = false;
   let image = false;
@@ -134,7 +135,7 @@ async function outsideRun() {
     proof.network = { internal: JSON.parse(await docker(["network", "inspect", owned]))[0].Internal, testContainer: `${owned}-tests`, gateway: `supabase_kong_${owned}` };
     assert.equal(proof.network.internal, true);
     console.log("E2E: running transport, authentication and browser gates");
-    await docker(["run", ...(keepDiagnostic ? [] : ["--rm"]), "--name", `${owned}-tests`, "--label", `pulsefolio.e2e.owner=${owned}`, "--network", owned, "--env-file", envFile, "--mount", `type=bind,source=${resultDir},target=/proof`, owned], { label: "isolated E2E execution" });
+    await docker(["run", ...(keepDiagnostic ? [] : ["--rm"]), "--name", `${owned}-tests`, "--label", `pulsefolio.e2e.owner=${owned}`, "--network", owned, "--env-file", envFile, "--mount", `type=bind,source=${resultDir},target=/proof`, owned, ...(frontendOnly ? ["node", "tests/e2e/run.mjs", "--inside", "--frontend"] : [])], { label: "isolated E2E execution" });
     const assertions = (await readFile(join(resultDir, "assertions.jsonl"), "utf8")).split("\n").filter(Boolean).map((line) => JSON.parse(line));
     proof.executedScenarioFamilies = [...new Set(assertions.map((row) => row.scenario.match(/^E2E-\d{2}/)?.[0]).filter(Boolean))].sort();
     proof.status = "passed";
@@ -218,8 +219,12 @@ if os.environ.get('E2E_TRANSPORT_ONLY') != '1':
     }
     assert.ok(ready, "Next production server did not become ready");
     await command(process.execPath, ["node_modules/@playwright/test/cli.js", "test", "session-import", "--grep", "foundation:"], { env, label: "browser foundation gate" });
-    await command(process.execPath, ["node_modules/@playwright/test/cli.js", "test", "session-import", "--grep-invert", "foundation:"], { env, label: "browser session/import scenarios" });
-    await command(process.execPath, ["node_modules/@playwright/test/cli.js", "test", "portfolio-feed|chat-thesis-community|billing-notifications|news-workers"], { env, label: "browser remaining scenarios" });
+    if (frontendOnly) {
+      await command(process.execPath, ["node_modules/@playwright/test/cli.js", "test", "frontend-polish"], { env, label: "browser frontend polish scenarios" });
+    } else {
+      await command(process.execPath, ["node_modules/@playwright/test/cli.js", "test", "session-import", "--grep-invert", "foundation:"], { env, label: "browser session/import scenarios" });
+      await command(process.execPath, ["node_modules/@playwright/test/cli.js", "test", "portfolio-feed|chat-thesis-community|billing-notifications|news-workers|frontend-polish"], { env, label: "browser remaining scenarios" });
+    }
   } finally { next.kill("SIGTERM"); }
 }
 

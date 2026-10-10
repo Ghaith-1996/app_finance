@@ -24,6 +24,7 @@ import { Button, buttonStyles } from "@/components/ui/button";
 import { ModalDialog } from "@/components/ui/modal-dialog";
 import { Panel } from "@/components/ui/panel";
 import { FEED_PAGE_SIZE } from "@/lib/feed/constants";
+import { scrollBehavior } from "@/lib/motion";
 import { buildScoreExplanation } from "@/lib/feed/score-explanation";
 import {
   NEWS_CATEGORIES,
@@ -527,7 +528,7 @@ export function FeedView({
 
   const scrollToTopAfterPageChange = useCallback(() => {
     if (typeof window === "undefined") return;
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    window.scrollTo({ top: 0, behavior: scrollBehavior() });
   }, []);
 
   const handlePageChange = useCallback(
@@ -699,7 +700,7 @@ export function FeedView({
     window.requestAnimationFrame(() => {
       document
         .getElementById(`feed-story-${match.newsItemId || match.id}`)
-        ?.scrollIntoView?.({ behavior: "smooth", block: "center" });
+        ?.scrollIntoView?.({ behavior: scrollBehavior(), block: "center" });
     });
   }, [initialStoryId, pinnedStory, trackStoryOpen, visibleStories]);
 

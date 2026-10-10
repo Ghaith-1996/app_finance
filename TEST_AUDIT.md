@@ -12,6 +12,33 @@ La politique actuelle et les commandes de vérification sont dans AGENTS.md et R
 - Campagne du 2 octobre : intake 732 Vitest/80 Python ; retrait 162/12 cas, 174 au total ; concurrence ajouta 13 cas et porta le run final à 583 Vitest/68 Python.
 - Résultats datés : 583/583 et 68/68 réussis ; ils ne valident pas le HEAD du présent refactor. Le défaut de timing SaveArticleButton fut corrigé en gardant son interaction.
 - Les mocks ne prouvaient pas locking/rollback/RLS/atomicité SQL ; les SQL et fixtures conservés ne furent pas exécutés par cette campagne.
+## Remplacement frontend du 10 octobre 2026 (PR #11)
+
+Les 17 cas ajoutés après l'implémentation dans cette PR sont retirés seulement après qualification de leur remplacement dans `tests/e2e/frontend-polish.spec.ts` : six parcours Chromium, plus le gate foundation existant. Ce remplacement est distinct de la campagne historique ci-dessous.
+
+| Cas retirés | Protection de remplacement vérifiée |
+|---|---|
+| `reduced-motion.test.tsx` : 2 helpers de mouvement | Préférence OS réelle et scroll natif via le feed authentifié ; API `matchMedia` absente injectée après hydratation pour vérifier le fallback réel de pagination. |
+| Même fichier : 4 assertions CSS et 1 markup Hero | Styles calculés : délais nuls, durée/itérations/transitions réduites, spinner actif, mesh statique ou animé selon largeur/préférence, couleurs des deux thèmes et `aria-hidden`. |
+| Même fichier : 5 cas UseCases avec faux observer/timers | Vrai IntersectionObserver, intervalle natif, sélection au pointeur, focus clavier, hover sans sélection, absence de cycle en mouvement réduit et contenu visible sans JavaScript. |
+| `analysis-step-status.test.ts` : 5 statuts | Sessions Auth et lectures de la base réelles : idle, mapping, complete, degraded, failed ; les cinq étapes affichées sont vérifiées pour chaque état. Queued et accès inter-utilisateurs sont aussi couverts. |
+
+Commande reproductible et prérequis : `npm run test:e2e -- --frontend`, voir README.md. Qualification locale réussie : namespace `pf-e2e-532e8fc8-721`, HEAD `3dcf7b0f554489a97a219cf8fb6b62c98b642746` avec patch fingerprint `8bff74719a3d0818f839480a202b781452986ad3fe70704f6507bd2aa8e10f74` ; le manifest des sources et les assertions sont dans `runner.json` et `assertions.jsonl`. La CI complète rejoue ces parcours sur le commit publié et exporte sa propre preuve.
+
+Les fixtures créent uniquement comptes, portefeuille, articles et statuts d'analyse jetables. CSS, observer, timers, scroll, application compilée, Auth, PostgREST et RLS sont réels. HTTP fournisseurs et widget Turnstile sont simulés par le runner existant. L'absence d'API navigateur est une injection limitée, pas une qualification des anciens navigateurs. La livraison realtime est désactivée dans ce stack ; la présentation des statuts ne prouve pas une génération AI ou une livraison realtime réussie. Les captures exportées concernent uniquement les pages publiques.
+
+### Suivi : focus avant le démarrage du cycle
+
+Le nouveau commentaire de revue est reproduit par un septième parcours : focus natif sur la première carte encore hors viewport avec `preventScroll`, puis révélation par le vrai IntersectionObserver et attente d'un intervalle natif complet. Avant correction, la sélection devient `false` malgré le focus (namespace rouge `pf-e2e-424228a1-f3e`). `stopAutoAdvance` marque désormais le cycle comme déjà traité avant son retour lorsque le timer est absent ; le garde existant empêche son démarrage ultérieur.
+
+La même commande qualifie les sept parcours après correction (namespace vert `pf-e2e-b8979f42-25c`, HEAD `c39e9363c7a2e041a5b465433916bb94f47e60af` avec patch fingerprint `ae55aa0546db07bb3b5922d76ad2fc90b03d6864b2922131094195a4361c4383`). Le focus est natif, l'ordre est contrôlé avec l'option navigateur `preventScroll` ; observer et timers ne sont pas simulés. Le cas existant continue de vérifier le cycle sans interaction et l'arrêt après révélation. Couches et limites du runner restent celles déclarées ci-dessus ; aucun nouveau cas unitaire n'est ajouté ni retiré.
+
+### Suivi : changement de préférence pendant le cycle
+
+Un huitième parcours attend le premier tick du vrai timer, active ensuite la préférence reduced-motion dans Chromium et vérifie que la carte sélectionnée reste stable pendant un intervalle complet. Avant correction, la carte suivante devient active (namespace rouge `pf-e2e-a464da5d-5a1`). Le cycle écoute désormais l'événement natif `change` de MediaQueryList et retire ce listener à la destruction de l'effet.
+
+Les huit parcours passent avec la même commande après correction : namespace vert `pf-e2e-bc1056a2-e91`, HEAD `0118e494fe70b573fdf2f448c61c4950b53b8667` avec patch fingerprint `33b7a875f35921d29596f455253a9da68ffc6c7dbc4c6ad2711546c5c73a7056`. Préférence, événement et timer sont réels ; aucun nouveau cas unitaire n'est ajouté ou retiré. Cette preuve Chromium ne qualifie pas les autres moteurs de navigateur.
+
 ## Vitest decisions
 
 Filenames are relative to tests/. Counts compare the intake suite with the retained suite; renamed cases retain their count.

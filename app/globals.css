@@ -233,6 +233,14 @@ body {
   50%      { box-shadow: 0 0 16px 2px rgba(16, 185, 129, 0.18); }
 }
 
+/* Pre-reveal state for scroll-triggered content. Only hidden when scripts can run to reveal it;
+   with JS disabled (or no `scripting` support) the section simply renders visible. */
+@media (scripting: enabled) {
+  .uc-pending {
+    opacity: 0;
+  }
+}
+
 .uc-animate-fade-up {
   animation: uc-fade-up 0.6s ease-out both;
 }
@@ -256,6 +264,70 @@ body {
 
 .uc-animate-glow {
   animation: uc-glow-pulse 2s ease-in-out infinite;
+}
+
+/* ── Landing hero mesh backdrop ──
+   CSS-only stand-in for a WebGPU MeshGradient: broad, soft brand fields behind the hero preview
+   frame. It animates transform only (compositor work, no per-frame repaint), stays static below lg
+   and under reduced motion, and is the same still image when JS is disabled. Decorative only. */
+
+.hero-mesh {
+  --hero-mesh-a: rgba(16, 185, 129, 0.16);
+  --hero-mesh-b: rgba(13, 148, 136, 0.14);
+  --hero-mesh-c: rgba(56, 130, 190, 0.08);
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+[data-theme="light"] .hero-mesh {
+  --hero-mesh-a: rgba(15, 159, 115, 0.11);
+  --hero-mesh-b: rgba(110, 231, 183, 0.16);
+  --hero-mesh-c: rgba(125, 180, 230, 0.16);
+}
+
+.hero-mesh::before {
+  content: "";
+  position: absolute;
+  inset: -25%;
+  background:
+    radial-gradient(42% 46% at 22% 20%, var(--hero-mesh-a), transparent 70%),
+    radial-gradient(38% 44% at 80% 32%, var(--hero-mesh-b), transparent 70%),
+    radial-gradient(46% 50% at 52% 86%, var(--hero-mesh-c), transparent 72%);
+}
+
+@keyframes hero-mesh-drift {
+  0%   { transform: translate3d(0, 0, 0) rotate(0deg) scale(1); }
+  50%  { transform: translate3d(3%, -2%, 0) rotate(6deg) scale(1.05); }
+  100% { transform: translate3d(-2%, 3%, 0) rotate(-4deg) scale(1.02); }
+}
+
+@media (min-width: 1024px) and (prefers-reduced-motion: no-preference) {
+  .hero-mesh::before {
+    animation: hero-mesh-drift 40s ease-in-out infinite alternate;
+    will-change: transform;
+  }
+}
+
+/* ── Reduced motion ──
+   Collapse decorative CSS animation/transition time for viewers who ask for less motion. Loading
+   spinners keep turning: they report work in progress rather than decorate. Recharts 3 already
+   honours this preference (isAnimationActive defaults to "auto"); JS scrolling uses lib/motion.ts. */
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *:not(.animate-spin),
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 .themed-select {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import Link from "next/link";
 
@@ -23,6 +23,15 @@ export function UseCases() {
   const [inView, setInView] = useState(false);
   const sectionRef = useRef<HTMLElement>(null);
   const hasAutoAdvanced = useRef(false);
+  const autoAdvanceTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const stopAutoAdvance = useCallback(() => {
+    // Remember early focus/selection even before the observer starts a timer.
+    hasAutoAdvanced.current = true;
+    if (autoAdvanceTimer.current === null) return;
+    clearInterval(autoAdvanceTimer.current);
+    autoAdvanceTimer.current = null;
+  }, []);
 
   /* ── IntersectionObserver: activate section when 20% visible ── */
   useEffect(() => {
@@ -38,21 +47,38 @@ export function UseCases() {
     return () => io.disconnect();
   }, []);
 
-  /* ── Optional auto-advance: cycle once on first view ── */
+  /* ── Optional auto-advance: cycle once on first view. Skipped for reduced motion and
+        stopped for good as soon as the visitor picks or focuses a card themselves. ── */
   useEffect(() => {
     if (!inView || hasAutoAdvanced.current) return;
     hasAutoAdvanced.current = true;
+    const motionQuery = typeof window.matchMedia === "function"
+      ? window.matchMedia("(prefers-reduced-motion: reduce)")
+      : null;
+    if (motionQuery?.matches) return;
+    const handleMotionChange = (event: MediaQueryListEvent) => {
+      if (event.matches) stopAutoAdvance();
+    };
+    motionQuery?.addEventListener("change", handleMotionChange);
     let step = 0;
-    const timer = setInterval(() => {
+    autoAdvanceTimer.current = setInterval(() => {
       step += 1;
       if (step >= useCases.length) {
-        clearInterval(timer);
+        stopAutoAdvance();
         return;
       }
       setActiveId(useCases[step]!.id);
     }, 4000);
-    return () => clearInterval(timer);
-  }, [inView]);
+    return () => {
+      motionQuery?.removeEventListener("change", handleMotionChange);
+      stopAutoAdvance();
+    };
+  }, [inView, stopAutoAdvance]);
+
+  const selectUseCase = (id: string) => {
+    stopAutoAdvance();
+    setActiveId(id);
+  };
 
   const activeCase = useCases.find((uc) => uc.id === activeId) ?? useCases[0]!;
 
@@ -64,7 +90,7 @@ export function UseCases() {
     >
       <div className="mx-auto max-w-7xl space-y-12">
         {/* Heading – fades up on enter */}
-        <div className={inView ? "uc-animate-fade-up" : "opacity-0"}>
+        <div className={inView ? "uc-animate-fade-up" : "uc-pending"}>
           <SectionHeading
             eyebrow="Use cases"
             title="See how it works in your daily investing routine"
@@ -75,13 +101,13 @@ export function UseCases() {
         {/* ── Desktop: 2-column layout ── */}
         <div className="hidden gap-8 lg:grid lg:grid-cols-[0.42fr_0.58fr]">
           {/* Left – use-case cards */}
-          <div className="grid content-start gap-4">
+          <div className="grid content-start gap-4" onFocus={stopAutoAdvance}>
             {useCases.map((uc, i) => (
               <UseCaseCard
                 key={uc.id}
                 useCase={uc}
                 isActive={uc.id === activeId}
-                onActivate={() => setActiveId(uc.id)}
+                onActivate={() => selectUseCase(uc.id)}
                 inView={inView}
                 index={i}
               />
@@ -136,11 +162,10 @@ function UseCaseCard({
     <button
       type="button"
       onClick={onActivate}
-      onMouseEnter={onActivate}
       aria-pressed={isActive}
       className={cn(
         "group w-full text-left transition-all duration-300",
-        inView ? "uc-animate-slide-in" : "opacity-0",
+        inView ? "uc-animate-slide-in" : "uc-pending",
       )}
       style={{ animationDelay: `${index * 120}ms` }}
     >
@@ -213,7 +238,7 @@ function PreviewStage({
       glow
       className={cn(
         "relative overflow-hidden p-0 transition-opacity duration-500",
-        inView ? "opacity-100" : "opacity-0",
+        inView ? "opacity-100" : "uc-pending",
       )}
     >
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.06),transparent_40%)]" />

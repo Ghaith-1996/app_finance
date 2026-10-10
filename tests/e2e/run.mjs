@@ -228,7 +228,8 @@ if os.environ.get('E2E_TRANSPORT_ONLY') != '1':
 function failureLocation(output = "") {
   const tests = [...output.matchAll(/^\s*\d+\) (?:\[[^\]]+\] › )?((?:[\w.-]+\/)*[\w.-]+\.spec\.ts:\d+:\d+) › (.+?)[\s─]*$/gm)]
     .map((match) => `${match[1]} › ${match[2]}`);
-  const positions = [...output.matchAll(/tests\/e2e\/([\w.-]+\.spec\.ts:\d+:\d+)/g)].map((match) => match[1]);
+  // Stack-trace frames only: the reporter's progress lines also name every passing test's position.
+  const positions = [...output.matchAll(/^\s*at .*?tests\/e2e\/([\w.-]+\.spec\.ts:\d+:\d+)/gm)].map((match) => match[1]);
   return { tests: [...new Set(tests)], positions: [...new Set(positions)].slice(0, 10) };
 }
 

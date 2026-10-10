@@ -42,11 +42,11 @@ test("E2E-06: paid tiers use real Mistral and Azure HTTP budgets with ownership 
     const subscriptionId = `sub_${randomUUID()}`;
     expect((await admin.from("subscriptions").insert({ user_id: users.a.id, stripe_subscription_id: subscriptionId, stripe_customer_id: `cus_${randomUUID()}`, stripe_price_id: "price_e2e_premium", plan_key: "premium", status: "active", current_period_start: new Date().toISOString(), current_period_end: new Date(Date.now() + 86400000).toISOString() })).error).toBeNull();
     for (const [tier, origin, path, budget] of [
-      ["premium", "https://api.mistral.ai", "/v1/chat/completions", '"max_tokens":2000'],
+      ["premium", "https://openrouter.ai", "/api/v1/chat/completions", '"max_tokens":2000'],
       ["ultimate", "https://e2e.openai.azure.com", "/openai/v1/responses", '"max_output_tokens":2000'],
     ]) {
       if (tier === "ultimate") expect((await admin.from("subscriptions").update({ plan_key: "ultimate", stripe_price_id: "price_e2e_ultimate" }).eq("stripe_subscription_id", subscriptionId)).error).toBeNull();
-      httpFixtures(`E2E-06-paid-${tier}`, [verify("article-chat"), verify("portfolio-copilot"), { origin, method: "POST", path, requestAssertions: [{ label: `${tier} explicit2000 budget`, needle: budget, count: 1 }], body: tier === "ultimate" ? { output_text: "Fixture Azure paid reply" } : { choices: [{ message: { content: "Fixture Mistral paid reply" } }] } }]);
+      httpFixtures(`E2E-06-paid-${tier}`, [verify("article-chat"), verify("portfolio-copilot"), { origin, method: "POST", path, requestAssertions: [{ label: `${tier} explicit2000 budget`, needle: budget, count: 1 }], body: tier === "ultimate" ? { output_text: "Fixture Azure paid reply" } : { choices: [{ message: { content: "Fixture Nemotron paid reply" } }] } }]);
       for (const route of ["article-chat", "portfolio-copilot"]) expect((await send(route, tier)).status).toBe(200);
       if (tier === "premium") {
         httpFixtures("E2E-06-premium-denies-ultimate", [verify("article-chat"), verify("portfolio-copilot")]);
@@ -62,7 +62,7 @@ test("E2E-06: paid tiers use real Mistral and Azure HTTP budgets with ownership 
     httpFixtures("E2E-06-paid-cross-owner", [verify("article-chat"), verify("portfolio-copilot")]);
     for (const route of ["article-chat", "portfolio-copilot"]) expect((await send(route, "free")).status).toBe(404);
     expect((await admin.from("ai_usage_counters").select("used_count").eq("user_id", users.b.id)).data).toEqual([]);
-    proof("free denies paid tiers; premium allows Mistral but denies Azure; ultimate allows Azure; both surfaces actual explicit budgets and four successful quota units; B ownership refusal before quota/provider", true);
+    proof("free denies paid tiers; premium allows Nemotron but denies Azure; ultimate allows Azure; both surfaces actual explicit budgets and four successful quota units; B ownership refusal before quota/provider", true);
   } finally { await admin.from("news_items").delete().eq("id", articleId); }
 });
 

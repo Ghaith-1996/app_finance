@@ -31,7 +31,7 @@ setupServer(http.all("*", async ({ request }) => {
   const checks = (row?.requestAssertions ?? []).map(({ label, needle, count, minimum }) => {
     const occurrences = payload.split(needle).length - 1;
     return { label, passed: minimum === undefined ? occurrences === count : occurrences >= minimum };
-  });
+  }).concat(Object.entries(row?.requestHeaders ?? {}).map(([name, value]) => ({ label: `header ${name}`, passed: request.headers.get(name) === value })));
   appendFileSync(process.env.E2E_LEDGER, JSON.stringify({ transport: "node", pid: process.pid, scenario: fixture.scenario, method: request.method, path: url.pathname, ordinal, fixtureLabel: row?.label ?? null, status: row?.status ?? (row ? 200 : "blocked"), checks }) + "\n");
   if (checks.some((check) => !check.passed)) return HttpResponse.error();
   if (!row || row.networkError) return HttpResponse.error();

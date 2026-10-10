@@ -79,9 +79,26 @@ async function chatComplete(
   return extractOpenRouterAssistantText(data.choices?.[0]?.message);
 }
 
-export function createOpenRouterProvider(): IAIProvider {
-  const key = process.env.OPENROUTER_API_KEY;
-  const model = process.env.OPENROUTER_MODEL?.trim() || DEFAULT_MODEL;
+/** Default for the separate Nemotron key, which replaced Mistral for enrichment and the premium tier. */
+export const NEMOTRON_DEFAULT_MODEL = "nvidia/nemotron-3-ultra-550b-a55b:free";
+
+type OpenRouterConfig = { key: string | undefined; model: string; keyName: string };
+
+export function createNemotronProvider(): IAIProvider {
+  return createOpenRouterProvider({
+    key: process.env.OPENROUTER_NEMOTRON_API_KEY,
+    model: process.env.OPENROUTER_NEMOTRON_MODEL?.trim() || NEMOTRON_DEFAULT_MODEL,
+    keyName: "OPENROUTER_NEMOTRON_API_KEY",
+  });
+}
+
+export function createOpenRouterProvider(
+  { key, model, keyName }: OpenRouterConfig = {
+    key: process.env.OPENROUTER_API_KEY,
+    model: process.env.OPENROUTER_MODEL?.trim() || DEFAULT_MODEL,
+    keyName: "OPENROUTER_API_KEY",
+  },
+): IAIProvider {
   const referer =
     process.env.OPENROUTER_HTTP_REFERER?.trim() ||
     process.env.NEXT_PUBLIC_SITE_URL?.trim() ||
@@ -95,7 +112,7 @@ export function createOpenRouterProvider(): IAIProvider {
   if (!key) {
     const chatError = new AIChatError(
       "provider_auth",
-      "OpenRouter is misconfigured: OPENROUTER_API_KEY is missing.",
+      `OpenRouter is misconfigured: ${keyName} is missing.`,
     );
     return {
       ...stubAIProvider,

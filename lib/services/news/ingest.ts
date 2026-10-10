@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { NewsCategory } from "@/lib/types";
 import { getAIProvider } from "../ai";
+import { toArticleChatError } from "../ai/ai-chat-errors";
 
 export const ENRICHMENT_MAX_ATTEMPTS = 5;
 const ENRICHMENT_BASE_BACKOFF_MS = 5 * 60_000;
@@ -143,6 +144,19 @@ export async function ingestNewsToSupabase(
         enriched_at: new Date().toISOString(),
       };
     } catch (error) {
+      const { code } = toArticleChatError(error);
+      if (code === "provider_auth" || code === "provider_rate_limited") {
+        // Provider-wide refusal (key, access, quota): the article is not at fault, so give the attempt
+        // back and stop the batch rather than exhausting every article's retries. The claim's backoff
+        // stays, and the error fails the run so the outage is visible.
+        const { error: refundError } = await supabase
+          .from("news_items")
+          .update({ enrichment_attempts: attemptsBefore, enrichment_last_error: errorMessage(error) })
+          .eq("id", article.id as string)
+          .eq("enrichment_attempts", attempts);
+        const message = `${code}: ${errorMessage(error)}`;
+        return { enriched, skipped, retrying, failed, error: refundError ? `${message}; ${refundError.message}` : message };
+      }
       if (attempts >= ENRICHMENT_MAX_ATTEMPTS) {
         // Terminal: keep something readable for the feed, but never mark it as enriched.
         update = {

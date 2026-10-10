@@ -261,7 +261,7 @@ describe("POST /api/article-chat", () => {
   });
 
   it.each([
-    { name: "uses the premium tier provider when modelTier is premium", modelTier: "premium", provider: "mistral", answer: "Premium-tier answer." },
+    { name: "uses the premium tier provider when modelTier is premium", modelTier: "premium", provider: "nemotron", answer: "Premium-tier answer." },
     { name: "uses the ultimate tier provider when modelTier is ultimate", modelTier: "ultimate", provider: "azure", answer: "Ultimate-tier answer." },
   ])("$name", async ({ modelTier, provider, answer }) => {
     mocks.answerArticleQuestion.mockResolvedValue(answer);

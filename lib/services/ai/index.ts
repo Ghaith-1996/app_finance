@@ -3,9 +3,9 @@ import { createAnthropicProvider } from "./anthropic-provider";
 import { createAzureOpenAIProvider } from "./azure-openai-provider";
 import { createMistralProvider } from "./mistral-provider";
 import { createOpenAIProvider } from "./openai-provider";
-import { createOpenRouterProvider } from "./openrouter-provider";
+import { createNemotronProvider, createOpenRouterProvider } from "./openrouter-provider";
 
-export type AIProviderId = "azure" | "anthropic" | "openai" | "openrouter" | "mistral";
+export type AIProviderId = "azure" | "anthropic" | "openai" | "openrouter" | "mistral" | "nemotron";
 
 export type {
   IAIProvider,
@@ -31,6 +31,9 @@ export function getAIProviderById(id: AIProviderId): IAIProvider {
   if (id === "mistral") {
     return createMistralProvider();
   }
+  if (id === "nemotron") {
+    return createNemotronProvider();
+  }
   return createOpenRouterProvider();
 }
 
@@ -41,7 +44,8 @@ export function getAIProvider(): IAIProvider {
     rawId === "anthropic" ||
     rawId === "openai" ||
     rawId === "openrouter" ||
-    rawId === "mistral"
+    rawId === "mistral" ||
+    rawId === "nemotron"
   ) {
     return getAIProviderById(rawId);
   }

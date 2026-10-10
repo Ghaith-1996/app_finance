@@ -51,13 +51,14 @@ Provider configuration is needed for the features below, not just for startup.
 
 `AI_PROVIDER` selects general enrichment/analysis through [lib/services/ai/index.ts](lib/services/ai/index.ts).
 Unrecognized or absent values use the public OpenAI implementation.
-Five provider paths are maintained:
+Six provider paths are maintained:
 
 | ID | Transport | Configuration names |
 |---|---|---|
 | `azure` | Azure OpenAI Responses | `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_BASE_URL`, `AZURE_OPENAI_MODEL` (or `AZURE_OPENAI_DEPLOYMENT`), optional `AZURE_OPENAI_REASONING_EFFORT` |
 | `openrouter` | OpenRouter chat completions; StepFun default | `OPENROUTER_API_KEY`, optional `OPENROUTER_MODEL`, `OPENROUTER_HTTP_REFERER`, `OPENROUTER_APP_NAME` |
-| `mistral` | Mistral chat completions | `MISTRAL_API_KEY`, optional `MISTRAL_MODEL` |
+| `nemotron` | OpenRouter chat completions on a separate key; `nvidia/nemotron-3-ultra-550b-a55b:free` default | `OPENROUTER_NEMOTRON_API_KEY`, optional `OPENROUTER_NEMOTRON_MODEL` (shares the referer/app-name settings) |
+| `mistral` | Mistral chat completions (no longer routed by default) | `MISTRAL_API_KEY`, optional `MISTRAL_MODEL` |
 | `openai` | Public OpenAI chat completions | `OPENAI_API_KEY` |
 | `anthropic` | Anthropic Messages | `ANTHROPIC_API_KEY` |
 
@@ -65,7 +66,9 @@ Azure's base URL accepts the resource root or `/openai/v1/`; the model identifie
 An Azure AI Foundry agent endpoint is not an Azure OpenAI Responses endpoint.
 OpenRouter defaults to `stepfun/step-3.5-flash:free`; retain this path unless explicitly authorized to remove it.
 Defaults and validation live in the provider modules and [lib/env.ts](lib/env.ts), not in an independently maintained model catalog.
-Article chat and portfolio copilot select by model tier: `free` → OpenRouter, `premium` → Mistral, `ultimate` → Azure.
+Article chat and portfolio copilot select by model tier: `free` → OpenRouter, `premium` → Nemotron, `ultimate` → Azure.
+Production enrichment uses `AI_PROVIDER=nemotron`. Free `:free` models are capped by OpenRouter (20 requests/minute; 50/day, or 1,000/day after 10 purchased credits).
+An enrichment 401/403/429 returns the article's attempt, stops the batch and fails the run instead of exhausting retries.
 [lib/billing/plans.ts](lib/billing/plans.ts) defines tier rights; [lib/security/ai-access.ts](lib/security/ai-access.ts) enforces billing, burst and durable quota checks.
 Failed answer requests release the charged quota bucket on a best-effort basis; failed requests still count against burst limits.
 `AI_PROVIDER` does not override this tier routing.

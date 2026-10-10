@@ -190,7 +190,7 @@ describe("POST /api/portfolio-copilot", () => {
   });
 
   it.each([
-    { name: "uses the premium provider for premium users", modelTier: "premium", provider: "mistral", answer: "Mistral answer" },
+    { name: "uses the premium provider for premium users", modelTier: "premium", provider: "nemotron", answer: "Nemotron answer" },
     { name: "uses the ultimate provider for ultimate users", modelTier: "ultimate", provider: "azure", answer: "Azure answer" },
   ])("$name", async ({ modelTier, provider, answer }) => {
     mocks.answerPortfolioQuestion.mockResolvedValue(answer);

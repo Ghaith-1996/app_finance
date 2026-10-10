@@ -2,6 +2,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { runAnalysis } from "@/lib/services/analysis";
 import { createLogger } from "@/lib/logger";
 import { fetchAllRows } from "@/lib/supabase/paginate";
+import { fetchLatestUsableRuns } from "@/lib/services/latest-analysis-runs";
 
 const log = createLogger("cron-analysis");
 
@@ -45,11 +46,15 @@ async function getPortfolios(supabase: ReturnType<typeof createServiceClient>) {
   return portfolios;
 }
 
+// Review P1: terminal failures count as work too. They carry fallback text that runAnalysis can
+// still match, and during a provider outage they may be the only articles that settle.
+const SETTLED_ENRICHMENT_STATUSES = ["succeeded", "failed"];
+
 async function getNewestEnrichedAt(supabase: ReturnType<typeof createServiceClient>) {
   const { data, error } = await supabase
     .from("news_items")
     .select("enriched_at")
-    .eq("enrichment_status", "succeeded")
+    .in("enrichment_status", SETTLED_ENRICHMENT_STATUSES)
     .not("enriched_at", "is", null)
     .order("enriched_at", { ascending: false })
     .limit(1)
@@ -74,12 +79,23 @@ async function getLatestCompletedRun(
   return latestRun as { completed_at?: string | null; started_at?: string | null } | null;
 }
 
+/**
+ * Latest usable run per portfolio: one row each from migration 044's RPC, read in pages, instead of
+ * one sequential query per portfolio or a scan of the whole run history.
+ */
+async function getLatestCompletedRunsByPortfolio(supabase: ReturnType<typeof createServiceClient>) {
+  const { data: runs, error } = await fetchLatestUsableRuns(supabase);
+  if (error) throw new Error(`Could not load analysis runs: ${error.message}`);
+  return new Map(runs.map((run) => [run.portfolio_id, run]));
+}
+
 async function getEligiblePortfolioIds(
   supabase: ReturnType<typeof createServiceClient>,
   opts?: { force?: boolean },
 ) {
   const portfolios = await getPortfolios(supabase);
   const newestEnrichedAt = opts?.force ? null : await getNewestEnrichedAt(supabase);
+  const latestRuns = opts?.force ? null : await getLatestCompletedRunsByPortfolio(supabase);
   const portfolioIds: string[] = [];
   let skippedCount = 0;
   let upToDateCount = 0;
@@ -88,8 +104,8 @@ async function getEligiblePortfolioIds(
   // articles were enriched after its last usable run — not merely when this run inserted rows.
   // A failed run leaves the last usable run older than the news, so it is retried next time.
   for (const portfolio of portfolios) {
-    if (!opts?.force) {
-      const latestRun = await getLatestCompletedRun(supabase, portfolio.id);
+    if (latestRuns) {
+      const latestRun = latestRuns.get(portfolio.id);
       const completedAt = latestRun?.completed_at ?? null;
       if (isInCooldown(completedAt)) {
         skippedCount++;

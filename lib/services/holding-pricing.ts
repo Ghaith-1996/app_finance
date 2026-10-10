@@ -11,7 +11,8 @@ import {
  * Builds one whole-portfolio price update (audit B3). Holdings without a new quote keep their
  * last-known price; allocations are recomputed over everything that can be valued, so they never
  * exceed 100%. `syncState` is "complete" only when every holding received a fresh quote and a
- * USD conversion; otherwise the portfolio must be marked stale, not freshly synced.
+ * fresh USD conversion; a reused stored FX rate still values the position, but the portfolio must
+ * then be marked stale, not freshly synced.
  */
 
 export const PRICING_HOLDING_COLUMNS =
@@ -55,6 +56,8 @@ export type HoldingPricingPlan = {
   updates: HoldingPriceUpdate[];
   refreshedSymbols: string[];
   missingQuoteSymbols: string[];
+  /** Non-USD currencies whose fresh quotes were converted with a previously stored FX rate. */
+  staleFxCurrencies: string[];
   syncState: "complete" | "partial";
   valuation: PortfolioValuation;
 };
@@ -72,6 +75,7 @@ export function buildHoldingPricingPlan(
 ): HoldingPricingPlan {
   const refreshedSymbols: string[] = [];
   const missingQuoteSymbols: string[] = [];
+  const staleFxCurrencies = new Set<string>();
 
   const merged = rows.map((row) => {
     const symbol = row.symbol.trim().toUpperCase();
@@ -95,6 +99,7 @@ export function buildHoldingPricingPlan(
           ? Number(row.fx_rate_to_usd)
           : null;
     const fxAsOf = fx ? fx.asOf : currency === BASE_CURRENCY ? nowIso : sameCurrency ? row.fx_as_of : null;
+    if (!fx && currency !== BASE_CURRENCY && fxRateToUsd !== null) staleFxCurrencies.add(currency);
 
     const quoteFields = {
       price: quote.price,
@@ -134,7 +139,16 @@ export function buildHoldingPricingPlan(
   }));
 
   const syncState =
-    missingQuoteSymbols.length === 0 && valuation.status === "complete" ? "complete" : "partial";
+    missingQuoteSymbols.length === 0 && staleFxCurrencies.size === 0 && valuation.status === "complete"
+      ? "complete"
+      : "partial";
 
-  return { updates, refreshedSymbols, missingQuoteSymbols, syncState, valuation };
+  return {
+    updates,
+    refreshedSymbols,
+    missingQuoteSymbols,
+    staleFxCurrencies: [...staleFxCurrencies].sort(),
+    syncState,
+    valuation,
+  };
 }

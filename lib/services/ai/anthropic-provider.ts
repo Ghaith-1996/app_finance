@@ -57,7 +57,15 @@ async function ask(
 
 export function createAnthropicProvider(): IAIProvider {
   const key = process.env.ANTHROPIC_API_KEY;
-  if (!key) return stubAIProvider;
+  if (!key) {
+    return {
+      ...stubAIProvider,
+      // Enrichment must fail (and stay retryable), not record stub output as succeeded.
+      async analyzeArticle() {
+        throw new Error("Anthropic is misconfigured: ANTHROPIC_API_KEY is missing.");
+      },
+    };
+  }
 
   return {
     async generateSummary(article, holdings) {
@@ -103,15 +111,12 @@ export function createAnthropicProvider(): IAIProvider {
       return stubAIProvider.generateInsights(holdings, newsContexts);
     },
 
+    // No stub fallback: enrichment must see provider failures so the article stays retryable.
     async analyzeArticle(headline, content, hintTickers): Promise<ArticleAnalysis> {
-      try {
-        const p = articleEnrichmentPrompt(headline, content, hintTickers);
-        const raw = await ask(key, `${p.system}\n\nHeadline: ${headline}\n\n${(content ?? "").slice(0, 4000)}`, 500);
-        if (raw) {
-          return parseArticleAnalysis(raw, headline, hintTickers, { dropEmptyStockTags: false });
-        }
-      } catch { /* fallback */ }
-      return stubAIProvider.analyzeArticle(headline, content, hintTickers);
+      const p = articleEnrichmentPrompt(headline, content, hintTickers);
+      const raw = await ask(key, `${p.system}\n\nHeadline: ${headline}\n\n${(content ?? "").slice(0, 4000)}`, 500);
+      if (!raw) throw new Error("Anthropic returned an empty article analysis");
+      return parseArticleAnalysis(raw, headline, hintTickers, { dropEmptyStockTags: false });
     },
 
     async answerArticleQuestion(context: ArticleChatContext) {

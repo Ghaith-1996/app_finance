@@ -3,6 +3,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { EARNINGS_NO_NEWER_REPORT_NOTE, EARNINGS_NO_REPORT_LINK_NOTE } from "@/lib/services/earnings-reports";
+import { fetchLatestUsableRuns, type LatestUsableRun } from "@/lib/services/latest-analysis-runs";
 import { fetchAllRows } from "@/lib/supabase/paginate";
 
 /**
@@ -55,8 +56,6 @@ function minutesBetween(fromIso: string | null, now: Date): number | null {
   return Number.isFinite(ms) ? Math.round(ms / 60_000) : null;
 }
 
-type UsableRun = { portfolio_id: string; started_at: string | null; completed_at: string | null };
-
 type AnalysisFreshness = {
   latestUsableRunAt: string | null;
   portfolios: number;
@@ -77,26 +76,20 @@ async function loadAnalysisFreshness(supabase: SupabaseClient, now: Date): Promi
     fetchAllRows<{ id: string; created_at: string | null }>((from, to) =>
       supabase.from("portfolios").select("id, created_at").order("id", { ascending: true }).range(from, to),
     ),
-    // Only the newest few runs per portfolio are kept, so this stays small.
-    fetchAllRows<UsableRun & { id: string }>((from, to) =>
-      supabase
-        .from("analysis_runs")
-        .select("id, portfolio_id, started_at, completed_at")
-        .in("status", ["complete", "degraded"])
-        .order("id", { ascending: true })
-        .range(from, to),
-    ),
+    // One latest usable run per portfolio (migration 044), not the whole run history.
+    fetchLatestUsableRuns(supabase),
     supabase
       .from("news_items")
       .select("enriched_at")
-      .eq("enrichment_status", "succeeded")
+      // Same watermark as the analysis cron: terminal failures are settled work too (review P1).
+      .in("enrichment_status", ["succeeded", "failed"])
       .not("enriched_at", "is", null)
       .order("enriched_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
   ]);
 
-  const latestByPortfolio = new Map<string, UsableRun>();
+  const latestByPortfolio = new Map<string, LatestUsableRun>();
   let latestUsableRunAt: string | null = null;
   for (const run of runs.data) {
     const completedMs = Date.parse(run.completed_at ?? "");

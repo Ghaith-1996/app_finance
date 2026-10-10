@@ -43,7 +43,7 @@ export default async function SettingsPage({
   const { t } = await getTranslations();
   const showOnboardingNav = await loadOnboardingNavState();
   const showAdminLink = isAdminUser(user);
-  const billingSummary = await getBillingSummaryForUser(user.id, user.email);
+  const billingSummary = await getBillingSummaryForUser(user.id, user.email, user);
   const sp = searchParams ? await searchParams : {};
   const billingMessage =
     typeof sp.billing === "string" ? sp.billing : Array.isArray(sp.billing) ? sp.billing[0] : null;

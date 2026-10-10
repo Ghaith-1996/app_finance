@@ -137,7 +137,7 @@ export default async function PricingPage({
 
   const showOnboardingNav = await loadOnboardingNavState();
   const showAdminLink = isAdminUser(user);
-  const billingSummary = user ? await getBillingSummaryForUser(user.id, user.email) : null;
+  const billingSummary = user ? await getBillingSummaryForUser(user.id, user.email, user) : null;
   const [premiumPrice, ultimatePrice] = await Promise.all([loadPrice("premium"), loadPrice("ultimate")]);
   const sp = searchParams ? await searchParams : {};
   const billingMessage =

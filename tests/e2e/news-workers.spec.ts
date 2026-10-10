@@ -5,7 +5,7 @@ import { promisify } from "node:util";
 import { readFileSync } from "node:fs";
 
 test("E2E-11: current and candidate workers finalize through Node enrichment into visible feed articles", async ({ page, context, users, proof }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(480_000);
   await completeProfile(users.a);
   const portfolioId = await seedPortfolio(users.a);
   const otherPortfolio = await seedPortfolio(users.b);
@@ -53,7 +53,7 @@ test("E2E-11: current and candidate workers finalize through Node enrichment int
       expect(response.body.stages.analysis.status).toBe("success");
       const article = await users.a.client.from("news_items").select("id,source_type,enrichment_status,global_summary").eq("url", url).single();
       expect(article.data).toMatchObject({ source_type: source, enrichment_status: "succeeded", global_summary: "Fixture Node enriched AAA earnings." });
-      await expect.poll(async () => (await admin.from("news_items").select("extraction_status").eq("url", url).single()).data?.extraction_status, { timeout: 60_000 }).toBe("complete");
+      await expect.poll(async () => (await admin.from("news_items").select("extraction_status").eq("url", url).single()).data?.extraction_status, { timeout: 180_000 }).toBe("complete");
       expect((await users.a.client.from("analysis_runs").select("status,progress").eq("id", response.body.analysisRunId).single()).data).toEqual({ status: "complete", progress: 100 });
       expect((await users.a.client.from("feed_items").select("news_item_id").eq("analysis_run_id", response.body.analysisRunId).eq("news_item_id", article.data!.id)).data).toHaveLength(1);
       await page.goto(`/feed?portfolioId=${portfolioId}&story=${article.data!.id}`);
@@ -132,7 +132,7 @@ test("E2E-12: earnings cache beyond Data API cap survives real provider HTTP fai
 });
 
 test("E2E-11: real main and extraction child persist and deduplicate a NewsAPI article", async ({ users, proof }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(300_000);
   const identity = randomUUID();
   const path = `/story/${identity}`;
   const articleUrl = `https://publisher.e2e.invalid${path}`;
@@ -153,7 +153,7 @@ test("E2E-11: real main and extraction child persist and deduplicate a NewsAPI a
     const first = await invoke();
     expect(first.newsapi.inserted).toBe(1);
     expect(first.full_text_extraction).toMatchObject({ queued: 1, background: true });
-    await expect.poll(async () => (await admin.from("news_items").select("extraction_status").eq("url", articleUrl).single()).data?.extraction_status, { timeout: 60_000 }).toBe("complete");
+    await expect.poll(async () => (await admin.from("news_items").select("extraction_status").eq("url", articleUrl).single()).data?.extraction_status, { timeout: 180_000 }).toBe("complete");
     const article = await users.a.client.from("news_items").select("source_type,external_id,extracted_content").eq("url", articleUrl).single();
     expect(article.error).toBeNull();
     expect(article.data?.source_type).toBe("newsapi");

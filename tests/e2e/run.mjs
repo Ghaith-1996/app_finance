@@ -223,9 +223,18 @@ if os.environ.get('E2E_TRANSPORT_ONLY') != '1':
   } finally { next.kill("SIGTERM"); }
 }
 
+// Sanitized pointer to a failing browser test for the exported proof: Playwright test titles and
+// spec source positions only, never assertion values, page content, headers or credentials.
+function failureLocation(output = "") {
+  const tests = [...output.matchAll(/^\s*\d+\) (?:\[[^\]]+\] › )?((?:[\w.-]+\/)*[\w.-]+\.spec\.ts:\d+:\d+) › (.+?)[\s─]*$/gm)]
+    .map((match) => `${match[1]} › ${match[2]}`);
+  const positions = [...output.matchAll(/tests\/e2e\/([\w.-]+\.spec\.ts:\d+:\d+)/g)].map((match) => match[1]);
+  return { tests: [...new Set(tests)], positions: [...new Set(positions)].slice(0, 10) };
+}
+
 try { await (inside ? insideRun() : outsideRun()); }
 catch (error) {
-  if (inside) await writeFile("/proof/failure.json", JSON.stringify({ stage: error.message }));
+  if (inside) await writeFile("/proof/failure.json", JSON.stringify({ stage: error.message, ...failureLocation(error.privateOutput) }));
   console.error(error.message);
   // Captured only into runner-owned private TEMP, never the exported proof directory.
   if (error.privateOutput) console.error(error.privateOutput);

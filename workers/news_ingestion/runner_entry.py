@@ -182,9 +182,10 @@ def make_local_client():
     from postgrest.constants import DEFAULT_POSTGREST_CLIENT_TIMEOUT
     from supabase import ClientOptions, create_client
 
-    # The default clients follow redirects, which would replay the insert and the apikey
-    # header to a nonlocal target; the guard above only vets the configured URL.
-    http_client = httpx.Client(follow_redirects=False, timeout=DEFAULT_POSTGREST_CLIENT_TIMEOUT)
+    # Redirects and inherited proxies can send credentials outside the validated local endpoint.
+    http_client = httpx.Client(
+        follow_redirects=False, trust_env=False, timeout=DEFAULT_POSTGREST_CLIENT_TIMEOUT
+    )
     return create_client(url, key, options=ClientOptions(httpx_client=http_client))
 
 

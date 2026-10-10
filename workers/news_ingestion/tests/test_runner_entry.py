@@ -176,6 +176,42 @@ class RunnerContractTests(unittest.TestCase):
         self.assertEqual(summary["inserted"], 1)
         self.assertEqual(seen, [("/rest/v1/news_items", "local-test-key", "Bearer local-test-key")])
 
+    @needs_client
+    def test_local_insert_ignores_inherited_proxies(self):
+        seen = []
+        proxied = []
+
+        class Local(BaseHTTPRequestHandler):
+            requests = seen
+
+            def do_POST(self):
+                self.requests.append((self.path, self.headers.get("apikey"),
+                                      self.headers.get("Authorization")))
+                self.send_response(201)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(b"[]")
+
+            def log_message(self, *args):
+                pass
+
+        class Proxy(Local):
+            requests = proxied
+
+        local_url = self._serve(Local)
+        proxy_url = self._serve(Proxy)
+        for variable in ("HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"):
+            with self.subTest(variable=variable):
+                seen.clear()
+                proxied.clear()
+                # No ambient proxy bypass may hide the credential leak.
+                with patch.dict(os.environ, {variable: proxy_url, "NO_PROXY": ""}, clear=True):
+                    summary = self._process_against(local_url)
+                self.assertEqual(proxied, [], "service-role request reached the inherited proxy")
+                self.assertEqual(summary["inserted"], 1)
+                self.assertEqual(seen, [("/rest/v1/news_items", "local-test-key",
+                                         "Bearer local-test-key")])
+
     def test_discover_stdout_is_exactly_one_json_document(self):
         manifest = {"version": MANIFEST_VERSION, "provider_set": "current",
                     "sources": {"gnews": {"outcome": "success"}},

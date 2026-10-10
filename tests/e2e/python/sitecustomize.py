@@ -3,6 +3,7 @@ import io
 import json
 import os
 import socket
+import sys
 import urllib.request
 import httpx
 import requests
@@ -101,4 +102,12 @@ def _resolve(host, port, *args, **kwargs):
 
 
 socket.getaddrinfo = _resolve
-_ledger(event="sitecustomize-loaded")
+_modules = {"workers.news_ingestion.main", "workers.news_ingestion.extract_full_text", "workers.news_ingestion.cron_runner"}
+_module = next((argument for argument in sys.orig_argv if argument in _modules), None)
+_worker_flags = {}
+if _module == "workers.news_ingestion.main":
+    for _flag in ("--tickers", "--lookback-hours", "--max-articles", "--provider-set", "--queries-json"):
+        if _flag in sys.orig_argv:
+            _worker_flags[_flag] = sys.orig_argv[sys.orig_argv.index(_flag) + 1]
+_ledger(event="sitecustomize-loaded", module=_module, worker_flags=_worker_flags, parent_pid=os.getppid(), inherited_python_pid=os.environ.get("E2E_PYTHON_PARENT_PID"))
+os.environ["E2E_PYTHON_PARENT_PID"] = str(os.getpid())

@@ -1,134 +1,80 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { AIChatError } from "@/lib/services/ai/ai-chat-errors";
 import { BillingAccessError } from "@/lib/billing/subscriptions";
 import { AIUsageAccessError } from "@/lib/security/ai-access";
+import { AIChatError } from "@/lib/services/ai/ai-chat-errors";
+import type { ArticleChatContext, PortfolioCopilotContext } from "@/lib/services/ai/provider";
+import {
+  buildChatGrantCookieValue,
+  chatGrantCookieName,
+  type ChatGrantScope,
+} from "@/lib/security/chat-turnstile-grant";
 
-// Always-pass Turnstile mock for route tests
+const mocks = vi.hoisted(() => ({
+  verifyTurnstileToken: vi.fn(),
+  answerArticleQuestion: vi.fn<(context: ArticleChatContext) => Promise<string>>(),
+  answerPortfolioQuestion: vi.fn<(context: PortfolioCopilotContext) => Promise<string>>(),
+  assertUserCanUseAI: vi.fn(),
+  releaseAIUsage: vi.fn(),
+  getAIProviderById: vi.fn(),
+}));
+
 vi.mock("@/lib/security/turnstile", () => ({
-  verifyTurnstileToken: vi.fn().mockResolvedValue({ success: true }),
+  verifyTurnstileToken: mocks.verifyTurnstileToken,
   getClientIp: () => "127.0.0.1",
 }));
-
-const mockAnswerArticleQuestion = vi.fn();
-const mockAnswerPortfolioQuestion = vi.fn();
-const mockAssertUserCanUseAI = vi.fn();
-const mockReleaseAIUsage = vi.fn();
-const RESERVED_USAGE = { aiQuotaWindow: "day", aiQuotaResetsAt: "2026-10-03T04:00:00.000Z" };
-const mockComputePortfolioOverview = vi.fn().mockResolvedValue({
-  totalValue: 125000,
-  dayChange: 1400,
-  lastAnalyzedAt: new Date().toISOString(),
-  coverage: "Balanced",
-  primaryGoal: "Compound capital",
-});
-const mockGetAIProviderById = vi.fn((_id: "azure" | "anthropic" | "openai" | "openrouter" | "mistral") => ({
-  answerArticleQuestion: mockAnswerArticleQuestion,
-  answerPortfolioQuestion: mockAnswerPortfolioQuestion,
-}));
-
 vi.mock("@/lib/services/portfolio", () => ({
-  computePortfolioOverview: (...args: unknown[]) => mockComputePortfolioOverview(...args),
+  computePortfolioOverview: vi.fn().mockResolvedValue({
+    totalValue: 125000,
+    dayChange: 1400,
+    lastAnalyzedAt: "2026-10-04T12:00:00.000Z",
+    coverage: "Balanced",
+    primaryGoal: "Compound capital",
+  }),
+}));
+vi.mock("@/lib/security/ai-access", async () => ({
+  ...await vi.importActual<typeof import("@/lib/security/ai-access")>("@/lib/security/ai-access"),
+  assertUserCanUseAI: mocks.assertUserCanUseAI,
+  releaseAIUsage: mocks.releaseAIUsage,
+}));
+vi.mock("@/lib/services/ai", async () => ({
+  ...await vi.importActual<typeof import("@/lib/services/ai")>("@/lib/services/ai"),
+  getAIProviderById: mocks.getAIProviderById,
 }));
 
-vi.mock("@/lib/security/ai-access", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/security/ai-access")>(
-    "@/lib/security/ai-access",
-  );
-  return {
-    ...actual,
-    assertUserCanUseAI: (...args: unknown[]) => mockAssertUserCanUseAI(...args),
-    releaseAIUsage: (...args: unknown[]) => mockReleaseAIUsage(...args),
-  };
-});
-
-vi.mock("@/lib/services/ai", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/services/ai")>("@/lib/services/ai");
-  return {
-    ...actual,
-    getAIProviderById: (id: "azure" | "anthropic" | "openai" | "openrouter" | "mistral") => mockGetAIProviderById(id),
-  };
-});
-
-let insertAssistantCalls = 0;
-let insertUserCalls = 0;
+const RESERVED_USAGE = { aiQuotaWindow: "day", aiQuotaResetsAt: "2026-10-03T04:00:00.000Z" };
+type MessageInsert = { role: string; content: string; thread_id: string; created_at?: string };
+type ChatResponseBody = {
+  messages?: Array<{ role: string; content: string }>;
+  error?: string;
+  code?: string;
+  requiredPlan?: string;
+  retryAfterMs?: number;
+  quotaWindow?: string;
+  quotaLimit?: number;
+  quotaUsed?: number;
+  turnstileVerified?: boolean;
+};
 const messageRows: Array<{ id: string; role: string; content: string; created_at: string }> = [];
-const insertedMessageBatches: Array<
-  Array<{ role: string; content: string; thread_id: string; created_at?: string }>
-> = [];
+const insertedMessageBatches: MessageInsert[][] = [];
+let insertUserCalls = 0;
+let insertAssistantCalls = 0;
 
-function createSupabaseMock(opts: {
-  insertUserError?: Error | null;
-  currentPlan?: "free" | "premium" | "ultimate";
-  currentStatus?: string;
-  hasUsedTrial?: boolean;
-}) {
-  const threadId = "thread-1";
-  const currentPeriodEnd = new Date(Date.now() + 86_400_000).toISOString();
-  const subscriptionRows =
-    opts.currentPlan && opts.currentPlan !== "free"
-      ? [
-          {
-            id: "sub-row-1",
-            user_id: "user-1",
-            stripe_subscription_id: "sub_123",
-            stripe_customer_id: "cus_123",
-            stripe_price_id: opts.currentPlan === "premium" ? "price_premium" : "price_ultimate",
-            stripe_product_id: opts.currentPlan === "premium" ? "prod_premium" : "prod_ultimate",
-            plan_key: opts.currentPlan,
-            status: opts.currentStatus ?? "active",
-            current_period_start: new Date().toISOString(),
-            current_period_end: currentPeriodEnd,
-            cancel_at_period_end: false,
-            canceled_at: null,
-            trial_start: opts.hasUsedTrial ? new Date().toISOString() : null,
-            trial_end: opts.hasUsedTrial ? currentPeriodEnd : null,
-            raw: {},
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          },
-        ]
-      : [];
+function createSupabaseMock() {
+  const emptyRows = async () => ({ data: [], error: null });
   return {
-    auth: {
-      getUser: vi.fn().mockResolvedValue({
-        data: { user: { id: "user-1" } },
-        error: null,
-      }),
-    },
+    auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { id: "user-1" } }, error: null }) },
     from(table: string) {
       if (table === "portfolios") {
         return {
           select: () => ({
-            eq: () => ({
-              eq: () => ({
-                single: async () => ({ data: { id: "p1" }, error: null }),
-              }),
-            }),
-          }),
-        };
-      }
-      if (table === "billing_customers") {
-        return {
-          select: () => ({
-            eq: () => ({
-              maybeSingle: async () => ({
-                data:
-                  subscriptionRows.length > 0
-                    ? { user_id: "user-1", stripe_customer_id: "cus_123" }
-                    : null,
-                error: null,
-              }),
-            }),
-          }),
-        };
-      }
-      if (table === "subscriptions") {
-        return {
-          select: () => ({
-            eq: () => ({
-              order: () => ({
-                order: async () => ({ data: subscriptionRows, error: null }),
+            eq: (column: string, portfolioId: string) => ({
+              eq: (ownerColumn: string, userId: string) => ({
+                single: async () => ({
+                  data: column === "id" && portfolioId === "p1" && ownerColumn === "user_id" && userId === "user-1"
+                    ? { id: "p1", name: "My Portfolio" } : null,
+                  error: null,
+                }),
               }),
             }),
           }),
@@ -140,48 +86,24 @@ function createSupabaseMock(opts: {
             eq: () => ({
               eq: () => ({
                 eq: () => ({
-                  maybeSingle: async () => ({ data: { id: threadId }, error: null }),
+                  maybeSingle: async () => ({ data: { id: "thread-1" }, error: null }),
                 }),
               }),
             }),
           }),
-          insert: () => ({
-            select: () => ({
-              single: async () => ({ data: { id: threadId }, error: null }),
-            }),
-          }),
-          update: () => ({
-            eq: async () => ({ error: null }),
-          }),
+          update: () => ({ eq: async () => ({ error: null }) }),
         };
       }
       if (table === "article_chat_messages") {
         return {
-          insert: (
-            value:
-              | { role: string; content: string; thread_id: string; created_at?: string }
-              | Array<{ role: string; content: string; thread_id: string; created_at?: string }>,
-          ) => {
+          insert(value: MessageInsert | MessageInsert[]) {
             const rows = Array.isArray(value) ? value : [value];
             insertedMessageBatches.push(rows);
-            if (opts.insertUserError && rows.some((row) => row.role === "user")) {
-              return Promise.resolve({ error: opts.insertUserError });
-            }
             for (const row of rows) {
-              if (row.role === "user") {
-                insertUserCalls += 1;
-                messageRows.push({
-                  id: `u-${insertUserCalls}`,
-                  role: "user",
-                  content: row.content,
-                  created_at: row.created_at ?? new Date().toISOString(),
-                });
-                continue;
-              }
-              insertAssistantCalls += 1;
+              const id = row.role === "user" ? `u-${++insertUserCalls}` : `a-${++insertAssistantCalls}`;
               messageRows.push({
-                id: `a-${insertAssistantCalls}`,
-                role: "assistant",
+                id,
+                role: row.role,
                 content: row.content,
                 created_at: row.created_at ?? new Date().toISOString(),
               });
@@ -189,13 +111,7 @@ function createSupabaseMock(opts: {
             return Promise.resolve({ error: null });
           },
           select: () => ({
-            eq: () => ({
-              order: () =>
-                Promise.resolve({
-                  data: [...messageRows],
-                  error: null,
-                }),
-            }),
+            eq: () => ({ order: async () => ({ data: [...messageRows], error: null }) }),
           }),
         };
       }
@@ -203,15 +119,12 @@ function createSupabaseMock(opts: {
         return {
           select: () => ({
             eq: () => ({
-              maybeSingle: async () => ({
-                data: { id: "n1" },
-                error: null,
-              }),
+              maybeSingle: async () => ({ data: { id: "n1" }, error: null }),
               single: async () => ({
                 data: {
                   headline: "H",
                   source: "S",
-                  published_at: new Date().toISOString(),
+                  published_at: "2026-10-04T12:00:00.000Z",
                   category: "other",
                   global_summary: null,
                   raw_content: "body",
@@ -229,14 +142,7 @@ function createSupabaseMock(opts: {
         };
       }
       if (table === "holdings") {
-        return {
-          select: () => ({
-            eq: () => ({
-              order: async () => ({ data: [], error: null }),
-              then: undefined,
-            }),
-          }),
-        };
+        return { select: () => ({ eq: () => Object.assign(emptyRows(), { order: emptyRows }) }) };
       }
       if (table === "analysis_runs") {
         return {
@@ -244,52 +150,15 @@ function createSupabaseMock(opts: {
             eq: () => ({
               in: () => ({
                 order: () => ({
-                  limit: () => ({
-                    maybeSingle: async () => ({ data: null, error: null }),
-                  }),
+                  limit: () => ({ maybeSingle: async () => ({ data: null, error: null }) }),
                 }),
               }),
-            }),
-          }),
-        };
-      }
-      if (table === "feed_items") {
-        return {
-          select: () => ({
-            eq: () => ({
-              eq: () => ({
-                eq: () => ({
-                  order: () => ({
-                    limit: () => ({
-                      maybeSingle: async () => ({ data: null, error: null }),
-                    }),
-                  }),
-                }),
-                order: () => ({
-                  order: () => ({
-                    limit: async () => ({ data: [], error: null }),
-                  }),
-                }),
-              }),
-            }),
-          }),
-        };
-      }
-      if (table === "portfolio_insights") {
-        return {
-          select: () => ({
-            eq: () => ({
-              order: async () => ({ data: [], error: null }),
             }),
           }),
         };
       }
       if (table === "watchlist_items") {
-        return {
-          select: () => ({
-            eq: async () => ({ data: [{ symbol: "NVDA" }], error: null }),
-          }),
-        };
+        return { select: () => ({ eq: async () => ({ data: [{ symbol: "NVDA" }], error: null }) }) };
       }
       throw new Error(`unexpected table ${table}`);
     },
@@ -297,426 +166,191 @@ function createSupabaseMock(opts: {
 }
 
 let currentSupabase: ReturnType<typeof createSupabaseMock>;
+vi.mock("@/lib/supabase/server", () => ({ createClient: async () => currentSupabase }));
 
-vi.mock("@/lib/supabase/server", () => ({
-  createClient: async () => currentSupabase,
-}));
+import { GET, POST } from "@/app/api/article-chat/route";
 
-vi.mock("@/lib/supabase/service", () => ({
-  createServiceClient: () => currentSupabase,
-}));
+const storyScope: ChatGrantScope = {
+  userId: "user-1", surface: "article-chat", portfolioId: "p1", newsItemId: "n1",
+};
+function cookieHeaderFor(scope: ChatGrantScope = storyScope) {
+  return `${chatGrantCookieName(scope)}=${encodeURIComponent(buildChatGrantCookieValue(scope))}`;
+}
+function makePost(body: object = {}, cookie?: string) {
+  const headers = new Headers({ "Content-Type": "application/json" });
+  if (cookie) headers.set("cookie", cookie);
+  return new Request("http://localhost/api/article-chat", {
+    method: "POST", headers,
+    body: JSON.stringify({ portfolioId: "p1", newsItemId: "n1", message: "What is the risk?", ...body }),
+  });
+}
+function makeGet(cookie?: string) {
+  return new Request("http://localhost/api/article-chat?portfolioId=p1&newsItemId=n1", {
+    headers: cookie ? { cookie } : {},
+  });
+}
 
-import { POST } from "@/app/api/article-chat/route";
+beforeEach(() => {
+  messageRows.length = 0;
+  insertedMessageBatches.length = 0;
+  insertUserCalls = 0;
+  insertAssistantCalls = 0;
+  for (const mock of Object.values(mocks)) mock.mockReset();
+  mocks.verifyTurnstileToken.mockResolvedValue({ success: true });
+  mocks.answerArticleQuestion.mockResolvedValue("answer");
+  mocks.answerPortfolioQuestion.mockResolvedValue("general-answer");
+  mocks.assertUserCanUseAI.mockResolvedValue(RESERVED_USAGE);
+  mocks.releaseAIUsage.mockResolvedValue(undefined);
+  mocks.getAIProviderById.mockReturnValue({
+    answerArticleQuestion: mocks.answerArticleQuestion,
+    answerPortfolioQuestion: mocks.answerPortfolioQuestion,
+  });
+  currentSupabase = createSupabaseMock();
+  vi.stubEnv("TURNSTILE_SECRET_KEY", "test-secret-key");
+  vi.stubEnv("ADMIN_USER_IDS", undefined);
+  vi.stubEnv("ADMIN_USER_EMAILS", undefined);
+});
+afterEach(() => vi.unstubAllEnvs());
 
 describe("POST /api/article-chat", () => {
-  beforeEach(() => {
-    insertAssistantCalls = 0;
-    insertUserCalls = 0;
-    messageRows.length = 0;
-    insertedMessageBatches.length = 0;
-    mockAnswerArticleQuestion.mockReset();
-    mockAnswerPortfolioQuestion.mockReset();
-    mockAssertUserCanUseAI.mockReset();
-    mockAssertUserCanUseAI.mockResolvedValue(RESERVED_USAGE);
-    mockReleaseAIUsage.mockReset();
-    mockReleaseAIUsage.mockResolvedValue(undefined);
-    mockComputePortfolioOverview.mockClear();
-    mockGetAIProviderById.mockClear();
-    currentSupabase = createSupabaseMock({});
-    delete process.env.ADMIN_USER_IDS;
-    delete process.env.ADMIN_USER_EMAILS;
-  });
-
   it("answers a generic portfolio-level question when newsItemId is omitted", async () => {
-    mockAnswerPortfolioQuestion.mockResolvedValue("Generic market answer.");
-
-    const req = new Request("http://localhost/api/article-chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        portfolioId: "p1",
-        message: "How should I think about today?",
-        history: [{ role: "assistant", content: "Earlier context" }],
-      }),
-    });
-
-    const res = await POST(req);
+    mocks.answerPortfolioQuestion.mockResolvedValue("Generic market answer.");
+    const res = await POST(makePost({
+      newsItemId: undefined, message: "How should I think about today?",
+      history: [{ role: "assistant", content: "Earlier context" }],
+    }));
+    const body: ChatResponseBody = await res.json();
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { messages?: Array<{ role: string; content: string }> };
-    expect(mockAnswerPortfolioQuestion).toHaveBeenCalledTimes(1);
-    expect(mockAnswerArticleQuestion).not.toHaveBeenCalled();
-    expect(body.messages?.some((message) => message.content === "Earlier context")).toBe(true);
-    expect(body.messages?.some((message) => message.role === "assistant" && message.content.includes("Generic market answer"))).toBe(true);
-    expect(mockGetAIProviderById).toHaveBeenCalledWith("openrouter");
+    expect(mocks.answerPortfolioQuestion).toHaveBeenCalledTimes(1);
+    expect(mocks.answerArticleQuestion).not.toHaveBeenCalled();
+    expect(body.messages?.some((message: { content: string }) => message.content === "Earlier context")).toBe(true);
+    expect(body.messages?.some((message: { role: string; content: string }) => message.role === "assistant" && message.content.includes("Generic market answer"))).toBe(true);
+    expect(mocks.getAIProviderById).toHaveBeenCalledWith("openrouter");
   });
 
   it("returns 503 without persisting either half of a failed exchange", async () => {
-    mockAnswerArticleQuestion.mockRejectedValue(new AIChatError("provider_unavailable", "down"));
-
-    const req = new Request("http://localhost/api/article-chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        portfolioId: "p1",
-        newsItemId: "n1",
-        message: "What is the risk?",
-      }),
-    });
-
-    const res = await POST(req);
+    mocks.answerArticleQuestion.mockRejectedValue(new AIChatError("provider_unavailable", "down"));
+    const res = await POST(makePost());
+    const body: ChatResponseBody = await res.json();
     expect(res.status).toBe(503);
-    const body = (await res.json()) as { error?: string; code?: string };
     expect(body.error).toMatch(/temporarily unavailable/i);
     expect(body.code).toBe("provider_unavailable");
     expect(insertUserCalls).toBe(0);
     expect(insertAssistantCalls).toBe(0);
-    expect(mockGetAIProviderById).toHaveBeenCalledWith("openrouter");
-    // Audit H5: a failed request gives its reserved quota unit back.
-    expect(mockReleaseAIUsage).toHaveBeenCalledTimes(1);
-    expect(mockReleaseAIUsage).toHaveBeenCalledWith(expect.any(String), RESERVED_USAGE);
+    expect(mocks.getAIProviderById).toHaveBeenCalledWith("openrouter");
+    expect(mocks.releaseAIUsage).toHaveBeenCalledTimes(1);
+    expect(mocks.releaseAIUsage).toHaveBeenCalledWith(expect.any(String), RESERVED_USAGE);
   });
 
   it("keeps the quota unit when the answer is delivered (H5)", async () => {
-    mockAnswerArticleQuestion.mockResolvedValue("Delivered answer");
-
-    const res = await POST(
-      new Request("http://localhost/api/article-chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ portfolioId: "p1", newsItemId: "n1", message: "What is the risk?" }),
-      }),
-    );
-
-    expect(res.status).toBe(200);
-    expect(mockReleaseAIUsage).not.toHaveBeenCalled();
+    mocks.answerArticleQuestion.mockResolvedValue("Delivered answer");
+    expect((await POST(makePost())).status).toBe(200);
+    expect(mocks.releaseAIUsage).not.toHaveBeenCalled();
   });
 
   it("returns 403 when a free user requests the premium tier", async () => {
-    mockAssertUserCanUseAI.mockRejectedValue(
-      new BillingAccessError({
-        currentPlan: "free",
-        requiredPlan: "premium",
-        requestedTier: "premium",
-      }),
-    );
-
-    const req = new Request("http://localhost/api/article-chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        portfolioId: "p1",
-        newsItemId: "n1",
-        message: "What matters here?",
-        modelTier: "premium",
-      }),
-    });
-
-    const res = await POST(req);
+    mocks.assertUserCanUseAI.mockRejectedValue(new BillingAccessError({
+      currentPlan: "free", requiredPlan: "premium", requestedTier: "premium",
+    }));
+    const res = await POST(makePost({ message: "What matters here?", modelTier: "premium" }));
+    const body: ChatResponseBody = await res.json();
     expect(res.status).toBe(403);
-    const body = (await res.json()) as { code?: string; requiredPlan?: string };
     expect(body.code).toBe("plan_upgrade_required");
     expect(body.requiredPlan).toBe("premium");
-    expect(mockGetAIProviderById).not.toHaveBeenCalled();
+    expect(mocks.getAIProviderById).not.toHaveBeenCalled();
   });
 
-  it("uses the premium tier provider when modelTier is premium", async () => {
-    mockAnswerArticleQuestion.mockResolvedValue("Premium-tier answer.");
-
-    const req = new Request("http://localhost/api/article-chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        portfolioId: "p1",
-        newsItemId: "n1",
-        message: "What matters here?",
-        modelTier: "premium",
-      }),
-    });
-
-    const res = await POST(req);
+  it.each([
+    { name: "uses the premium tier provider when modelTier is premium", modelTier: "premium", provider: "mistral", answer: "Premium-tier answer." },
+    { name: "uses the ultimate tier provider when modelTier is ultimate", modelTier: "ultimate", provider: "azure", answer: "Ultimate-tier answer." },
+  ])("$name", async ({ modelTier, provider, answer }) => {
+    mocks.answerArticleQuestion.mockResolvedValue(answer);
+    const res = await POST(makePost({ message: "What matters here?", modelTier }));
     expect(res.status).toBe(200);
-    expect(mockGetAIProviderById).toHaveBeenCalledWith("mistral");
-  });
-
-  it("uses the ultimate tier provider when modelTier is ultimate", async () => {
-    mockAnswerArticleQuestion.mockResolvedValue("Ultimate-tier answer.");
-
-    const req = new Request("http://localhost/api/article-chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        portfolioId: "p1",
-        newsItemId: "n1",
-        message: "What matters here?",
-        modelTier: "ultimate",
-      }),
-    });
-
-    const res = await POST(req);
-    expect(res.status).toBe(200);
-    expect(mockGetAIProviderById).toHaveBeenCalledWith("azure");
+    expect(mocks.getAIProviderById).toHaveBeenCalledWith(provider);
   });
 
   it("returns 400 for invalid model tiers", async () => {
-    const req = new Request("http://localhost/api/article-chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        portfolioId: "p1",
-        newsItemId: "n1",
-        message: "What matters here?",
-        modelTier: "enterprise",
-      }),
-    });
-
-    const res = await POST(req);
+    const res = await POST(makePost({ message: "What matters here?", modelTier: "enterprise" }));
     expect(res.status).toBe(400);
-    expect(mockGetAIProviderById).not.toHaveBeenCalled();
+    expect(mocks.getAIProviderById).not.toHaveBeenCalled();
   });
 
-  it("returns provider_auth code and config-specific message for auth errors", async () => {
-    mockAnswerArticleQuestion.mockRejectedValue(
-      new AIChatError("provider_auth", "Azure OpenAI is misconfigured"),
-    );
-
-    const req = new Request("http://localhost/api/article-chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ portfolioId: "p1", newsItemId: "n1", message: "test" }),
-    });
-
-    const res = await POST(req);
+  it.each([
+    { name: "returns provider_auth code and config-specific message for auth errors", error: new AIChatError("provider_auth", "Azure OpenAI is misconfigured"), code: "provider_auth", copy: /credentials/i },
+    { name: "returns provider_timeout code for timeout errors", error: new AIChatError("provider_timeout", "timed out"), code: "provider_timeout", copy: /too long/i },
+    { name: "returns actionable copy when the upstream provider is rate limited", error: new Error("OpenRouter HTTP 429: Provider returned too many requests"), code: "provider_rate_limited", copy: /busy|rate.?limited/i },
+    { name: "returns actionable copy when the provider rejects oversized context", error: new Error("Azure OpenAI HTTP 400: maximum context length exceeded"), code: "provider_context_limit", copy: /too much context/i },
+    { name: "returns provider_bad_response code for empty model output", error: new AIChatError("provider_bad_response", "Model returned an empty answer."), code: "provider_bad_response", copy: /unusable response/i },
+  ])("$name", async ({ error, code, copy }) => {
+    mocks.answerArticleQuestion.mockRejectedValue(error);
+    const res = await POST(makePost({ message: "test" }));
+    const body: ChatResponseBody = await res.json();
     expect(res.status).toBe(503);
-    const body = (await res.json()) as { error?: string; code?: string };
-    expect(body.code).toBe("provider_auth");
-    expect(body.error).toMatch(/credentials/i);
+    expect(body.code).toBe(code);
+    expect(body.error).toMatch(copy);
+    expect(insertUserCalls).toBe(0);
     expect(insertAssistantCalls).toBe(0);
   });
 
-  it("returns provider_timeout code for timeout errors", async () => {
-    mockAnswerArticleQuestion.mockRejectedValue(new AIChatError("provider_timeout", "timed out"));
-
-    const req = new Request("http://localhost/api/article-chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ portfolioId: "p1", newsItemId: "n1", message: "test" }),
-    });
-
-    const res = await POST(req);
-    expect(res.status).toBe(503);
-    const body = (await res.json()) as { error?: string; code?: string };
-    expect(body.code).toBe("provider_timeout");
-    expect(body.error).toMatch(/too long/i);
-  });
-
-  it("returns actionable copy when the upstream provider is rate limited", async () => {
-    mockAnswerArticleQuestion.mockRejectedValue(
-      new Error("OpenRouter HTTP 429: Provider returned too many requests"),
-    );
-
-    const req = new Request("http://localhost/api/article-chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ portfolioId: "p1", newsItemId: "n1", message: "test" }),
-    });
-
-    const res = await POST(req);
-    const body = (await res.json()) as { error?: string; code?: string };
-
-    expect(res.status).toBe(503);
-    expect(body.code).toBe("provider_rate_limited");
-    expect(body.error).toMatch(/busy|rate.?limited/i);
-  });
-
-  it("returns actionable copy when the provider rejects oversized context", async () => {
-    mockAnswerArticleQuestion.mockRejectedValue(
-      new Error("Azure OpenAI HTTP 400: maximum context length exceeded"),
-    );
-
-    const req = new Request("http://localhost/api/article-chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ portfolioId: "p1", newsItemId: "n1", message: "test" }),
-    });
-
-    const res = await POST(req);
-    const body = (await res.json()) as { error?: string; code?: string };
-
-    expect(res.status).toBe(503);
-    expect(body.code).toBe("provider_context_limit");
-    expect(body.error).toMatch(/too much context/i);
-  });
-
-  it("returns provider_bad_response code for empty model output", async () => {
-    mockAnswerArticleQuestion.mockRejectedValue(
-      new AIChatError("provider_bad_response", "Model returned an empty answer."),
-    );
-
-    const req = new Request("http://localhost/api/article-chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ portfolioId: "p1", newsItemId: "n1", message: "test" }),
-    });
-
-    const res = await POST(req);
-    expect(res.status).toBe(503);
-    const body = (await res.json()) as { error?: string; code?: string };
-    expect(body.code).toBe("provider_bad_response");
-    expect(body.error).toMatch(/unusable response/i);
-  });
-
   it("inserts assistant message on success", async () => {
-    mockAnswerArticleQuestion.mockResolvedValue("A real answer about your question.");
-
-    const req = new Request("http://localhost/api/article-chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        portfolioId: "p1",
-        newsItemId: "n1",
-        message: "What is the risk?",
-      }),
-    });
-
-    const res = await POST(req);
+    mocks.answerArticleQuestion.mockResolvedValue("A real answer about your question.");
+    const res = await POST(makePost());
+    const body: ChatResponseBody = await res.json();
     expect(res.status).toBe(200);
     expect(insertAssistantCalls).toBe(1);
     expect(insertedMessageBatches).toHaveLength(1);
     expect(insertedMessageBatches[0]?.map((row) => row.role)).toEqual(["user", "assistant"]);
-    expect(
-      Date.parse(insertedMessageBatches[0]?.[0]?.created_at ?? "") <
-        Date.parse(insertedMessageBatches[0]?.[1]?.created_at ?? ""),
-    ).toBe(true);
-    const body = (await res.json()) as { messages?: Array<{ role: string; content: string }> };
-    expect(body.messages?.some((m) => m.role === "assistant" && m.content.includes("real answer"))).toBe(true);
+    expect(Date.parse(insertedMessageBatches[0]?.[0]?.created_at ?? "") < Date.parse(insertedMessageBatches[0]?.[1]?.created_at ?? "")).toBe(true);
+    expect(body.messages?.some((message: { role: string; content: string }) => message.role === "assistant" && message.content.includes("real answer"))).toBe(true);
   });
 
   it("passes prior thread messages without duplicating the current question in history", async () => {
-    messageRows.push({
-      id: "prior-assistant",
-      role: "assistant",
-      content: "Earlier answer",
-      created_at: "2026-03-24T12:00:00.000Z",
-    });
-    mockAnswerArticleQuestion.mockImplementation(async (context) =>
-      JSON.stringify({ history: context.history, question: context.question }),
-    );
-
-    const req = new Request("http://localhost/api/article-chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        portfolioId: "p1",
-        newsItemId: "n1",
-        message: "Current question",
-      }),
-    });
-
-    const res = await POST(req);
-    const body = (await res.json()) as {
-      messages?: Array<{ role: string; content: string }>;
-    };
-    const assistantReply = body.messages?.findLast((message) => message.role === "assistant");
-
+    messageRows.push({ id: "prior-assistant", role: "assistant", content: "Earlier answer", created_at: "2026-03-24T12:00:00.000Z" });
+    mocks.answerArticleQuestion.mockImplementation(async (context) => JSON.stringify({ history: context.history, question: context.question }));
+    const res = await POST(makePost({ message: "Current question" }));
+    const body: ChatResponseBody = await res.json();
+    const assistantReply = body.messages?.findLast((message: { role: string }) => message.role === "assistant");
     expect(res.status).toBe(200);
     expect(JSON.parse(assistantReply?.content ?? "{}")).toEqual({
-      history: [{ role: "assistant", content: "Earlier answer" }],
-      question: "Current question",
+      history: [{ role: "assistant", content: "Earlier answer" }], question: "Current question",
     });
   });
 
   it("does not add a failed question to history when the user retries", async () => {
-    mockAnswerArticleQuestion
+    mocks.answerArticleQuestion
       .mockRejectedValueOnce(new AIChatError("provider_unavailable", "down"))
-      .mockImplementationOnce(async (context) =>
-        JSON.stringify({ history: context.history, question: context.question }),
-      );
-
-    const makeRequest = () =>
-      new Request("http://localhost/api/article-chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          portfolioId: "p1",
-          newsItemId: "n1",
-          message: "Retry this question",
-        }),
-      });
-
-    const firstResponse = await POST(makeRequest());
-    const retryResponse = await POST(makeRequest());
-    const body = (await retryResponse.json()) as {
-      messages?: Array<{ role: string; content: string }>;
-    };
-    const assistantReply = body.messages?.findLast((entry) => entry.role === "assistant");
-
+      .mockImplementationOnce(async (context) => JSON.stringify({ history: context.history, question: context.question }));
+    const firstResponse = await POST(makePost({ message: "Retry this question" }));
+    const retryResponse = await POST(makePost({ message: "Retry this question" }));
+    const body: ChatResponseBody = await retryResponse.json();
+    const assistantReply = body.messages?.findLast((message: { role: string }) => message.role === "assistant");
     expect(firstResponse.status).toBe(503);
     expect(retryResponse.status).toBe(200);
-    expect(JSON.parse(assistantReply?.content ?? "{}")).toEqual({
-      history: [],
-      question: "Retry this question",
-    });
+    expect(JSON.parse(assistantReply?.content ?? "{}")).toEqual({ history: [], question: "Retry this question" });
     expect(insertUserCalls).toBe(1);
     expect(insertAssistantCalls).toBe(1);
   });
 
   it("returns 429 with retry metadata when the durable burst limit is hit", async () => {
-    mockAssertUserCanUseAI.mockRejectedValue(
-      new AIUsageAccessError({
-        code: "rate_limited",
-        message: "Too many requests. Please wait a moment.",
-        retryAfterMs: 12_000,
-        resetsAt: "2026-04-04T12:01:00.000Z",
-      }),
-    );
-
-    const req = new Request("http://localhost/api/article-chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        portfolioId: "p1",
-        newsItemId: "n1",
-        message: "What matters here?",
-      }),
-    });
-
-    const res = await POST(req);
-    const body = (await res.json()) as { code?: string; retryAfterMs?: number };
+    mocks.assertUserCanUseAI.mockRejectedValue(new AIUsageAccessError({
+      code: "rate_limited", message: "Too many requests. Please wait a moment.", retryAfterMs: 12_000, resetsAt: "2026-04-04T12:01:00.000Z",
+    }));
+    const res = await POST(makePost({ message: "What matters here?" }));
+    const body: ChatResponseBody = await res.json();
     expect(res.status).toBe(429);
     expect(body.code).toBe("rate_limited");
     expect(body.retryAfterMs).toBe(12_000);
-    expect(mockGetAIProviderById).not.toHaveBeenCalled();
+    expect(mocks.getAIProviderById).not.toHaveBeenCalled();
   });
 
   it("returns 429 with quota metadata when the durable quota is exhausted", async () => {
-    mockAssertUserCanUseAI.mockRejectedValue(
-      new AIUsageAccessError({
-        code: "quota_exceeded",
-        message: "You have reached your AI usage limit for the current billing window.",
-        quotaWindow: "day",
-        quotaLimit: 100,
-        quotaUsed: 100,
-        resetsAt: "2026-04-05T04:00:00.000Z",
-      }),
-    );
-
-    const req = new Request("http://localhost/api/article-chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        portfolioId: "p1",
-        newsItemId: "n1",
-        message: "What matters here?",
-      }),
-    });
-
-    const res = await POST(req);
-    const body = (await res.json()) as {
-      code?: string;
-      quotaWindow?: string;
-      quotaLimit?: number;
-      quotaUsed?: number;
-    };
+    mocks.assertUserCanUseAI.mockRejectedValue(new AIUsageAccessError({
+      code: "quota_exceeded", message: "You have reached your AI usage limit for the current billing window.",
+      quotaWindow: "day", quotaLimit: 100, quotaUsed: 100, resetsAt: "2026-04-05T04:00:00.000Z",
+    }));
+    const res = await POST(makePost({ message: "What matters here?" }));
+    const body: ChatResponseBody = await res.json();
     expect(res.status).toBe(429);
     expect(body.code).toBe("quota_exceeded");
     expect(body.quotaWindow).toBe("day");
@@ -725,20 +359,73 @@ describe("POST /api/article-chat", () => {
   });
 
   it("checks durable AI access exactly once even when the provider later fails", async () => {
-    mockAnswerArticleQuestion.mockRejectedValue(new AIChatError("provider_unavailable", "down"));
+    mocks.answerArticleQuestion.mockRejectedValue(new AIChatError("provider_unavailable", "down"));
+    expect((await POST(makePost())).status).toBe(503);
+    expect(mocks.assertUserCanUseAI).toHaveBeenCalledTimes(1);
+  });
+});
 
-    const req = new Request("http://localhost/api/article-chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        portfolioId: "p1",
-        newsItemId: "n1",
-        message: "What is the risk?",
-      }),
-    });
+describe("POST /api/article-chat (Turnstile grant)", () => {
+  it("requires Turnstile on the first send for a new story scope and issues a grant cookie", async () => {
+    const res = await POST(makePost({ message: "Hello", turnstileToken: "tok-1" }));
+    expect(res.status).toBe(200);
+    expect(mocks.verifyTurnstileToken).toHaveBeenCalledTimes(1);
+    expect(mocks.verifyTurnstileToken.mock.calls[0][0].expectedAction).toBe("article-chat");
+    const setCookie = res.headers.get("set-cookie");
+    expect(setCookie).toBeTruthy();
+    expect(setCookie).toContain("HttpOnly");
+    expect(setCookie).toContain("SameSite=Lax");
+  });
 
-    const res = await POST(req);
+  it.each([
+    { name: "does NOT require Turnstile on subsequent sends when the grant cookie is present for the same scope", newsItemId: "n1", message: "Second message" },
+    { name: "does NOT require Turnstile when the story changes within a verified portfolio chat window", newsItemId: "n2", message: "On the other story" },
+    { name: "does NOT require Turnstile for general feed chat when a story grant exists for the same portfolio", newsItemId: undefined, message: "General question" },
+  ])("$name", async ({ newsItemId, message }) => {
+    const res = await POST(makePost({ newsItemId, message }, cookieHeaderFor()));
+    expect(res.status).toBe(200);
+    expect(mocks.verifyTurnstileToken).not.toHaveBeenCalled();
+    expect(res.headers.get("set-cookie")).toBeNull();
+  });
+
+  it("returns 503 on AI failure and does NOT re-consume the grant (cookie-bearing request should succeed once AI is healthy again)", async () => {
+    mocks.answerArticleQuestion.mockRejectedValueOnce(new AIChatError("provider_unavailable", "down"));
+    const failRes = await POST(makePost({ message: "First try" }, cookieHeaderFor()));
+    expect(failRes.status).toBe(503);
+    expect(mocks.verifyTurnstileToken).not.toHaveBeenCalled();
+    mocks.answerArticleQuestion.mockResolvedValue("retry answer");
+    const retryRes = await POST(makePost({ message: "Second try" }, cookieHeaderFor()));
+    expect(retryRes.status).toBe(200);
+    expect(mocks.verifyTurnstileToken).not.toHaveBeenCalled();
+  });
+
+  it("issues the grant cookie when Turnstile passes even if the AI provider fails", async () => {
+    mocks.answerArticleQuestion.mockRejectedValueOnce(new AIChatError("provider_unavailable", "down"));
+    const res = await POST(makePost({ message: "First try", turnstileToken: "tok-1" }));
     expect(res.status).toBe(503);
-    expect(mockAssertUserCanUseAI).toHaveBeenCalledTimes(1);
+    expect(mocks.verifyTurnstileToken).toHaveBeenCalledTimes(1);
+    expect(res.headers.get("set-cookie")).toContain("Max-Age=900");
+  });
+
+  it("rejects with 403 turnstile_failed when no grant cookie is present and the token fails", async () => {
+    mocks.verifyTurnstileToken.mockResolvedValueOnce({
+      success: false, code: "invalid-input-response", message: "Turnstile verification failed.",
+    });
+    const res = await POST(makePost({ message: "Hi", turnstileToken: "bad" }));
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe("turnstile_failed");
+    expect(res.headers.get("set-cookie")).toBeNull();
+  });
+});
+
+describe("GET /api/article-chat (Turnstile grant)", () => {
+  it.each([
+    { name: "returns turnstileVerified: false when no grant cookie is present", verified: false },
+    { name: "returns turnstileVerified: true when a grant cookie is for a different story in the same portfolio", verified: true },
+  ])("$name", async ({ verified }) => {
+    const cookie = verified ? cookieHeaderFor({ ...storyScope, newsItemId: "different-story" }) : undefined;
+    const res = await GET(makeGet(cookie));
+    expect(res.status).toBe(200);
+    expect((await res.json()).turnstileVerified).toBe(verified);
   });
 });

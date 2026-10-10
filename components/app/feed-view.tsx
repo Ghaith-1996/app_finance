@@ -198,6 +198,7 @@ export function FeedView({
   const [isDesktopChatLayout, setIsDesktopChatLayout] = useState(true);
 
   const loadingRef = useRef(false);
+  const activeFeedRequestRef = useRef<AbortController | null>(null);
   const queuedSilentRefreshRef = useRef(false);
   const realtimeRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const skipNextFeedFetchRef = useRef(false);
@@ -256,13 +257,16 @@ export function FeedView({
 
   const fetchFeed = useCallback(
     async ({ silent = false }: { silent?: boolean } = {}) => {
-      if (loadingRef.current) {
-        if (silent && hasLoadedFeedRef.current) {
+      if (loadingRef.current && silent) {
+        if (hasLoadedFeedRef.current) {
           queuedSilentRefreshRef.current = true;
         }
         return;
       }
 
+      activeFeedRequestRef.current?.abort();
+      const requestController = new AbortController();
+      activeFeedRequestRef.current = requestController;
       loadingRef.current = true;
       const showInlineRefresh = silent || hasLoadedFeedRef.current;
       if (showInlineRefresh) {
@@ -310,8 +314,9 @@ export function FeedView({
             params.set("ticker", appliedTickerQuery.trim().toUpperCase());
           }
         }
-        const res = await fetch(`/api/feed?${params.toString()}`);
+        const res = await fetch(`/api/feed?${params.toString()}`, { signal: requestController.signal });
         const data = await res.json().catch(() => ({}));
+        if (activeFeedRequestRef.current !== requestController) return;
         if (!res.ok) {
           const message = data.error ?? "Failed to load feed";
           if (silent && hasLoadedFeedRef.current) {
@@ -361,6 +366,7 @@ export function FeedView({
         setBackgroundError(null);
         hasLoadedFeedRef.current = true;
       } catch (fetchError) {
+        if (requestController.signal.aborted || activeFeedRequestRef.current !== requestController) return;
         const message =
           fetchError instanceof Error ? fetchError.message : "Failed to load feed";
         if (silent && hasLoadedFeedRef.current) {
@@ -373,15 +379,15 @@ export function FeedView({
         setTotalCount(0);
         hasLoadedFeedRef.current = false;
       } finally {
-        if (showInlineRefresh) {
+        if (activeFeedRequestRef.current === requestController) {
           setIsRefreshing(false);
-        } else {
           setIsInitialLoading(false);
-        }
-        loadingRef.current = false;
-        if (queuedSilentRefreshRef.current) {
-          queuedSilentRefreshRef.current = false;
-          void fetchFeed({ silent: true });
+          activeFeedRequestRef.current = null;
+          loadingRef.current = false;
+          if (queuedSilentRefreshRef.current) {
+            queuedSilentRefreshRef.current = false;
+            void fetchFeed({ silent: true });
+          }
         }
       }
     },

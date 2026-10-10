@@ -11,6 +11,7 @@ vi.mock("@/lib/services/news/pool-snapshot", () => ({
 }));
 
 import { runAnalysis } from "@/lib/services/analysis";
+import type { IAIProvider, PortfolioMatchAssessment } from "@/lib/services/ai";
 
 type AnalysisRunRow = {
   id: string;
@@ -39,7 +40,6 @@ function createSupabaseMock({
   const insertedFeedItems: Array<Record<string, unknown>> = [];
   const insertedInsights: Array<Record<string, unknown>> = [];
   const updatedRuns: AnalysisRunRow[] = [];
-  let newsSelectCall = 0;
 
   return {
     insertedFeedItems,
@@ -133,42 +133,19 @@ function createSupabaseMock({
       }
 
       if (table === "news_items") {
-        return {
-          select: (_columns: string, opts?: { count?: string; head?: boolean }) => {
-            if (opts?.head) {
-              return {
-                gte: async () => ({ count: newsRows.length, error: null }),
-              };
-            }
-
-            newsSelectCall += 1;
-
-            if (newsSelectCall === 1) {
-              return {
-                gte: () => ({
-                  order: () => ({
-                    limit: () => ({
-                      maybeSingle: async () => ({
-                        data: newsRows[0]
-                          ? { published_at: newsRows[0].published_at }
-                          : null,
-                        error: null,
-                      }),
-                    }),
-                  }),
-                }),
-              };
-            }
-
-            return {
-              gte: () => ({
-                order: () => ({
-                  limit: async () => ({ data: newsRows, error: null }),
-                }),
-              }),
-            };
-          },
+        const result = { data: newsRows, count: newsRows.length, error: null };
+        const query = {
+          gte: () => query,
+          order: () => query,
+          limit: () => query,
+          maybeSingle: async () => ({
+            data: newsRows[0] ? { published_at: newsRows[0].published_at } : null,
+            error: null,
+          }),
+          then: (resolve: (value: typeof result) => unknown) =>
+            Promise.resolve(result).then(resolve),
         };
+        return { select: () => query };
       }
 
       if (table === "portfolio_insights") {
@@ -199,29 +176,22 @@ function createSupabaseMock({
   };
 }
 
-function createAIProvider(overrides?: Partial<ReturnType<typeof buildAssessmentProvider>>) {
+function createAIProvider() {
   return {
-    ...buildAssessmentProvider(),
-    ...overrides,
-  };
-}
-
-function buildAssessmentProvider() {
-  return {
-    generateSummary: vi.fn().mockResolvedValue("summary"),
-    scoreSentiment: vi.fn().mockResolvedValue("neutral"),
-    assessPortfolioMatch: vi.fn().mockResolvedValue({
+    generateSummary: vi.fn<IAIProvider["generateSummary"]>().mockResolvedValue("summary"),
+    scoreSentiment: vi.fn<IAIProvider["scoreSentiment"]>().mockResolvedValue("neutral"),
+    assessPortfolioMatch: vi.fn<IAIProvider["assessPortfolioMatch"]>().mockResolvedValue({
       relevanceScore: 0,
       whyItMatters: "",
       matchedHoldings: [],
       matchReasonCodes: [],
     }),
-    generateInsights: vi.fn().mockResolvedValue([
+    generateInsights: vi.fn<IAIProvider["generateInsights"]>().mockResolvedValue([
       { title: "Most exposed theme", value: "Technology", detail: "AAPL drives exposure." },
     ]),
-    analyzeArticle: vi.fn(),
-    answerArticleQuestion: vi.fn(),
-    answerPortfolioQuestion: vi.fn(),
+    analyzeArticle: vi.fn<IAIProvider["analyzeArticle"]>(),
+    answerArticleQuestion: vi.fn<IAIProvider["answerArticleQuestion"]>(),
+    answerPortfolioQuestion: vi.fn<IAIProvider["answerPortfolioQuestion"]>(),
   };
 }
 
@@ -246,13 +216,13 @@ function baseNewsRow(overrides?: Partial<Record<string, unknown>>) {
 }
 
 describe("runAnalysis portfolio match gating", () => {
+  let ai: ReturnType<typeof createAIProvider>;
   beforeEach(() => {
-    mockGetAIProvider.mockReset();
+    ai = createAIProvider();
+    mockGetAIProvider.mockReset().mockReturnValue(ai);
   });
 
   it("returns a concurrency code when a portfolio already has an active run", async () => {
-    mockGetAIProvider.mockReturnValue(createAIProvider());
-
     const supabase = createSupabaseMock({
       newsRows: [baseNewsRow()],
       runInsertError: {
@@ -269,8 +239,6 @@ describe("runAnalysis portfolio match gating", () => {
   });
 
   it("fails stale active runs before creating a replacement run", async () => {
-    mockGetAIProvider.mockReturnValue(createAIProvider());
-
     const staleStartedAt = new Date(Date.now() - 16 * 60 * 1000).toISOString();
     const supabase = createSupabaseMock({
       newsRows: [baseNewsRow()],
@@ -292,8 +260,6 @@ describe("runAnalysis portfolio match gating", () => {
   });
 
   it("does not reclaim an active run with a fresh heartbeat", async () => {
-    mockGetAIProvider.mockReturnValue(createAIProvider());
-
     const staleStartedAt = new Date(Date.now() - 30 * 60 * 1000).toISOString();
     const freshUpdatedAt = new Date(Date.now() - 2 * 60 * 1000).toISOString();
     const supabase = createSupabaseMock({
@@ -321,16 +287,7 @@ describe("runAnalysis portfolio match gating", () => {
   });
 
   it("marks runs as degraded when AI failures make results unreliable", async () => {
-    const ai = createAIProvider({
-      generateInsights: vi.fn().mockRejectedValue(new Error("provider timeout")),
-      assessPortfolioMatch: vi.fn().mockResolvedValue({
-        relevanceScore: 0,
-        whyItMatters: "",
-        matchedHoldings: [],
-        matchReasonCodes: [],
-      }),
-    });
-    mockGetAIProvider.mockReturnValue(ai);
+    ai.generateInsights.mockRejectedValue(new Error("provider timeout"));
 
     const supabase = createSupabaseMock({
       newsRows: [
@@ -350,50 +307,35 @@ describe("runAnalysis portfolio match gating", () => {
     expect(supabase.updatedRuns.some((row) => row.status === "degraded")).toBe(true);
   });
 
-  it("rejects unrelated headlines with no validated portfolio evidence", async () => {
-    const ai = createAIProvider({
-      assessPortfolioMatch: vi.fn().mockResolvedValue({
-        relevanceScore: 92,
-        whyItMatters: "Broad macro themes could matter for your holdings.",
-        matchedHoldings: [],
-        matchReasonCodes: ["sector_exposure_explicit"],
-      }),
-    });
-    mockGetAIProvider.mockReturnValue(ai);
-
+  it.each([
+    {
+      name: "persists direct held ticker matches with reason codes",
+      news: {
+        headline: "Apple supplier raises guidance",
+        raw_content: "Apple Inc. may see stronger iPhone demand this quarter.",
+        stock_tags: ["AAPL"],
+      },
+      tags: ["AAPL"],
+      reasons: ["held_ticker_tag", "held_ticker_impact"],
+    },
+    {
+      name: "persists held stock matches from ticker impacts even when stock tags are empty",
+      news: {
+        headline: "Cloud demand lifts sentiment",
+        raw_content: "Enterprise cloud demand is improving for large platform companies.",
+        stock_tags: [],
+      },
+      tags: [],
+      reasons: ["held_ticker_impact"],
+    },
+  ])("$name", async ({ news, tags, reasons }) => {
     const supabase = createSupabaseMock({
-      newsRows: [baseNewsRow()],
-    });
-
-    const result = await runAnalysis(supabase as never, "p1");
-
-    expect(result.error).toBeNull();
-    expect(result.meta?.feedItemsCreated).toBe(0);
-    expect(supabase.insertedFeedItems).toHaveLength(0);
-  });
-
-  it("persists direct held ticker matches with reason codes", async () => {
-    const ai = createAIProvider({
-      assessPortfolioMatch: vi.fn().mockResolvedValue({
-        relevanceScore: 0,
-        whyItMatters: "",
-        matchedHoldings: [],
-        matchReasonCodes: [],
-      }),
-    });
-    mockGetAIProvider.mockReturnValue(ai);
-
-    const supabase = createSupabaseMock({
-      newsRows: [
-        baseNewsRow({
-          headline: "Apple supplier raises guidance",
-          raw_content: "Apple Inc. may see stronger iPhone demand this quarter.",
-          stock_tags: ["AAPL"],
-          ticker_impacts: [{ symbol: "AAPL", effect: "bullish" }],
-          category: "technology",
-          overall_effect: "bullish",
-        }),
-      ],
+      newsRows: [baseNewsRow({
+        ...news,
+        ticker_impacts: [{ symbol: "AAPL", effect: "bullish" }],
+        category: "technology",
+        overall_effect: "bullish",
+      })],
     });
 
     const result = await runAnalysis(supabase as never, "p1");
@@ -401,10 +343,8 @@ describe("runAnalysis portfolio match gating", () => {
     expect(result.meta?.feedItemsCreated).toBe(1);
     expect(supabase.insertedFeedItems).toHaveLength(1);
     expect(supabase.insertedFeedItems[0].holdings).toEqual(["AAPL"]);
-    expect(supabase.insertedFeedItems[0].match_reason_codes).toEqual([
-      "held_ticker_tag",
-      "held_ticker_impact",
-    ]);
+    expect(supabase.insertedFeedItems[0].matched_stock_tags).toEqual(tags);
+    expect(supabase.insertedFeedItems[0].match_reason_codes).toEqual(reasons);
     expect(ai.assessPortfolioMatch).not.toHaveBeenCalled();
   });
 
@@ -423,7 +363,6 @@ describe("runAnalysis portfolio match gating", () => {
       ["feed insert", { feedInsertError: { message: "XX000 feed write rejected" } }, /Feed items could not be saved/],
       ["final status update", { publishError: { message: "XX000 run update rejected" } }, /could not be published/],
     ])("%s failure leaves the run unpublished", async (_label, injected, message) => {
-      mockGetAIProvider.mockReturnValue(createAIProvider());
       const supabase = createSupabaseMock({ newsRows: appleNews(), ...injected });
 
       const result = await runAnalysis(supabase as never, "p1");
@@ -439,52 +378,14 @@ describe("runAnalysis portfolio match gating", () => {
 
   });
 
-  it("persists held stock matches from ticker impacts even when stock tags are empty", async () => {
-    const ai = createAIProvider({
-      assessPortfolioMatch: vi.fn().mockResolvedValue({
-        relevanceScore: 0,
-        whyItMatters: "",
-        matchedHoldings: [],
-        matchReasonCodes: [],
-      }),
-    });
-    mockGetAIProvider.mockReturnValue(ai);
-
-    const supabase = createSupabaseMock({
-      newsRows: [
-        baseNewsRow({
-          headline: "Cloud demand lifts sentiment",
-          raw_content: "Enterprise cloud demand is improving for large platform companies.",
-          stock_tags: [],
-          ticker_impacts: [{ symbol: "AAPL", effect: "bullish" }],
-          category: "technology",
-          overall_effect: "bullish",
-        }),
-      ],
-    });
-
-    const result = await runAnalysis(supabase as never, "p1");
-
-    expect(result.meta?.feedItemsCreated).toBe(1);
-    expect(supabase.insertedFeedItems[0].holdings).toEqual(["AAPL"]);
-    expect(supabase.insertedFeedItems[0].matched_stock_tags).toEqual([]);
-    expect(supabase.insertedFeedItems[0].match_reason_codes).toEqual([
-      "held_ticker_impact",
-    ]);
-    expect(ai.assessPortfolioMatch).not.toHaveBeenCalled();
-  });
-
   it("allows explicit sector exposure only when the why-it-matters text names the holding", async () => {
-    const ai = createAIProvider({
-      assessPortfolioMatch: vi.fn().mockResolvedValue({
-        relevanceScore: 74,
-        whyItMatters:
-          "AAPL may face margin pressure because semiconductor costs are rising across the technology sector.",
-        matchedHoldings: ["AAPL"],
-        matchReasonCodes: ["sector_exposure_explicit"],
-      }),
+    ai.assessPortfolioMatch.mockResolvedValue({
+      relevanceScore: 74,
+      whyItMatters:
+        "AAPL may face margin pressure because semiconductor costs are rising across the technology sector.",
+      matchedHoldings: ["AAPL"],
+      matchReasonCodes: ["sector_exposure_explicit"],
     });
-    mockGetAIProvider.mockReturnValue(ai);
 
     const supabase = createSupabaseMock({
       newsRows: [
@@ -505,71 +406,72 @@ describe("runAnalysis portfolio match gating", () => {
     expect(supabase.insertedFeedItems[0].holdings).toEqual(["AAPL"]);
   });
 
-  it("does not qualify a story when why-it-matters is generic template text", async () => {
-    const ai = createAIProvider({
-      assessPortfolioMatch: vi.fn().mockResolvedValue({
+  it.each<{
+    name: string;
+    assessment: PortfolioMatchAssessment;
+    news?: Parameters<typeof baseNewsRow>[0];
+    holdings?: Array<Record<string, unknown>>;
+  }>([
+    {
+      name: "rejects unrelated headlines with no validated portfolio evidence",
+      assessment: {
+        relevanceScore: 92,
+        whyItMatters: "Broad macro themes could matter for your holdings.",
+        matchedHoldings: [],
+        matchReasonCodes: ["sector_exposure_explicit"],
+      },
+    },
+    {
+      name: "does not qualify a story when why-it-matters is generic template text",
+      assessment: {
         relevanceScore: 91,
         whyItMatters:
           "This story may affect positions such as AAPL. Broader macro updates continue.",
         matchedHoldings: ["AAPL"],
         matchReasonCodes: ["sector_exposure_explicit"],
-      }),
-    });
-    mockGetAIProvider.mockReturnValue(ai);
-
-    const supabase = createSupabaseMock({
-      newsRows: [
-        baseNewsRow({
-          headline: "Technology sentiment weakens",
-          raw_content: "Technology companies are seeing softer sentiment this week.",
-          category: "technology",
-        }),
-      ],
-    });
-
-    const result = await runAnalysis(supabase as never, "p1");
-
-    expect(result.meta?.feedItemsCreated).toBe(0);
-    expect(supabase.insertedFeedItems).toHaveLength(0);
-  });
-
-  it("fails closed on generic macro relevance when there is no direct overlap", async () => {
-    const ai = createAIProvider({
-      assessPortfolioMatch: vi.fn().mockResolvedValue({
+      },
+      news: {
+        headline: "Technology sentiment weakens",
+        raw_content: "Technology companies are seeing softer sentiment this week.",
+        category: "technology",
+      },
+    },
+    {
+      name: "fails closed on generic macro relevance when there is no direct overlap",
+      assessment: {
         relevanceScore: 84,
         whyItMatters: "Alphabet is spending aggressively on AI infrastructure.",
         matchedHoldings: [],
         matchReasonCodes: ["held_company_mention"],
-      }),
-    });
-    mockGetAIProvider.mockReturnValue(ai);
-
+      },
+      holdings: [{
+        id: "h1",
+        symbol: "GOOGL",
+        company: "Alphabet Inc.",
+        sector: "Technology",
+        market: "NASDAQ",
+        source: "manual",
+        price: 100,
+        daily_change: 0,
+        allocation: 50,
+        thesis: "Search and cloud",
+      }],
+      news: {
+        headline: "Alphabet ramps AI capex",
+        raw_content: "Alphabet is increasing spending on AI infrastructure.",
+        category: "technology",
+      },
+    },
+  ])("$name", async ({ assessment, news, holdings }) => {
+    ai.assessPortfolioMatch.mockResolvedValue(assessment);
     const supabase = createSupabaseMock({
-      holdingsRows: [
-        {
-          id: "h1",
-          symbol: "GOOGL",
-          company: "Alphabet Inc.",
-          sector: "Technology",
-          market: "NASDAQ",
-          source: "manual",
-          price: 100,
-          daily_change: 0,
-          allocation: 50,
-          thesis: "Search and cloud",
-        },
-      ],
-      newsRows: [
-        baseNewsRow({
-          headline: "Alphabet ramps AI capex",
-          raw_content: "Alphabet is increasing spending on AI infrastructure.",
-          category: "technology",
-        }),
-      ],
+      newsRows: [baseNewsRow(news)],
+      holdingsRows: holdings,
     });
 
     const result = await runAnalysis(supabase as never, "p1");
 
+    expect(result.error).toBeNull();
     expect(result.meta?.feedItemsCreated).toBe(0);
     expect(supabase.insertedFeedItems).toHaveLength(0);
   });

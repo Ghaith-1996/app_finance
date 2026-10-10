@@ -116,7 +116,7 @@ Keep results tied to a commit/working-tree state, command, runtime, initial data
 Mocks can verify application failure handling; they cannot prove database locking, rollback, RLS or atomic quotas.
 SQL execution cannot by itself prove OAuth, browser behavior, a real news source or live AI operation.
 [TEST_AUDIT.md](TEST_AUDIT.md) records the dated test cleanup decisions; its counters are historical.
-The proposed full-stack E2E transition is not yet a verified procedure here; add commands only after the runner and scenarios actually exist and execute.
+The local E2E runner below executes real application layers with external HTTP fixtures. Check each run's assertion results for the exact sub-oracles exercised; its existence alone does not establish complete coverage or verify OAuth and live providers.
 Provider smoke scripts are not E2E coverage. Current quality-gate results belong to the implementation reports, not inherited claims in this guide.
 Ordinary deterministic checks must avoid real paid generations, emails, SMS and payments.
 
@@ -161,6 +161,16 @@ Health includes freshness, enrichment backlog, failed runs, stale quotes and fai
 It does not yet fully report billing reconciliation drift or per-portfolio analysis age.
 
 ## Staging checks still requiring evidence
+
+### Isolated local E2E
+
+`npm run test:e2e` builds a disposable Node22/Python3.11/Chromium image, starts a fresh Supabase2.119.0 stack, applies all47 migrations in lexical order, and runs the production Next app and Playwright. Docker's `default` context must be available. Set `E2E_SUPABASE_BIN` to the installed2.119.0 CLI executable; install that CLI outside this checkout. On Windows use its native `supabase.exe`. Set `E2E_RESULTS_DIR` to choose an external proof directory.
+
+The runner supplies fictitious provider credentials and locally generated Auth credentials. It does not load the project `.env`. External provider HTTP is intercepted; the app, Auth, PostgREST, RLS, RPCs, SDKs, parsers and Python subprocesses execute normally. The internal Docker network blocks external egress during scenarios. OAuth redirects and real provider services still require the separately authorized staging checks below.
+
+Normal runs remove only their own containers, network and image, including on failure. Exported proof contains versions, migration/source hashes, the patch fingerprint, assertion results and sanitized HTTP events. It excludes session cookies, tokens, request headers and provider payloads. Private diagnostics remain in the runner's temporary directory; do not upload them. CI uploads only `e2e-results/` and keeps SQL upgrade/concurrency validation in its separate job.
+
+For local debugging, `E2E_KEEP_DIAGNOSTIC=1` retains the printed owned namespace and temporary workdir. Those runs are not qualification evidence. Stop that exact Supabase workdir with `supabase stop --no-backup --workdir <printed-workdir>`, remove its `<namespace>-tests` container, then its `<namespace>` network and image. Never prune shared Docker resources. `test:e2e:browser` is an internal entry point requiring the prepared container environment, not a substitute for the runner's gates.
 
 These are open acceptance criteria; no success checkbox or deployment status is inherited from older sessions.
 Use owned test accounts/data. Real-provider and sandbox checks are a separately authorized activity.

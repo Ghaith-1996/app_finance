@@ -28,8 +28,9 @@ and it refuses to run unless all of the following are true:
 
 - `PULSEFOLIO_RUNNER_LOCAL=1`
 - `SUPABASE_URL` is an HTTP local/Docker endpoint (never hosted HTTPS); IP hosts
-  must be canonical private/loopback addresses (integer/hex IPv4 forms are refused),
-  and every address a host name resolves to must be private/loopback; writes then
+  must be canonical loopback (`127.0.0.0/8`, `::1`) or RFC1918 addresses (integer/hex
+  IPv4 forms, link-local/metadata such as `169.254.169.254`, `0.0.0.0` and IPv6 ULA
+  are refused), and every address a host name resolves to must be in those ranges; writes then
   connect to the first checked address that accepts a connection (in resolver
   order, e.g. `::1` then `127.0.0.1`), not to a fresh resolution of the name
 - `SUPABASE_SERVICE_ROLE_KEY` is a **local** service-role key.

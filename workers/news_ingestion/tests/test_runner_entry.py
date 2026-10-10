@@ -113,6 +113,27 @@ class RunnerContractTests(unittest.TestCase):
                 with self.subTest(host=host), self.assertRaises(ValueError):
                     validate_local_supabase_url(f"http://{host}:8000")
 
+    def test_private_but_nonlocal_ranges_rejected(self):
+        # Python's is_private also covers these; none is a loopback or RFC1918 Supabase endpoint.
+        for host in ("169.254.169.254", "[::ffff:169.254.169.254]", "[fd00:ec2::254]", "[fd00::1]",
+                     "[fe80::1]", "0.0.0.0", "[::]", "192.0.2.1", "198.18.0.1", "240.0.0.1"):
+            with self.subTest(host=host), self.assertRaises(ValueError):
+                validate_local_supabase_url(f"http://{host}:8000")
+        names = {"supabase": ["169.254.169.254"],       # cloud metadata behind a dotless alias
+                 "metadata": ["fd00:ec2::254"],         # AWS IPv6 metadata (inside fc00::/7)
+                 "kong": ["10.0.0.5", "fe80::1"]}       # one link-local answer taints the name
+        with self._resolving(names):
+            for host in names:
+                with self.subTest(host=host), self.assertRaises(ValueError):
+                    validate_local_supabase_url(f"http://{host}:8000")
+
+    def test_loopback_and_rfc1918_ranges_accepted(self):
+        for host in ("127.0.0.2", "10.1.2.3", "172.16.0.1", "172.31.255.255", "192.168.1.10",
+                     "[::ffff:127.0.0.1]", "[::ffff:10.0.0.5]"):
+            url = f"http://{host}:8000"
+            with self.subTest(host=host):
+                self.assertEqual(validate_local_supabase_url(url), url)
+
     def _serve_ipv4_insert_target(self, seen):
         class Local(DrainingHandler):
             def do_POST(self):

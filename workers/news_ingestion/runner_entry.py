@@ -144,15 +144,23 @@ def discover(
     }
 
 
+# Loopback and RFC1918 only. is_private is too broad: it also covers link-local (169.254.169.254
+# cloud metadata), 0.0.0.0/::, documentation/benchmark ranges and IPv6 ULA, which includes AWS
+# IPv6 metadata (fd00:ec2::254), so ULA endpoints are refused too.
+LOCAL_NETWORKS = tuple(ipaddress.ip_network(network) for network in (
+    "127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "::1/128",
+))
+
+
 def _is_local_address(address: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
     # Judge an IPv4-mapped IPv6 host by the IPv4 address it actually reaches.
     if address.version == 6 and address.ipv4_mapped:
         address = address.ipv4_mapped
-    return address.is_private or address.is_loopback
+    return any(address in network for network in LOCAL_NETWORKS)
 
 
 def _verified_local_addresses(url: str):
-    """Return the parsed URL and every address its host reaches, all private/loopback.
+    """Return the parsed URL and every address its host reaches, all loopback/RFC1918.
 
     A local-looking name proves nothing (a dotless alias can resolve to a public
     address), so every resolved address must be local.
@@ -183,7 +191,7 @@ def _verified_local_addresses(url: str):
 
 
 def pin_local_supabase_url(url: str, timeout: float) -> str:
-    """Return url with its host replaced by a verified private/loopback address.
+    """Return url with its host replaced by a verified loopback/RFC1918 address.
 
     The client connects to a checked address instead of resolving the name again.
     Like socket.create_connection, it falls back across the name's answers in

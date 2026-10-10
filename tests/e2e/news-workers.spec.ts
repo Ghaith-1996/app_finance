@@ -1,8 +1,59 @@
 import { randomUUID } from "node:crypto";
-import { test, expect, admin, createLocalSession, completeProfile, seedPortfolio, httpFixtures, yahooQuoteFixtures } from "./fixtures";
+import { test, expect, admin, gateway, createLocalSession, completeProfile, seedPortfolio, httpFixtures, yahooQuoteFixtures } from "./fixtures";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { readFileSync } from "node:fs";
+import { createClient } from "@supabase/supabase-js";
+import { extractPublisherContent } from "../../lib/services/news/publisher-extract";
+
+test("E2E-11: late Python and Node queue attempts preserve completed extraction", async ({ proof }) => {
+  test.setTimeout(120_000);
+  httpFixtures("E2E-11-completed-extraction-replay");
+  const ids: string[] = [];
+  const content = "Fixture article text already extracted by the first worker.";
+  async function seed(status: "complete" | null) {
+    const id = randomUUID();
+    ids.push(id);
+    expect((await admin.from("news_items").insert({ id, headline: "Fixture extraction replay", source: "Fixture", source_type: "newsapi", published_at: new Date(Date.now() + 60_000).toISOString(), url: `https://publisher.e2e.invalid/replay/${id}`, extraction_status: status, extracted_content: status ? content : null })).error).toBeNull();
+    return id;
+  }
+  async function assertComplete(id: string) {
+    const row = await admin.from("news_items").select("extraction_status,extracted_content").eq("id", id).single();
+    expect(row.error).toBeNull();
+    expect.soft(row.data).toEqual({ extraction_status: "complete", extracted_content: content });
+  }
+  try {
+    const completedId = await seed("complete");
+    for (let replay = 0; replay < 2; replay++) {
+      await promisify(execFile)("python", ["-m", "workers.news_ingestion.extract_full_text", "--ids", completedId], { env: { ...process.env }, timeout: 30_000 });
+      await assertComplete(completedId);
+    }
+    for (const explicitIds of [true, false]) {
+      const id = await seed(null);
+      let completedDuringSelect = false;
+      // Keep the actual HTTP response and database. Delay delivery of the initial
+      // select until another worker has atomically persisted the completed text.
+      const delayedClient = createClient(gateway, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
+        auth: { persistSession: false, autoRefreshToken: false },
+        global: { fetch: async (input, init) => {
+          const response = await fetch(input, init);
+          if (!completedDuringSelect && (!init?.method || init.method === "GET")) {
+            expect((await response.clone().json()).some((row: { id: string }) => row.id === id)).toBe(true);
+            expect((await admin.from("news_items").update({ extraction_status: "complete", extracted_content: content }).eq("id", id)).error).toBeNull();
+            completedDuringSelect = true;
+          }
+          return response;
+        } },
+      });
+      const result = await extractPublisherContent(delayedClient, explicitIds ? { articleIds: [id] } : { limit: 1 });
+      expect(completedDuringSelect).toBe(true);
+      expect.soft(result.queued).toBe(0);
+      expect.soft(result.processedArticleIds).toEqual([]);
+      await assertComplete(id);
+    }
+    if (test.info().errors.length === 0) proof("real Python replay twice and both Node queue paths retain completed text/status after a delayed real PostgREST select", true);
+  } finally { await admin.from("news_items").delete().in("id", ids); }
+});
 
 test("E2E-11: current and candidate workers finalize through Node enrichment into visible feed articles", async ({ page, context, users, proof }) => {
   test.setTimeout(480_000);

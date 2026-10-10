@@ -176,26 +176,38 @@ jobs:
           import os
           import subprocess
           import sys
+          import time
 
           enrich_url = sys.argv[1]
           cron_secret = os.environ["CRON_SECRET"]
           max_batches = 30
+          # Articles are enriched one AI call at a time and a call may take up to 60 s
+          # (AI_REQUEST_TIMEOUT_MS), so 3 per batch fits the 230 s wait, itself under Vercel's 300 s.
+          batch_size = 3
+          # Leave the job's 35 minutes to extraction and analysis; the backlog continues next run.
+          deadline = time.monotonic() + 12 * 60
           totals = {"enriched": 0, "retrying": 0, "failed": 0, "skipped": 0}
           remaining = None
 
           for i in range(max_batches):
-              result = subprocess.run([
-                  'curl', '-sS',
-                  '-X', 'POST',
-                  '-H', f'Authorization: Bearer {cron_secret}',
-                  '-H', 'Content-Type: application/json',
-                  '-H', 'Accept: application/json',
-                  '-d', json.dumps({'backlog': True, 'limit': 10}),
-                  '-w', '\n%{http_code}',
-                  enrich_url
-              ], capture_output=True, text=True, timeout=120)
+              if time.monotonic() > deadline:
+                  print(f'Drain time budget reached after {i} batch(es); the backlog continues next run.')
+                  break
+              try:
+                  result = subprocess.run([
+                      'curl', '-sS', '--max-time', '230',
+                      '-X', 'POST',
+                      '-H', f'Authorization: Bearer {cron_secret}',
+                      '-H', 'Content-Type: application/json',
+                      '-H', 'Accept: application/json',
+                      '-d', json.dumps({'backlog': True, 'limit': batch_size}),
+                      '-w', '\n%{http_code}',
+                      enrich_url
+                  ], capture_output=True, text=True, timeout=240)
+              except subprocess.TimeoutExpired:
+                  result = None
 
-              lines = result.stdout.strip().rsplit('\n', 1)
+              lines = result.stdout.strip().rsplit('\n', 1) if result else ['']
               body = lines[0] if len(lines) > 1 else ''
               http_code = lines[-1].strip()
               try:
@@ -204,7 +216,10 @@ jobs:
                   resp = {}
 
               if not http_code.isdigit() or not (200 <= int(http_code) < 300) or resp.get('error'):
-                  print(f'Enrich batch {i+1} failed: HTTP {http_code} error={resp.get("error")}')
+                  curl_error = result.stderr.strip() if result else 'no response before the timeout'
+                  print(f'Enrich batch {i+1} failed: HTTP {http_code or "000"} error={resp.get("error")}' + (f' curl={curl_error}' if curl_error else ''))
+                  if not http_code.isdigit() or http_code == '000':
+                      print('A batch that timed out may still finish on Vercel; its articles are retried with backoff.')
                   print(f'Totals so far: {json.dumps(totals)}')
                   sys.exit(1)
 

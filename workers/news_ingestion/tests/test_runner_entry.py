@@ -67,6 +67,33 @@ class RunnerContractTests(unittest.TestCase):
         validate_local_supabase_url("http://host.docker.internal:54321")
         validate_local_supabase_url("http://supabase_kong_app_finance:8000")
 
+    def test_noncanonical_public_ipv4_hosts_rejected(self):
+        # Each of these is resolved by the socket layer to public 8.8.8.8.
+        for url in ("http://134744072:54321", "http://0x08080808:54321",
+                    "http://0x8.0x8.0x8.0x8:54321", "http://[::ffff:8.8.8.8]:54321"):
+            with self.subTest(url=url), self.assertRaises(ValueError):
+                validate_local_supabase_url(url)
+
+    def test_canonical_local_hosts_still_accepted(self):
+        for url in ("http://localhost:54321", "http://127.0.0.1:54321", "http://[::1]:54321",
+                    "http://172.18.0.5:8000", "http://gateway.docker.internal:54321"):
+            with self.subTest(url=url):
+                self.assertEqual(validate_local_supabase_url(url), url)
+
+    def test_discover_refuses_manifest_over_configmap_limit(self):
+        # Under the limit in characters, over it in UTF-8 bytes (ConfigMap counts bytes).
+        article = article_to_dict(sample_article("big"))
+        article["raw_content"] = "é" * 600_000
+        manifest = {"version": MANIFEST_VERSION, "provider_set": "current",
+                    "sources": {"gnews": {"outcome": "success"}}, "articles": [article]}
+        out = io.StringIO()
+        err = io.StringIO()
+        with patch("workers.news_ingestion.runner_entry.discover", return_value=manifest), \
+             contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            result = main(["discover", "--sources", "gnews"])
+        self.assertEqual(result, 1)
+        self.assertEqual(out.getvalue(), "")
+
     def test_discover_stdout_is_exactly_one_json_document(self):
         manifest = {"version": MANIFEST_VERSION, "provider_set": "current",
                     "sources": {"gnews": {"outcome": "success"}},

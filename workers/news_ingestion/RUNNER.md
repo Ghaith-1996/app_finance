@@ -11,6 +11,8 @@ Discovery uses the existing Python fetchers and emits one JSON object to stdout.
 It does **not** connect to Supabase. Python logging and any Python-level
 third-party printing go to stderr. The manifest is ordered by
 `(source_type, external_id)`, deduplicated on those keys, and versioned.
+Kubernetes caps ConfigMap data at 1 MiB, so discovery fails (exit 1, empty
+stdout) when the UTF-8 manifest exceeds 1,000,000 bytes; lower `--max-articles`.
 
 The Runner's Go CLI stores that JSON in a **per-execution ConfigMap**, then
 creates a Kubernetes Indexed Job. Each Pod runs:
@@ -25,7 +27,8 @@ manifest positions `i, i+N, i+2N, ...`. Only this command writes to Supabase,
 and it refuses to run unless all of the following are true:
 
 - `PULSEFOLIO_RUNNER_LOCAL=1`
-- `SUPABASE_URL` is an HTTP local/Docker endpoint (never hosted HTTPS)
+- `SUPABASE_URL` is an HTTP local/Docker endpoint (never hosted HTTPS); IP hosts
+  must be canonical private/loopback addresses (integer/hex IPv4 forms are refused)
 - `SUPABASE_SERVICE_ROLE_KEY` is a **local** service-role key.
 
 The existing `news_items` partial unique index on `(source_type, external_id)`

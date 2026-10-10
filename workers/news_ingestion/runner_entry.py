@@ -13,6 +13,7 @@ import json
 import logging
 import os
 import signal
+import socket
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -22,6 +23,8 @@ from .schema import NormalizedArticle
 from .upsert import _row_from_article
 
 MANIFEST_VERSION = 1
+# The Runner stores the manifest in one ConfigMap, whose data Kubernetes caps at 1 MiB.
+MAX_MANIFEST_BYTES = 1_000_000
 logger = logging.getLogger(__name__)
 
 
@@ -153,9 +156,15 @@ def validate_local_supabase_url(url: str) -> str:
     is_private_ip = False
     try:
         address = ipaddress.ip_address(host)
+        # Judge an IPv4-mapped IPv6 host by the IPv4 address it actually reaches.
+        if address.version == 6 and address.ipv4_mapped:
+            address = address.ipv4_mapped
         is_private_ip = address.is_private or address.is_loopback
     except ValueError:
-        pass
+        # The socket layer resolves integer/hex/octal forms (e.g. 134744072 -> 8.8.8.8).
+        with contextlib.suppress(OSError):
+            socket.inet_aton(host)
+            raise ValueError("Runner refuses a noncanonical IPv4 Supabase host")
     if not is_local_name and not is_private_ip:
         raise ValueError("Runner refuses a nonlocal Supabase URL")
     return url
@@ -255,7 +264,13 @@ def main(argv: list[str] | None = None) -> int:
                     lookback_hours=args.lookback_hours,
                     max_articles=args.max_articles,
                 )
-            print(json.dumps(manifest, ensure_ascii=False, separators=(",", ":")), flush=True)
+            encoded = json.dumps(manifest, ensure_ascii=False, separators=(",", ":"))
+            size = len(encoded.encode("utf-8"))
+            if size > MAX_MANIFEST_BYTES:
+                logger.error("Manifest is %s bytes; limit is %s. Lower --max-articles.",
+                             size, MAX_MANIFEST_BYTES)
+                raise ValueError("Manifest exceeds the ConfigMap size limit")
+            print(encoded, flush=True)
             return 0
 
         raw_index = args.index if args.index is not None else os.environ.get("JOB_COMPLETION_INDEX")

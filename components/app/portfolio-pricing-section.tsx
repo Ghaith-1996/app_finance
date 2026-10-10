@@ -34,7 +34,17 @@ export function PortfolioPricingSection({
   const [overview, setOverview] = useState(initialOverview);
   const [holdings, setHoldings] = useState(initialHoldings);
   const [autoRefreshing, setAutoRefreshing] = useState(false);
+  const [serverSnapshot, setServerSnapshot] = useState({ initialOverview, initialHoldings });
   const autoRefreshStartedRef = useRef(false);
+
+  // Router refresh supplies the authoritative holdings after imports and transactions.
+  // Local pricing results stay visible until a genuinely new server snapshot arrives.
+  if (serverSnapshot.initialOverview !== initialOverview || serverSnapshot.initialHoldings !== initialHoldings) {
+    setServerSnapshot({ initialOverview, initialHoldings });
+    setOverview(initialOverview);
+    setHoldings(initialHoldings);
+    setAutoRefreshing(false);
+  }
 
   function handleRefreshed(result: PortfolioPricingRefreshResult) {
     if (result.status !== "updated" && result.status !== "partial") return;
@@ -79,7 +89,7 @@ export function PortfolioPricingSection({
     return () => {
       active = false;
     };
-  }, [initialHoldings.length, portfolioId]);
+  }, [initialHoldings, initialOverview, portfolioId]);
 
   return (
     <div className="min-w-0 space-y-10 lg:space-y-12">

@@ -277,7 +277,8 @@ test("E2E-05: 105 real feed rows paginate without loss or duplication", async ({
       expect(row).toBeTruthy();
       await page.locator(`a[href="${href}"]`).first().click();
       await expect(page).toHaveURL((url) => url.pathname === "/feed" && url.searchParams.get("story") === row.id);
-      await expect(page.getByRole("heading", { name: row.headline, exact: true })).toBeVisible();
+      // Scoped to the opened article: the same headline is also a feed card heading when the story is on the current page.
+      await expect(page.getByRole("dialog", { name: "Article details" }).getByRole("heading", { name: row.headline, exact: true })).toBeVisible();
       expect(new URL(page.url()).searchParams.get("story")).toBe(row.id);
       await page.goto(`/portfolio?portfolioId=${portfolioId}`);
     }

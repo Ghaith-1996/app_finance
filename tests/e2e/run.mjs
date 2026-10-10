@@ -230,7 +230,19 @@ function failureLocation(output = "") {
     .map((match) => `${match[1]} › ${match[2]}`);
   // Stack-trace frames only: the reporter's progress lines also name every passing test's position.
   const positions = [...output.matchAll(/^\s*at .*?tests\/e2e\/([\w.-]+\.spec\.ts:\d+:\d+)/gm)].map((match) => match[1]);
-  return { tests: [...new Set(tests)], positions: [...new Set(positions)].slice(0, 10) };
+  // Error category from a fixed vocabulary; matcher arguments and received values are dropped.
+  const errors = [...output.matchAll(/^\s*Error: (.+)$/gm)].map(([, line]) => {
+    if (/strict mode violation/.test(line)) return `strict mode violation (${line.match(/resolved to (\d+) elements/)?.[1] ?? "?"} elements)`;
+    if (/Test timeout of \d+ms exceeded/.test(line)) return "test timeout";
+    return line.match(/^expect\((?:locator|page|received)\)\.\w+\(\)/)?.[0] ?? "other";
+  });
+  const received = [...output.matchAll(/^\s*Received(?: string)?: (<element\(s\) not found>|hidden|visible)\s*$/gm)].map((match) => match[1]);
+  return {
+    tests: [...new Set(tests)],
+    positions: [...new Set(positions)].slice(0, 10),
+    errors: [...new Set(errors)].slice(0, 5),
+    received: [...new Set(received)],
+  };
 }
 
 try { await (inside ? insideRun() : outsideRun()); }

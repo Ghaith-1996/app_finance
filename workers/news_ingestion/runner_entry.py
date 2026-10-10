@@ -144,29 +144,54 @@ def discover(
     }
 
 
-def validate_local_supabase_url(url: str) -> str:
-    """Fail closed when a runner accidentally receives a hosted Supabase URL."""
+def _is_local_address(address: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    # Judge an IPv4-mapped IPv6 host by the IPv4 address it actually reaches.
+    if address.version == 6 and address.ipv4_mapped:
+        address = address.ipv4_mapped
+    return address.is_private or address.is_loopback
+
+
+def pin_local_supabase_url(url: str) -> str:
+    """Return url with its host replaced by a verified private/loopback address.
+
+    A local-looking name proves nothing (a dotless alias can resolve to a public
+    address), so every resolved address must be local, and the client connects
+    to the checked address instead of resolving the name again.
+    """
     parsed = urlsplit(url)
     host = (parsed.hostname or "").lower()
     if parsed.scheme != "http" or not host or parsed.username or parsed.password:
         raise ValueError("Runner requires a local HTTP Supabase endpoint")
 
-    allowed_names = {"localhost", "127.0.0.1", "host.docker.internal", "gateway.docker.internal"}
-    is_local_name = host in allowed_names or "." not in host or host.endswith(".docker.internal")
-    is_private_ip = False
     try:
-        address = ipaddress.ip_address(host)
-        # Judge an IPv4-mapped IPv6 host by the IPv4 address it actually reaches.
-        if address.version == 6 and address.ipv4_mapped:
-            address = address.ipv4_mapped
-        is_private_ip = address.is_private or address.is_loopback
+        addresses = [ipaddress.ip_address(host)]
     except ValueError:
         # The socket layer resolves integer/hex/octal forms (e.g. 134744072 -> 8.8.8.8).
         with contextlib.suppress(OSError):
             socket.inet_aton(host)
             raise ValueError("Runner refuses a noncanonical IPv4 Supabase host")
-    if not is_local_name and not is_private_ip:
+        allowed_names = {"localhost", "host.docker.internal", "gateway.docker.internal"}
+        if host not in allowed_names and "." in host and not host.endswith(".docker.internal"):
+            raise ValueError("Runner refuses a nonlocal Supabase URL")
+        try:
+            infos = socket.getaddrinfo(host, parsed.port or 80, type=socket.SOCK_STREAM)
+        except OSError as exc:
+            raise ValueError("Runner cannot resolve the Supabase host") from exc
+        addresses = [ipaddress.ip_address(info[4][0]) for info in infos]
+    if not addresses or not all(_is_local_address(address) for address in addresses):
         raise ValueError("Runner refuses a nonlocal Supabase URL")
+
+    pinned = str(addresses[0])
+    if addresses[0].version == 6:
+        pinned = f"[{pinned}]"
+    if parsed.port is not None:
+        pinned = f"{pinned}:{parsed.port}"
+    return parsed._replace(netloc=pinned).geturl()
+
+
+def validate_local_supabase_url(url: str) -> str:
+    """Fail closed when a runner accidentally receives a hosted Supabase URL."""
+    pin_local_supabase_url(url)
     return url
 
 
@@ -177,7 +202,7 @@ def make_local_client():
     key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
     if not key:
         raise ValueError("Missing local SUPABASE_SERVICE_ROLE_KEY")
-    validate_local_supabase_url(url)
+    url = pin_local_supabase_url(url)
     import httpx
     from postgrest.constants import DEFAULT_POSTGREST_CLIENT_TIMEOUT
     from supabase import ClientOptions, create_client

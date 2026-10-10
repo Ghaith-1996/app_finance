@@ -11,6 +11,7 @@ import io
 import json
 import os
 import shutil
+import socket
 import tempfile
 import threading
 import unittest
@@ -68,11 +69,62 @@ class RunnerContractTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             partition_articles([], 3, 3)
 
+    def _resolving(self, mapping):
+        """Patch DNS so mapped names resolve to the given addresses; others resolve normally."""
+        original = socket.getaddrinfo
+
+        def fake(host, port, *args, **kwargs):
+            if host not in mapping:
+                return original(host, port, *args, **kwargs)
+            answer = mapping[host]
+            addresses = answer.pop(0) if answer and isinstance(answer[0], list) else answer
+            if not addresses:
+                raise socket.gaierror(socket.EAI_NONAME, "not found")
+            return [(socket.AF_INET6 if ":" in a else socket.AF_INET, socket.SOCK_STREAM, 6, "",
+                     (a, port)) for a in addresses]
+
+        return patch("socket.getaddrinfo", fake)
+
     def test_cloud_supabase_url_rejected(self):
         with self.assertRaises(ValueError):
             validate_local_supabase_url("https://production.supabase.co")
-        validate_local_supabase_url("http://host.docker.internal:54321")
-        validate_local_supabase_url("http://supabase_kong_app_finance:8000")
+        with self._resolving({"host.docker.internal": ["192.168.65.254"],
+                              "supabase_kong_app_finance": ["172.18.0.5"]}):
+            validate_local_supabase_url("http://host.docker.internal:54321")
+            validate_local_supabase_url("http://supabase_kong_app_finance:8000")
+
+    def test_local_names_resolving_off_host_rejected(self):
+        cases = {"supabase": ["8.8.8.8"],                  # dotless alias to a public address
+                 "kong": ["172.18.0.5", "8.8.8.8"],        # any public answer taints the name
+                 "evil.docker.internal": ["1.1.1.1"],
+                 "gone": []}                               # unresolvable fails closed
+        with self._resolving(cases):
+            for host in cases:
+                with self.subTest(host=host), self.assertRaises(ValueError):
+                    validate_local_supabase_url(f"http://{host}:8000")
+
+    @needs_client
+    def test_service_role_key_pinned_to_validated_address(self):
+        seen = []
+
+        class Local(BaseHTTPRequestHandler):
+            def do_POST(self):
+                seen.append(self.headers.get("apikey"))
+                self.send_response(201)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(b"[]")
+
+            def log_message(self, *args):
+                pass
+
+        port = self._serve(Local).rsplit(":", 1)[1]
+        # Only the validation lookup answers: a connection that re-resolves the name (and could be
+        # rebound off-host) fails, so success proves the client uses the checked address.
+        with self._resolving({"supabase": [["127.0.0.1"]]}):
+            summary = self._process_against(f"http://supabase:{port}")
+        self.assertEqual(summary["inserted"], 1)
+        self.assertEqual(seen, ["local-test-key"])
 
     def test_noncanonical_public_ipv4_hosts_rejected(self):
         # Each of these is resolved by the socket layer to public 8.8.8.8.
@@ -84,7 +136,8 @@ class RunnerContractTests(unittest.TestCase):
     def test_canonical_local_hosts_still_accepted(self):
         for url in ("http://localhost:54321", "http://127.0.0.1:54321", "http://[::1]:54321",
                     "http://172.18.0.5:8000", "http://gateway.docker.internal:54321"):
-            with self.subTest(url=url):
+            with self.subTest(url=url), \
+                 self._resolving({"gateway.docker.internal": ["192.168.65.1"]}):
                 self.assertEqual(validate_local_supabase_url(url), url)
 
     def test_discover_refuses_manifest_over_configmap_limit(self):

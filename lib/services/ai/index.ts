@@ -4,6 +4,11 @@ import { createAzureOpenAIProvider } from "./azure-openai-provider";
 import { createMistralProvider } from "./mistral-provider";
 import { createOpenAIProvider } from "./openai-provider";
 import { createNemotronProvider, createOpenRouterProvider } from "./openrouter-provider";
+import { createGroqEnrichmentProvider } from "./groq-provider";
+import { toArticleChatError } from "./ai-chat-errors";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("ai-enrichment");
 
 export type AIProviderId = "azure" | "anthropic" | "openai" | "openrouter" | "mistral" | "nemotron";
 
@@ -35,6 +40,28 @@ export function getAIProviderById(id: AIProviderId): IAIProvider {
     return createNemotronProvider();
   }
   return createOpenRouterProvider();
+}
+
+/**
+ * Enrichment tries Groq first and uses the AI_PROVIDER provider only when Groq refuses for
+ * provider-wide reasons (key, quota, rate limit). Other Groq failures stay per-article failures.
+ * Analysis keeps AI_PROVIDER alone so its many calls never spend Groq's daily token budget.
+ */
+export function getEnrichmentProvider(): Pick<IAIProvider, "analyzeArticle"> {
+  const groq = createGroqEnrichmentProvider();
+  const fallback = getAIProvider();
+  return {
+    async analyzeArticle(headline, content, hintTickers) {
+      try {
+        return await groq.analyzeArticle(headline, content, hintTickers);
+      } catch (error) {
+        const { code } = toArticleChatError(error);
+        if (code !== "provider_auth" && code !== "provider_rate_limited") throw error;
+        log.warn("Groq refused enrichment; using the fallback provider", { code });
+        return fallback.analyzeArticle(headline, content, hintTickers);
+      }
+    },
+  };
 }
 
 export function getAIProvider(): IAIProvider {

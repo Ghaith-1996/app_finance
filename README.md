@@ -67,8 +67,10 @@ An Azure AI Foundry agent endpoint is not an Azure OpenAI Responses endpoint.
 OpenRouter defaults to `stepfun/step-3.5-flash:free`; retain this path unless explicitly authorized to remove it.
 Defaults and validation live in the provider modules and [lib/env.ts](lib/env.ts), not in an independently maintained model catalog.
 Article chat and portfolio copilot select by model tier: `free` → OpenRouter, `premium` → Nemotron, `ultimate` → Azure.
-Production enrichment uses `AI_PROVIDER=nemotron`. Free `:free` models are capped by OpenRouter (20 requests/minute; 50/day, or 1,000/day after 10 purchased credits).
-An enrichment 401/403/429 returns the article's attempt, stops the batch and fails the run instead of exhausting retries.
+Article enrichment tries Groq first (`GROQ_API_KEY`, optional `GROQ_MODEL`; `openai/gpt-oss-120b`, medium reasoning, JSON mode) and falls back to the `AI_PROVIDER` provider (production: `nemotron`) only when Groq refuses with 401/403/429 or has no key.
+Portfolio analysis uses `AI_PROVIDER` alone, so it never spends Groq's budget.
+Free tiers cap throughput: Groq 8K tokens/minute and 200K/day (~115 articles); OpenRouter `:free` 20 requests/minute and 50/day (1,000/day after 10 purchased credits). The news cron starts enrichment batches a minute apart for Groq's per-minute limit.
+When every enrichment provider refuses with 401/403/429, the article's attempt is returned, the batch stops and the run fails instead of exhausting retries.
 [lib/billing/plans.ts](lib/billing/plans.ts) defines tier rights; [lib/security/ai-access.ts](lib/security/ai-access.ts) enforces billing, burst and durable quota checks.
 Failed answer requests release the charged quota bucket on a best-effort basis; failed requests still count against burst limits.
 `AI_PROVIDER` does not override this tier routing.

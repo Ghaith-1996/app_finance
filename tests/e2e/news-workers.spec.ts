@@ -93,7 +93,8 @@ test("E2E-11: current and candidate workers finalize through Node enrichment int
         { origin: "https://newsapi.org", method: "GET", path: "/v2/everything", body: { status: "ok", totalResults: 1, articles: [{ source: { name: "Fixture publisher" }, title: headline, url, publishedAt: now, description: paragraph }] } },
         { origin: "https://eventregistry.org", method: "POST", path: "/api/v1/article/getArticles", body: { articles: { results: [{ uri: identity, title: headline, url, dateTimePub: now, body: paragraph, source: { title: "Fixture publisher" }, concepts: [{ label: { eng: "AAA" } }] }] } } },
         { origin: "https://publisher.e2e.invalid", method: "GET", path, headers: { "content-type": "text/html" }, body: `<html><head><title>${headline}</title></head><body><article><h1>${headline}</h1><p>${paragraph}</p><p>${paragraph}</p></article></body></html>` },
-        ai("financial-news classification", { category: "earnings", globalSummary: "Fixture Node enriched AAA earnings.", overallEffect: "bullish", stockTags: ["AAA"], tickerImpacts: [{ symbol: "AAA", effect: "bullish" }] }),
+        // Enrichment goes to Groq first; analysis keeps AI_PROVIDER (OpenRouter).
+        { ...ai("financial-news classification", { category: "earnings", globalSummary: "Fixture Node enriched AAA earnings.", overallEffect: "bullish", stockTags: ["AAA"], tickerImpacts: [{ symbol: "AAA", effect: "bullish" }] }), origin: "https://api.groq.com", path: "/openai/v1/chat/completions" },
         ai("output 3 short insights", [{ title: "Fixture real Node insight", value: "AAA", detail: "Fixture earnings support the outlook." }]),
         ai("explicit-indirect portfolio impact classifier", { relevanceScore: 0, whyItMatters: "", matchedHoldings: [], matchReasonCodes: [] }),
       ]);

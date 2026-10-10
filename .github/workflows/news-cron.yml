@@ -186,13 +186,20 @@ jobs:
           batch_size = 3
           # Leave the job's 35 minutes to extraction and analysis; the backlog continues next run.
           deadline = time.monotonic() + 12 * 60
+          # Groq's free tier allows 8K tokens/minute and a batch of 3 uses ~5K, so batches start a
+          # minute apart; otherwise its per-minute limit pushes articles onto the Nemotron fallback.
+          batch_interval = 60
           totals = {"enriched": 0, "retrying": 0, "failed": 0, "skipped": 0}
           remaining = None
+          last_start = None
 
           for i in range(max_batches):
+              if last_start is not None:
+                  time.sleep(max(0, batch_interval - (time.monotonic() - last_start)))
               if time.monotonic() > deadline:
                   print(f'Drain time budget reached after {i} batch(es); the backlog continues next run.')
                   break
+              last_start = time.monotonic()
               try:
                   result = subprocess.run([
                       'curl', '-sS', '--max-time', '230',

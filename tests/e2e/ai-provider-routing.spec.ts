@@ -3,17 +3,23 @@ import { readFileSync } from "node:fs";
 import { test, expect, admin, createLocalSession, completeProfile, seedPortfolio, httpFixtures } from "./fixtures";
 
 const completions = { origin: "https://openrouter.ai", method: "POST", path: "/api/v1/chat/completions" };
+const groqCompletions = { origin: "https://api.groq.com", method: "POST", path: "/openai/v1/chat/completions" };
 const nemotron = { requestHeaders: { authorization: "Bearer sk-or-e2e-nemotron" }, requestAssertions: [{ label: "Nemotron model", needle: '"model":"nvidia/nemotron-3-ultra-550b-a55b:free"', count: 1 }] };
 const stepfun = { requestHeaders: { authorization: "Bearer sk-or-e2e-fixture" }, requestAssertions: [{ label: "StepFun model", needle: '"model":"stepfun/step-3.5-flash:free"', count: 1 }] };
+const groq = { ...groqCompletions, requestHeaders: { authorization: "Bearer gsk-e2e-fixture" }, requestAssertions: [
+  { label: "Groq model", needle: '"model":"openai/gpt-oss-120b"', count: 1 },
+  { label: "Groq medium reasoning", needle: '"reasoning_effort":"medium"', count: 1 },
+  { label: "Groq JSON mode", needle: '"response_format":{"type":"json_object"}', count: 1 },
+] };
 const reply = (content: string) => ({ choices: [{ message: { content } }] });
-const providerError = (status: number, message: string) => ({ ...completions, ...nemotron, status, body: { error: { message } } });
+const failure = (status: number, message: string) => ({ status, body: { error: { message } } });
 
-function providerCalls(scenario: string) {
+function providerCalls(scenario: string, path = completions.path) {
   return readFileSync(process.env.E2E_LEDGER!, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line))
-    .filter((row) => row.scenario === scenario && row.path === completions.path).length;
+    .filter((row) => row.scenario === scenario && row.path === path).length;
 }
 
-test("E2E-13: enrichment uses the Nemotron key and never spends attempts on provider-wide refusals", async ({ page, proof }) => {
+test("E2E-13: enrichment tries Groq, falls back to Nemotron only on provider-wide refusals, and never spends attempts on them", async ({ page, proof }) => {
   const ids = [randomUUID(), randomUUID(), randomUUID()];
   // Distinct publication times fix the order in which the route claims articles.
   const rows = ids.map((id, i) => ({ id, headline: `Fixture enrichment ${i}`, source: "Fixture", raw_content: "AAA reported results.", published_at: new Date(Date.now() - i * 60_000).toISOString(), enrichment_status: "pending" }));
@@ -28,37 +34,46 @@ test("E2E-13: enrichment uses the Nemotron key and never spends attempts on prov
   async function state() {
     const result = await admin.from("news_items").select("id,enrichment_status,enrichment_attempts,enrichment_last_error,category").in("id", ids);
     expect(result.error).toBeNull();
-    return result.data!;
+    return new Map(result.data!.map((row) => [row.id, row]));
   }
   const makeDue = async () => expect((await admin.from("news_items").update({ enrichment_next_attempt_at: null }).in("id", ids)).error).toBeNull();
   try {
-    for (const [scenario, status, code] of [["E2E-13-429", 429, "provider_rate_limited"], ["E2E-13-403", 403, "provider_auth"]] as const) {
-      httpFixtures(scenario, [providerError(status, status === 429 ? "Rate limit exceeded: free-models-per-day" : "Forbidden")]);
+    // Both providers refuse: the attempt is refunded and the batch stops after one article.
+    for (const [scenario, groqStatus, nemotronStatus, code] of [["E2E-13-quota", 429, 429, "provider_rate_limited"], ["E2E-13-auth", 401, 403, "provider_auth"]] as const) {
+      httpFixtures(scenario, [
+        { ...groq, ...failure(groqStatus, groqStatus === 429 ? "Rate limit reached for model openai/gpt-oss-120b on tokens per day (TPD)" : "Invalid API Key") },
+        { ...completions, ...nemotron, ...failure(nemotronStatus, nemotronStatus === 429 ? "Rate limit exceeded: free-models-per-day" : "Forbidden") },
+      ]);
       const result = await enrich();
       expect(result.status).toBe(500);
       expect(result.body).toMatchObject({ enriched: 0, retrying: 0, failed: 0 });
       expect(result.body.error).toContain(code);
-      expect(providerCalls(scenario), "batch stops at the first provider-wide refusal").toBe(1);
-      const after = await state();
+      expect(providerCalls(scenario, groqCompletions.path), "Groq tried once").toBe(1);
+      expect(providerCalls(scenario), "Nemotron fallback tried once, then the batch stops").toBe(1);
+      const after = [...(await state()).values()];
       expect(after.map((row) => [row.enrichment_status, row.enrichment_attempts])).toEqual(ids.map(() => ["pending", 0]));
-      expect(after.filter((row) => row.enrichment_last_error?.includes(`HTTP ${status}`))).toHaveLength(1);
+      expect(after.filter((row) => row.enrichment_last_error?.includes(`OpenRouter HTTP ${nemotronStatus}`))).toHaveLength(1);
       await makeDue();
     }
 
-    // An ordinary per-article failure still counts its attempt and does not stop the batch.
+    // Groq 500 counts without fallback; Groq 429 falls back to Nemotron; Groq success needs no fallback.
     const analysis = JSON.stringify({ category: "earnings", globalSummary: "AAA beat.", overallEffect: "bullish", stockTags: ["AAA"], tickerImpacts: [{ symbol: "AAA", effect: "bullish" }] });
-    httpFixtures("E2E-13-recovery", [
-      { ...completions, ...nemotron, ordinal: 1, status: 500, body: { error: { message: "Upstream error" } } },
-      { ...completions, ...nemotron, ordinal: 2, body: reply(analysis) },
-      { ...completions, ...nemotron, ordinal: 3, body: reply(analysis) },
+    httpFixtures("E2E-13-mixed", [
+      { ...groq, ordinal: 1, ...failure(500, "Internal Server Error") },
+      { ...groq, ordinal: 2, ...failure(429, "Rate limit reached for model openai/gpt-oss-120b on tokens per minute (TPM)") },
+      { ...groq, ordinal: 3, body: reply(analysis) },
+      { ...completions, ...nemotron, body: reply(analysis) },
     ]);
-    const recovered = await enrich();
-    expect(recovered.status).toBe(200);
-    expect(recovered.body).toMatchObject({ enriched: 2, retrying: 1, failed: 0, error: null });
+    const mixed = await enrich();
+    expect(mixed.status).toBe(200);
+    expect(mixed.body).toMatchObject({ enriched: 2, retrying: 1, failed: 0, error: null });
+    expect(providerCalls("E2E-13-mixed", groqCompletions.path)).toBe(3);
+    expect(providerCalls("E2E-13-mixed"), "only the Groq 429 article used Nemotron").toBe(1);
     const final = await state();
-    expect(final.filter((row) => row.enrichment_status === "succeeded" && row.category === "earnings" && row.enrichment_attempts === 1)).toHaveLength(2);
-    expect(final.filter((row) => row.enrichment_status === "retrying" && row.enrichment_attempts === 1)).toHaveLength(1);
-    proof("429/403 refund the attempt and stop the batch with HTTP 500; 500 counts; success enriches; Nemotron key+model on every call", true);
+    expect(final.get(ids[0])).toMatchObject({ enrichment_status: "retrying", enrichment_attempts: 1 });
+    expect(final.get(ids[0])!.enrichment_last_error).toContain("Groq HTTP 500");
+    for (const id of ids.slice(1)) expect(final.get(id)).toMatchObject({ enrichment_status: "succeeded", enrichment_attempts: 1, category: "earnings" });
+    proof("Groq first (model, medium reasoning, JSON mode, key); 429/401 fall back to Nemotron; both refusing refunds and stops with HTTP 500; Groq 500 counts without fallback", true);
   } finally {
     await admin.from("news_items").delete().in("id", ids);
   }

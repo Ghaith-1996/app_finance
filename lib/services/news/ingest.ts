@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { NewsCategory } from "@/lib/types";
-import { getAIProvider } from "../ai";
+import { getEnrichmentProvider } from "../ai";
 import { toArticleChatError } from "../ai/ai-chat-errors";
 
 export const ENRICHMENT_MAX_ATTEMPTS = 5;
@@ -46,7 +46,7 @@ export async function ingestNewsToSupabase(
     now?: Date;
   }
 ): Promise<{ enriched: number; skipped: number; retrying: number; failed: number; error?: string }> {
-  const ai = getAIProvider();
+  const ai = getEnrichmentProvider();
   const now = options?.now ?? new Date();
   const nowIso = now.toISOString();
 

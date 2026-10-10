@@ -126,7 +126,7 @@ async function outsideRun() {
       RESEND_API_KEY: "re_e2e_fictitious", RESEND_FROM_EMAIL: "Fixture <fixture@example.invalid>",
       STRIPE_PREMIUM_PRICE_ID: "price_e2e_premium", STRIPE_ULTIMATE_PRICE_ID: "price_e2e_ultimate",
       AI_PROVIDER: "nemotron", OPENROUTER_API_KEY: "sk-or-e2e-fixture", OPENROUTER_MODEL: "stepfun/step-3.5-flash:free",
-      OPENROUTER_NEMOTRON_API_KEY: "sk-or-e2e-nemotron",
+      OPENROUTER_NEMOTRON_API_KEY: "sk-or-e2e-nemotron", GROQ_API_KEY: "gsk-e2e-fixture",
       OPENAI_API_KEY: "sk-e2e-fixture", ANTHROPIC_API_KEY: "sk-ant-e2e-fixture",
       MISTRAL_API_KEY: "e2e-fixture", MISTRAL_MODEL: "mistral-large-latest",
       AZURE_OPENAI_API_KEY: "e2e-fixture", AZURE_OPENAI_BASE_URL: "https://e2e.openai.azure.com", AZURE_OPENAI_MODEL: "e2e-deployment",

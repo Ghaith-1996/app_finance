@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Loader2 } from "lucide-react";
+import { CircleNotch as Loader2 } from "@phosphor-icons/react/dist/ssr/CircleNotch";
 import { usePreferences } from "@/components/providers/preferences-provider";
 import { Panel } from "@/components/ui/panel";
 import { Button } from "@/components/ui/button";
@@ -56,7 +56,7 @@ export function ProfileForm({
       </div>
 
       <form
-        className="space-y-5"
+        className="space-y-6"
         onSubmit={(event) => {
           event.preventDefault();
           setError(null);
@@ -80,7 +80,7 @@ export function ProfileForm({
           });
         }}
       >
-        <div className="grid gap-5 sm:grid-cols-2">
+        <div className="grid gap-6 sm:grid-cols-2">
           <label className="space-y-2">
             <span className="text-sm font-medium text-primary">{t("profile.firstName")}</span>
             <input

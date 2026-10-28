@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { CircleNotch as Loader2 } from "@phosphor-icons/react/dist/ssr/CircleNotch";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";

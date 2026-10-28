@@ -15,9 +15,9 @@ function matchSourceLabel(sources: MatchSource[]): string | null {
 }
 
 function formatFeedTimeAgo(minutes: number): string {
-  if (minutes < 60) return `${minutes}M AGO`;
-  if (minutes < 1440) return `${Math.floor(minutes / 60)}H AGO`;
-  return `${Math.floor(minutes / 1440)}D AGO`;
+  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 1440) return `${Math.floor(minutes / 60)}h ago`;
+  return `${Math.floor(minutes / 1440)}d ago`;
 }
 
 function holdingChips(story: NewsItem, mode: FeedMode): string[] {
@@ -48,7 +48,7 @@ export function NewsFeedCard({
     isMarketHeadlineSource(story.sourceType) && story.sourceType !== "edgar";
   const chips = holdingChips(story, mode);
   const summary = cardSummary(story);
-  const meta = `${story.source.toUpperCase()} · ${formatFeedTimeAgo(story.publishedMinutesAgo)}`;
+  const meta = `${story.source} · ${formatFeedTimeAgo(story.publishedMinutesAgo)}`;
 
   return (
     <div
@@ -70,35 +70,35 @@ export function NewsFeedCard({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           {isMarket && isHeadline ? (
-            <span className="rounded-lg bg-teal-500/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.14em] text-teal-400">
+            <span className="rounded-lg bg-teal-500/10 px-3 py-1 text-xs font-bold text-teal-400">
               Market headline
             </span>
           ) : null}
           {!isMarket && story.relevanceScore != null ? (
-            <span className="rounded-lg bg-brand px-3 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-[#080c11]">
+            <span className="rounded-lg bg-brand px-3 py-1 text-xs font-bold text-brand-foreground">
               {story.relevanceScore}% match
             </span>
           ) : null}
           {!isMarket && story.impact ? (
             <Badge
               tone={impactTone(story.impact)}
-              className="text-[11px] tracking-[0.12em]"
+              className="text-xs"
             >
               {story.impact} impact
             </Badge>
           ) : null}
           {isMarket && story.isPortfolioMatch ? (
-            <span className="rounded-lg bg-brand/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-brand">
+            <span className="rounded-lg bg-brand/10 px-3 py-1 text-xs font-bold text-brand">
               In portfolio
             </span>
           ) : null}
           {isMarket && story.isWatchlistMatch && !story.isPortfolioMatch ? (
-            <span className="rounded-lg bg-violet-500/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-violet-400">
+            <span className="rounded-lg bg-violet-500/10 px-3 py-1 text-xs font-bold text-violet-400">
               Watchlist
             </span>
           ) : null}
           {isMarket && story.isPortfolioMatch && story.isWatchlistMatch ? (
-            <span className="rounded-lg bg-violet-500/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-violet-400">
+            <span className="rounded-lg bg-violet-500/10 px-3 py-1 text-xs font-bold text-violet-400">
               + Watchlist
             </span>
           ) : null}
@@ -106,35 +106,35 @@ export function NewsFeedCard({
             const label = matchSourceLabel(story.matchSources ?? []);
             if (!label || label === "Portfolio") return null;
             return (
-              <span className="rounded-lg bg-violet-500/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-violet-400">
+              <span className="rounded-lg bg-violet-500/10 px-3 py-1 text-xs font-bold text-violet-400">
                 {label}
               </span>
             );
           })()}
           {(story.thesisMatches ?? []).length > 0 ? (
-            <span className="rounded-lg bg-sky-500/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-sky-300">
+            <span className="rounded-lg bg-sky-500/10 px-3 py-1 text-xs font-bold text-sky-300">
               Thesis watch
             </span>
           ) : null}
         </div>
-        <p className="text-right text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-600">
+        <p className="text-right text-xs font-semibold text-slate-600">
           {meta}
         </p>
       </div>
 
-      <h3 className="mt-4 text-xl font-semibold leading-snug tracking-tight text-white">
+      <h3 className="mt-4 text-xl font-semibold tracking-tight text-white">
         {story.headline}
       </h3>
 
       {/* Audit D02: one score (the badge above) and one sentence; the score drivers are shown
           in the story detail panel when the card is opened. */}
       {summary ? (
-        <p className="mt-3 line-clamp-2 text-sm leading-relaxed text-slate-400">{summary}</p>
+        <p className="mt-3 line-clamp-2 text-sm text-slate-400">{summary}</p>
       ) : null}
 
       {(story.thesisMatches ?? []).length > 0 ? (
-        <div className="mt-5 border-t border-white/[0.06] pt-4">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-600">
+        <div className="mt-6 border-t border-white/[0.06] pt-4">
+          <p className="text-xs font-semibold text-slate-600">
             Thesis tracker
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
@@ -142,7 +142,7 @@ export function NewsFeedCard({
               <Badge
                 key={`${match.symbol}-${match.label}`}
                 tone={match.tone === "watch" || match.tone === "risk" ? "warning" : "neutral"}
-                className="max-w-full text-[10px]"
+                className="max-w-full text-xs"
               >
                 {match.detail}
               </Badge>
@@ -152,16 +152,16 @@ export function NewsFeedCard({
       ) : null}
 
       {chips.length > 0 ? (
-        <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-white/[0.06] pt-4">
-          <span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-600">
+        <div className="mt-6 flex flex-wrap items-center gap-3 border-t border-white/[0.06] pt-4">
+          <span className="text-xs font-semibold text-slate-600">
             Affected holdings
           </span>
           {/* Full symbols in wrapping pills: a truncated ticker is a different (or no) security (F09). */}
-          <ul className="flex flex-wrap gap-1.5" aria-label="Affected holdings">
+          <ul className="flex flex-wrap gap-2" aria-label="Affected holdings">
             {chips.map((sym) => (
               <li
                 key={sym}
-                className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 font-mono text-[11px] font-bold uppercase text-slate-300"
+                className="rounded-full border border-white/10 bg-white/5 px-3 py-1 font-mono text-xs font-bold uppercase text-slate-300"
               >
                 {sym}
               </li>
@@ -171,7 +171,7 @@ export function NewsFeedCard({
       ) : null}
 
       {!isMarket && story.displayEffect !== "neutral" ? (
-        <p className="mt-3 text-xs font-medium uppercase tracking-wider text-slate-600">
+        <p className="mt-3 text-xs font-medium text-slate-600">
           Sentiment: {effectLabel(story.displayEffect)}
         </p>
       ) : null}

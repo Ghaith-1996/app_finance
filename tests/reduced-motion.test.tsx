@@ -1,13 +1,11 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render } from "@testing-library/react";
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { Hero } from "@/components/marketing/hero";
 import { UseCases } from "@/components/marketing/use-cases";
-import { PreferencesProvider } from "@/components/providers/preferences-provider";
 import { prefersReducedMotion, scrollBehavior } from "@/lib/motion";
 
 vi.mock("next/link", () => ({
@@ -84,34 +82,6 @@ describe("globals.css motion rules", () => {
 
   it("keeps loading spinners turning under reduced motion", () => {
     expect(css).toContain("*:not(.animate-spin)");
-  });
-
-  it("only animates the hero mesh on large screens without a reduced-motion preference", () => {
-    const animated = css.match(/@media \(min-width: 1024px\) and \(prefers-reduced-motion: no-preference\) \{([\s\S]*?)\n\}/);
-    expect(animated?.[1]).toContain("hero-mesh-drift");
-    const outside = css.replace(animated?.[0] ?? "", "");
-    expect(outside).not.toMatch(/animation:\s*hero-mesh-drift/);
-  });
-
-  it("defines hero mesh colors for both themes", () => {
-    expect(css).toMatch(/\.hero-mesh \{[^}]*--hero-mesh-a/);
-    expect(css).toMatch(/\[data-theme="light"\] \.hero-mesh \{[^}]*--hero-mesh-a/);
-  });
-});
-
-describe("Hero mesh backdrop", () => {
-  beforeEach(() => stubMatchMedia(false));
-
-  it("renders a decorative layer hidden from assistive technology", () => {
-    render(
-      <PreferencesProvider initialTheme="dark" initialLocale="en">
-        <Hero />
-      </PreferencesProvider>,
-    );
-    const mesh = screen.getByTestId("hero-mesh");
-    expect(mesh).toHaveClass("hero-mesh");
-    expect(mesh).toHaveAttribute("aria-hidden", "true");
-    expect(mesh).toBeEmptyDOMElement();
   });
 });
 

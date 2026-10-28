@@ -3,14 +3,12 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import {
-  ArrowRight,
-  FileSpreadsheet,
-  Loader2,
-  PencilLine,
-  ShieldCheck,
-  Trash2,
-} from "lucide-react";
+import { ArrowRight } from "@phosphor-icons/react/dist/ssr/ArrowRight";
+import { FileCsv as FileSpreadsheet } from "@phosphor-icons/react/dist/ssr/FileCsv";
+import { CircleNotch as Loader2 } from "@phosphor-icons/react/dist/ssr/CircleNotch";
+import { PencilLine } from "@phosphor-icons/react/dist/ssr/PencilLine";
+import { ShieldCheck } from "@phosphor-icons/react/dist/ssr/ShieldCheck";
+import { Trash as Trash2 } from "@phosphor-icons/react/dist/ssr/Trash";
 
 import { AppShell } from "@/components/app/app-shell";
 import { PortfolioCsvImportFlow } from "@/components/app/portfolio-csv-import-flow";
@@ -231,12 +229,12 @@ export function OnboardingPageClient({ showAdminLink = false }: { showAdminLink?
       {step === "method" ? (
         <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
           <div className="space-y-6">
-            <Panel className="space-y-5 border-white/[0.06] bg-surface-raised">
+            <Panel className="space-y-6 border-white/[0.06] bg-surface-raised">
               <div>
-                <p className="text-sm font-semibold uppercase tracking-[0.24em] text-brand">
+                <p className="text-sm font-semibold text-brand">
                   Choose a method
                 </p>
-                <p className="mt-2 text-sm leading-7 text-slate-400">
+                <p className="mt-2 text-sm text-slate-400">
                   Import holdings from a CSV file or add them manually one by one.
                 </p>
               </div>
@@ -251,7 +249,7 @@ export function OnboardingPageClient({ showAdminLink = false }: { showAdminLink?
                     setError(null);
                   }}
                   className={cn(
-                    "rounded-3xl border p-5 text-left transition",
+                    "rounded-3xl border p-6 text-left transition",
                     "border-white/[0.06] bg-surface-raised hover:border-brand/28 hover:bg-brand/6",
                   )}
                 >
@@ -277,7 +275,7 @@ export function OnboardingPageClient({ showAdminLink = false }: { showAdminLink?
                     setError(null);
                   }}
                   className={cn(
-                    "rounded-3xl border p-5 text-left transition",
+                    "rounded-3xl border p-6 text-left transition",
                     "border-white/[0.06] bg-surface-raised hover:border-brand/28 hover:bg-brand/6",
                   )}
                 >
@@ -298,7 +296,7 @@ export function OnboardingPageClient({ showAdminLink = false }: { showAdminLink?
           </div>
 
           <Panel className="space-y-4 border-white/[0.06] bg-surface-raised">
-            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-brand">
+            <p className="text-sm font-semibold text-brand">
               What to expect
             </p>
             <div className="space-y-3">
@@ -315,14 +313,14 @@ export function OnboardingPageClient({ showAdminLink = false }: { showAdminLink?
                 detail="Start with a CSV or add positions manually. You can switch methods before saving."
               />
             </div>
-            <div className="rounded-3xl border border-brand/16 bg-brand/10 p-5">
+            <div className="rounded-3xl border border-brand/16 bg-brand/10 p-6">
               <div className="flex items-center gap-3 text-brand">
                 <ShieldCheck className="h-5 w-5" />
-                <p className="text-sm font-semibold uppercase tracking-[0.2em]">
+                <p className="text-sm font-semibold">
                   Read-only by design
                 </p>
               </div>
-              <p className="mt-3 text-sm leading-7 text-slate-300">
+              <p className="mt-3 text-sm text-slate-300">
                 Pulsefolio only reads your holdings and cannot place trades or
                 move money. Your CSV is parsed on our server, and only the
                 holdings you confirm are saved.
@@ -346,13 +344,13 @@ export function OnboardingPageClient({ showAdminLink = false }: { showAdminLink?
       {step === "intake" && method === "manual" ? (
         <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
           <div className="space-y-6">
-            <Panel className="space-y-5 border-white/[0.06] bg-surface-raised">
+            <Panel className="space-y-6 border-white/[0.06] bg-surface-raised">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div>
-                  <p className="text-sm font-semibold uppercase tracking-[0.24em] text-brand">
+                  <p className="text-sm font-semibold text-brand">
                     Add holdings
                   </p>
-                  <p className="mt-2 text-sm leading-7 text-slate-400">
+                  <p className="mt-2 text-sm text-slate-400">
                     Search for a ticker or company name, then enter quantity and average cost.
                   </p>
                 </div>
@@ -396,7 +394,7 @@ export function OnboardingPageClient({ showAdminLink = false }: { showAdminLink?
                       </div>
                       <div className="grid gap-3 sm:grid-cols-3">
                         <div>
-                          <label className="mb-1 block text-xs uppercase tracking-[0.18em] text-slate-400">
+                          <label className="mb-1 block text-xs text-slate-400">
                             Shares
                           </label>
                           <input
@@ -408,11 +406,11 @@ export function OnboardingPageClient({ showAdminLink = false }: { showAdminLink?
                               updateManualRow(draft.tempId, "quantity", e.target.value)
                             }
                             placeholder="e.g. 50"
-                            className="w-full rounded-xl border border-white/10 bg-surface-raised px-3 py-2.5 text-sm text-white outline-none focus:border-brand focus:ring-1 focus:ring-brand"
+                            className="w-full rounded-xl border border-white/10 bg-surface-raised px-3 py-2 text-sm text-white outline-none focus:border-brand focus:ring-1 focus:ring-brand"
                           />
                         </div>
                         <div>
-                          <label className="mb-1 block text-xs uppercase tracking-[0.18em] text-slate-400">
+                          <label className="mb-1 block text-xs text-slate-400">
                             Avg cost
                           </label>
                           <input
@@ -424,11 +422,11 @@ export function OnboardingPageClient({ showAdminLink = false }: { showAdminLink?
                               updateManualRow(draft.tempId, "avgCost", e.target.value)
                             }
                             placeholder="e.g. 142.50"
-                            className="w-full rounded-xl border border-white/10 bg-surface-raised px-3 py-2.5 text-sm text-white outline-none focus:border-brand focus:ring-1 focus:ring-brand"
+                            className="w-full rounded-xl border border-white/10 bg-surface-raised px-3 py-2 text-sm text-white outline-none focus:border-brand focus:ring-1 focus:ring-brand"
                           />
                         </div>
                         <div>
-                          <label className="mb-1 block text-xs uppercase tracking-[0.18em] text-slate-400">
+                          <label className="mb-1 block text-xs text-slate-400">
                             Thesis (optional)
                           </label>
                           <input
@@ -438,7 +436,7 @@ export function OnboardingPageClient({ showAdminLink = false }: { showAdminLink?
                               updateManualRow(draft.tempId, "thesis", e.target.value)
                             }
                             placeholder="Why you own this"
-                            className="w-full rounded-xl border border-white/10 bg-surface-raised px-3 py-2.5 text-sm text-white outline-none focus:border-brand focus:ring-1 focus:ring-brand"
+                            className="w-full rounded-xl border border-white/10 bg-surface-raised px-3 py-2 text-sm text-white outline-none focus:border-brand focus:ring-1 focus:ring-brand"
                           />
                         </div>
                       </div>
@@ -463,17 +461,17 @@ export function OnboardingPageClient({ showAdminLink = false }: { showAdminLink?
           </div>
 
           <Panel className="space-y-4 border-white/[0.06] bg-surface-raised">
-            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-brand">
+            <p className="text-sm font-semibold text-brand">
               Summary
             </p>
-            <div className="rounded-3xl border border-white/[0.06] bg-white/[0.03] p-5">
-              <p className="text-sm uppercase tracking-[0.18em] text-slate-400">
+            <div className="rounded-3xl border border-white/[0.06] bg-white/[0.03] p-6">
+              <p className="text-sm text-slate-400">
                 Holdings added
               </p>
               <p className="mt-3 text-4xl font-semibold text-white">{drafts.length}</p>
             </div>
-            <div className="rounded-3xl border border-white/[0.06] bg-white/[0.03] p-5">
-              <p className="text-sm uppercase tracking-[0.18em] text-slate-400">
+            <div className="rounded-3xl border border-white/[0.06] bg-white/[0.03] p-6">
+              <p className="text-sm text-slate-400">
                 Ready to save
               </p>
               <p className="mt-3 text-4xl font-semibold text-white">{confirmedCount}</p>
@@ -491,7 +489,7 @@ export function OnboardingPageClient({ showAdminLink = false }: { showAdminLink?
         <div className="space-y-6">
           <div className="flex items-center justify-between gap-4">
             <div>
-              <p className="text-sm font-semibold uppercase tracking-[0.24em] text-brand">
+              <p className="text-sm font-semibold text-brand">
                 Review holdings
               </p>
               <p className="mt-1 text-sm text-slate-400">
@@ -510,7 +508,7 @@ export function OnboardingPageClient({ showAdminLink = false }: { showAdminLink?
           />
 
           {confirmedCount > 0 ? (
-            <Panel className="flex flex-col gap-3 border-white/[0.06] bg-white/[0.03] p-5 sm:flex-row sm:items-center sm:justify-between">
+            <Panel className="flex flex-col gap-3 border-white/[0.06] bg-white/[0.03] p-6 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="text-sm text-slate-400">Estimated cost basis</p>
                 <p className="text-2xl font-semibold text-white">
@@ -536,7 +534,7 @@ function InfoCard({ title, detail }: { title: string; detail: string }) {
   return (
     <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-4">
       <p className="text-sm font-semibold text-white">{title}</p>
-      <p className="mt-2 text-sm leading-7 text-slate-400">{detail}</p>
+      <p className="mt-2 text-sm text-slate-400">{detail}</p>
     </div>
   );
 }

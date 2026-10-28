@@ -4,24 +4,22 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  Activity,
-  ArrowLeft,
-  Bell,
-  Bookmark,
-  BookmarkPlus,
-  ChevronDown,
-  ChevronRight,
-  Globe,
-  Home,
-  LayoutDashboard,
-  MessagesSquare,
-  Newspaper,
-  PanelLeftClose,
-  PanelLeft,
-  Search,
-  Upload,
-} from "lucide-react";
+import { Pulse as Activity } from "@phosphor-icons/react/dist/ssr/Pulse";
+import { ArrowLeft } from "@phosphor-icons/react/dist/ssr/ArrowLeft";
+import { Bell } from "@phosphor-icons/react/dist/ssr/Bell";
+import { BookmarkSimple as Bookmark } from "@phosphor-icons/react/dist/ssr/BookmarkSimple";
+import { BookmarkSimple as BookmarkPlus } from "@phosphor-icons/react/dist/ssr/BookmarkSimple";
+import { CaretDown as ChevronDown } from "@phosphor-icons/react/dist/ssr/CaretDown";
+import { CaretRight as ChevronRight } from "@phosphor-icons/react/dist/ssr/CaretRight";
+import { Globe } from "@phosphor-icons/react/dist/ssr/Globe";
+import { House as Home } from "@phosphor-icons/react/dist/ssr/House";
+import { SquaresFour as LayoutDashboard } from "@phosphor-icons/react/dist/ssr/SquaresFour";
+import { ChatsCircle as MessagesSquare } from "@phosphor-icons/react/dist/ssr/ChatsCircle";
+import { Newspaper } from "@phosphor-icons/react/dist/ssr/Newspaper";
+import { SidebarSimple as PanelLeftClose } from "@phosphor-icons/react/dist/ssr/SidebarSimple";
+import { SidebarSimple as PanelLeft } from "@phosphor-icons/react/dist/ssr/SidebarSimple";
+import { MagnifyingGlass as Search } from "@phosphor-icons/react/dist/ssr/MagnifyingGlass";
+import { UploadSimple as Upload } from "@phosphor-icons/react/dist/ssr/UploadSimple";
 
 import { AppLogo } from "@/components/brand/app-logo";
 import { ThemeToggle } from "@/components/preferences/theme-toggle";
@@ -159,7 +157,7 @@ export function AppShellLayout({
           ref={showNavigationRef}
           type="button"
           onClick={() => persistCollapsed(false)}
-          className="fixed left-0 top-1/2 z-[60] hidden -translate-y-1/2 rounded-r-lg border border-l-0 border-subtle bg-surface px-1.5 py-4 text-secondary shadow-[var(--surface-shadow)] transition hover:bg-surface-raised hover:text-primary lg:flex"
+          className="fixed left-0 top-1/2 z-[60] hidden -translate-y-1/2 rounded-r-lg border border-l-0 border-subtle bg-surface px-2 py-4 text-secondary shadow-[var(--surface-shadow)] transition hover:bg-surface-raised hover:text-primary lg:flex"
           aria-label={t("shell.showNavigation")}
         >
           <PanelLeft className="h-5 w-5" />
@@ -169,8 +167,8 @@ export function AppShellLayout({
       {/* Sidebar */}
       <aside
         className={cn(
-          "fixed left-0 top-0 z-50 hidden h-full flex-col border-r border-subtle bg-surface/95 backdrop-blur-xl transition-[width,transform,opacity] duration-300 ease-out lg:flex",
-          collapsed ? "w-0 translate-x-[-4px] overflow-hidden border-0 opacity-0" : "w-[260px] opacity-100",
+          "fixed left-0 top-0 z-50 hidden h-full w-[260px] flex-col border-r border-subtle bg-surface/95 backdrop-blur-xl transition-[transform,opacity] duration-500 lg:flex",
+          collapsed ? "-translate-x-full opacity-0" : "translate-x-0 opacity-100",
         )}
         aria-hidden={collapsed}
         inert={collapsed}
@@ -180,7 +178,7 @@ export function AppShellLayout({
             <Link href="/" className="flex min-w-0 flex-1 items-center gap-3">
               <AppLogo size="md" />
               <div className="min-w-0">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
+                <p className="text-xs font-semibold text-slate-500">
                   {t("shell.observatory")}
                 </p>
                 <p className="truncate text-sm font-semibold text-primary">Pulsefolio</p>
@@ -199,7 +197,7 @@ export function AppShellLayout({
           </div>
 
           <nav className="flex-1 space-y-1 overflow-y-auto px-3 pb-4">
-            <p className="mb-3 px-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted">
+            <p className="mb-3 px-3 text-xs font-semibold text-muted">
               {t("shell.navigation")}
             </p>
 
@@ -211,7 +209,7 @@ export function AppShellLayout({
                   key={item.href}
                   href={item.href}
                   className={cn(
-                    "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
+                    "flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-colors",
                     isActive
                       ? "bg-brand/10 text-brand"
                       : "text-secondary hover:bg-surface-soft hover:text-primary",
@@ -220,7 +218,7 @@ export function AppShellLayout({
                   <Icon className="h-4 w-4 shrink-0" />
                   {item.label}
                   {item.href === "/alerts" && resolvedUnreadAlertCount > 0 ? (
-                    <span className="ml-auto inline-flex min-w-5 items-center justify-center rounded-full bg-amber-400 px-1.5 py-0.5 text-[10px] font-bold text-[#080c11]">
+                    <span className="ml-auto inline-flex min-w-5 items-center justify-center rounded-full bg-amber-400 px-2 py-0.5 text-xs font-bold text-black">
                       {resolvedUnreadAlertCount > 99 ? "99+" : resolvedUnreadAlertCount}
                     </span>
                   ) : null}
@@ -235,14 +233,14 @@ export function AppShellLayout({
             <div className="pt-1">
               <div
                 className={cn(
-                  "flex w-full items-center gap-1 rounded-xl px-2 py-1.5 transition-colors",
+                  "flex w-full items-center gap-1 rounded-xl px-2 py-2 transition-colors",
                   isOverviewSection(pathname) ? "bg-brand/10" : "hover:bg-surface-soft",
                 )}
               >
                 <Link
                   href="/portfolio"
                   className={cn(
-                    "flex min-w-0 flex-1 items-center gap-3 rounded-lg px-2 py-1.5 text-sm font-medium transition-colors",
+                    "flex min-w-0 flex-1 items-center gap-3 rounded-lg px-2 py-2 text-sm font-medium transition-colors",
                     pathname === "/portfolio"
                       ? "text-brand"
                       : isOverviewSection(pathname)
@@ -304,7 +302,7 @@ export function AppShellLayout({
           <div className="border-t border-subtle px-4 py-4">
             <Link
               href="/"
-              className="mb-3 flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm text-muted transition hover:bg-surface-soft hover:text-secondary"
+              className="mb-3 flex items-center gap-3 rounded-xl px-3 py-2 text-sm text-muted transition hover:bg-surface-soft hover:text-secondary"
             >
               <Globe className="h-4 w-4" />
               {t("shell.landingPage")}
@@ -319,7 +317,7 @@ export function AppShellLayout({
 
       {/* Mobile header */}
       <header className="fixed left-0 right-0 top-0 z-40 flex flex-col border-b border-subtle bg-surface/95 backdrop-blur-xl lg:hidden">
-        <div className="flex items-center gap-3 px-4 py-3 sm:px-5">
+        <div className="flex items-center gap-3 px-4 py-3 sm:px-6">
           <Link href="/" className="flex items-center gap-2">
             <AppLogo size="sm" />
             <span className="text-sm font-semibold text-primary">Pulsefolio</span>
@@ -338,7 +336,7 @@ export function AppShellLayout({
                   }
                   aria-current={pathname === item.href ? "page" : undefined}
                   className={cn(
-                    "relative flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition",
+                    "relative flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition",
                     pathname === item.href
                       ? "bg-brand/10 text-brand"
                       : "text-secondary hover:text-primary",
@@ -346,7 +344,7 @@ export function AppShellLayout({
                 >
                   <Icon className="h-3.5 w-3.5" aria-hidden="true" />
                   {item.href === "/alerts" && resolvedUnreadAlertCount > 0 ? (
-                    <span aria-hidden="true" className="absolute -right-1 -top-1 inline-flex min-w-4 items-center justify-center rounded-full bg-amber-400 px-1 text-[9px] font-bold text-[#080c11]">
+                    <span aria-hidden="true" className="absolute -right-1 -top-1 inline-flex min-w-4 items-center justify-center rounded-full bg-amber-400 px-1 text-xs font-bold text-black">
                       {resolvedUnreadAlertCount > 9 ? "9+" : resolvedUnreadAlertCount}
                     </span>
                   ) : null}
@@ -358,7 +356,7 @@ export function AppShellLayout({
               href="/portfolio"
               aria-label={t("shell.overview")}
               className={cn(
-                "flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition",
+                "flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition",
                 isOverviewSection(pathname)
                   ? "bg-brand/10 text-brand"
                   : "text-secondary hover:text-primary",
@@ -372,7 +370,7 @@ export function AppShellLayout({
           {/* Audit F21: account, settings and sign-out stay reachable without the desktop sidebar. */}
           <UserMenu showAdminLink={showAdminLink} compact />
         </div>
-        <div className="flex gap-4 overflow-x-auto whitespace-nowrap border-t border-subtle px-4 py-2 text-[11px] text-secondary sm:px-5">
+        <div className="flex gap-4 overflow-x-auto whitespace-nowrap border-t border-subtle px-4 py-2 text-xs text-secondary sm:px-6">
           <Link href="/portfolio/full" className={cn(pathname === "/portfolio/full" && "font-medium text-brand")}>
             {t("shell.fullPortfolio")}
           </Link>
@@ -384,7 +382,7 @@ export function AppShellLayout({
 
       <main
         className={cn(
-          "min-w-0 flex-1 transition-[margin] duration-300 ease-out",
+          "min-w-0 flex-1 transition-[margin] duration-500",
           collapsed ? "lg:ml-0" : "lg:ml-[260px]",
           "px-4 pt-28 pb-10 sm:px-6 md:px-8 lg:px-10 lg:pt-8 xl:px-12",
           mainClassName,
@@ -407,7 +405,7 @@ export function AppShellLayout({
           <div className="flex flex-col gap-4 sm:gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div className="max-w-3xl space-y-3">
               {eyebrow ? (
-                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-brand">
+                <p className="text-xs font-semibold text-brand">
                   {eyebrow}
                 </p>
               ) : null}
@@ -415,7 +413,7 @@ export function AppShellLayout({
                 <h1 className="text-3xl font-semibold tracking-tight text-primary sm:text-4xl">
                   {title}
                 </h1>
-                <p className="text-base leading-7 text-secondary">{description}</p>
+                <p className="text-base text-secondary">{description}</p>
               </div>
             </div>
             {actions ? <div className="flex flex-wrap gap-3">{actions}</div> : null}

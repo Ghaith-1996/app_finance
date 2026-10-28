@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Search } from "lucide-react";
+import { MagnifyingGlass as Search } from "@phosphor-icons/react/dist/ssr/MagnifyingGlass";
 
 import { AppShell } from "@/components/app/app-shell";
 import { Badge } from "@/components/ui/badge";
@@ -27,7 +27,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   return (
     <AppShell
       eyebrow="Command center"
-      title="Global Search"
+      title="Search"
       description="Find tickers, saved articles, alerts, thesis notes, and recent stories from one place."
       activePath="/search"
       showOnboardingNav={showOnboardingNav}
@@ -45,7 +45,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
             />
             <button
               type="submit"
-              className="rounded-lg bg-brand px-4 py-2 text-sm font-bold text-[#080c11] transition hover:bg-brand-strong"
+              className="rounded-lg bg-brand px-4 py-2 text-sm font-bold text-brand-foreground transition hover:bg-brand-strong"
             >
               Search
             </button>
@@ -56,7 +56,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
           <div className="rounded-2xl border border-dashed border-white/10 bg-surface-raised/60 p-10 text-center">
             <Search className="mx-auto h-8 w-8 text-slate-500" />
             <h2 className="mt-4 text-xl font-bold text-white">Search across Pulsefolio</h2>
-            <p className="mx-auto mt-2 max-w-xl text-sm leading-7 text-slate-500">
+            <p className="mx-auto mt-2 max-w-xl text-sm text-slate-500">
               Enter at least two characters to search holdings, watchlist symbols, articles,
               saved articles, alerts, and thesis notes.
             </p>
@@ -67,20 +67,20 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
               <Link
                 key={result.id}
                 href={result.href}
-                className="rounded-2xl border border-white/[0.06] bg-surface-raised p-5 transition hover:border-white/10 hover:bg-surface-hover"
+                className="rounded-2xl border border-white/[0.06] bg-surface-raised p-6 transition hover:border-white/10 hover:bg-surface-hover"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <Badge tone={resultTone(result.type)}>{result.type}</Badge>
-                    <h2 className="mt-3 line-clamp-2 text-lg font-bold leading-snug text-white">
+                    <h2 className="mt-3 line-clamp-2 text-lg font-bold text-white">
                       {result.title}
                     </h2>
                   </div>
-                  <span className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-600">
+                  <span className="shrink-0 text-xs font-semibold text-slate-600">
                     {result.meta}
                   </span>
                 </div>
-                <p className="mt-3 line-clamp-3 text-sm leading-6 text-slate-400">
+                <p className="mt-3 line-clamp-3 text-sm text-slate-400">
                   {result.detail}
                 </p>
               </Link>
@@ -89,7 +89,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
         ) : (
           <div className="rounded-2xl border border-dashed border-white/10 bg-surface-raised/60 p-10 text-center">
             <h2 className="text-xl font-bold text-white">No result found</h2>
-            <p className="mx-auto mt-2 max-w-xl text-sm leading-7 text-slate-500">
+            <p className="mx-auto mt-2 max-w-xl text-sm text-slate-500">
               Try a ticker, company name, article headline, saved risk, or alert keyword.
             </p>
           </div>

@@ -99,22 +99,22 @@ export function PortfolioPricingSection({
       <div>
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h2 className="text-[22px] font-bold tracking-tight text-white">Active Holdings</h2>
+            <h2 className="text-xl font-bold tracking-tight text-white">Active holdings</h2>
             <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-500">
               <p>{overview.lastSyncedAt ? `Synced ${overview.lastSyncedAt}` : "Not synced yet"}</p>
               {autoRefreshing ? (
-                <span className="text-[11px] font-medium text-slate-400">Auto-refreshing...</span>
+                <span className="text-xs font-medium text-slate-400">Auto-refreshing...</span>
               ) : null}
             </div>
           </div>
           <div className="flex w-full flex-col-reverse gap-3 sm:w-auto sm:flex-row sm:items-start">
-            <p className="text-[12px] font-bold uppercase tracking-widest text-brand sm:pt-2">
+            <p className="text-xs font-bold text-brand sm:pt-2">
               {holdings.length} positions
             </p>
             <RefreshPricesButton
               portfolioId={portfolioId}
               includeHoldings
-              className="h-9 gap-1.5 px-3 text-[11px] font-bold uppercase tracking-wider"
+              className="h-9 gap-2 px-3 text-xs font-bold"
               statusClassName="max-w-[220px]"
               onRefreshed={handleRefreshed}
             />
@@ -137,7 +137,7 @@ export function PortfolioPricingSection({
         {holdings.length > 0 ? (
           <PortfolioHoldingsTable holdings={holdings} portfolioId={portfolioId} />
         ) : (
-          <div className="rounded-[1.5rem] border border-white/[0.06] bg-surface-raised px-5 py-6 text-center text-sm text-slate-500 shadow-sm sm:px-6 sm:py-8">
+          <div className="rounded-3xl border border-white/[0.06] bg-surface-raised px-6 py-6 text-center text-sm text-slate-500 shadow-sm sm:px-6 sm:py-8">
             No holdings available yet.
           </div>
         )}

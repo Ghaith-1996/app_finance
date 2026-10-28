@@ -17,8 +17,8 @@ export function PreferencesPanel() {
         <p className="text-sm text-secondary">Choose how the app looks on this device.</p>
       </div>
 
-      <div className="grid gap-5">
-        <div className="space-y-3 rounded-2xl border border-subtle bg-surface-soft px-5 py-4">
+      <div className="grid gap-6">
+        <div className="space-y-3 rounded-2xl border border-subtle bg-surface-soft px-6 py-4">
           <div className="space-y-1">
             <p className="text-sm font-semibold text-primary">{t("preferences.themeLabel")}</p>
             <p className="text-sm text-secondary">{t("preferences.themeDescription")}</p>
@@ -30,7 +30,7 @@ export function PreferencesPanel() {
                 type="button"
                 onClick={() => setTheme(option)}
                 className={cn(
-                  "rounded-xl border px-4 py-2.5 text-sm font-medium transition",
+                  "rounded-xl border px-4 py-2 text-sm font-medium transition",
                   theme === option
                     ? "border-brand/30 bg-brand/10 text-brand"
                     : "border-subtle bg-surface text-secondary hover:border-strong hover:text-primary",

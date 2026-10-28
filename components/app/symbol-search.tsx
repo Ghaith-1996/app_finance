@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Search } from "lucide-react";
+import { MagnifyingGlass as Search } from "@phosphor-icons/react/dist/ssr/MagnifyingGlass";
 import { resolveSymbol } from "@/lib/actions/portfolio";
 import type { HoldingResolutionCandidate } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -69,7 +69,7 @@ export function SymbolSearch({
           onChange={(e) => setQuery(e.target.value)}
           onFocus={() => results.length > 0 && setOpen(true)}
           placeholder={placeholder}
-          className="w-full rounded-xl border border-white/10 bg-surface-raised py-2.5 pl-9 pr-3 text-sm text-slate-200 outline-none transition focus:border-brand focus:ring-1 focus:ring-brand"
+          className="w-full rounded-xl border border-white/10 bg-surface-raised py-2 pl-10 pr-3 text-sm text-slate-200 outline-none transition focus:border-brand focus:ring-1 focus:ring-brand"
         />
         {loading && (
           <div className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin rounded-full border-2 border-brand border-t-transparent" />

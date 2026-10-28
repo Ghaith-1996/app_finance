@@ -4,7 +4,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { ChevronDown, LogOut, Settings, Shield } from "lucide-react";
+import { CaretDown as ChevronDown } from "@phosphor-icons/react/dist/ssr/CaretDown";
+import { SignOut as LogOut } from "@phosphor-icons/react/dist/ssr/SignOut";
+import { Gear as Settings } from "@phosphor-icons/react/dist/ssr/Gear";
+import { Shield } from "@phosphor-icons/react/dist/ssr/Shield";
 import type { User } from "@supabase/supabase-js";
 import { ThemeToggle } from "@/components/preferences/theme-toggle";
 import { usePreferences } from "@/components/providers/preferences-provider";
@@ -26,6 +29,7 @@ export function UserMenu({
   } | null>(null);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  const [avatarFailed, setAvatarFailed] = useState(false);
   const router = useRouter();
   const { t } = usePreferences();
   const supabase = useMemo(() => createClient(), []);
@@ -136,10 +140,12 @@ export function UserMenu({
         aria-expanded={open}
         aria-label={compact ? `Account menu for ${name}` : undefined}
       >
-        {avatarUrl ? (
+        {avatarUrl && !avatarFailed ? (
           <img
             src={avatarUrl}
             alt=""
+            referrerPolicy="no-referrer"
+            onError={() => setAvatarFailed(true)}
             className="h-8 w-8 rounded-lg border border-white/10 object-cover"
           />
         ) : (
@@ -171,7 +177,7 @@ export function UserMenu({
             href="/settings"
             role="menuitem"
             onClick={() => setOpen(false)}
-            className="flex items-center gap-2 px-3 py-2.5 text-sm text-primary transition hover:bg-surface-soft"
+            className="flex items-center gap-2 px-3 py-2 text-sm text-primary transition hover:bg-surface-soft"
           >
             <Settings className="h-4 w-4 shrink-0" />
             {t("common.settings")}
@@ -181,7 +187,7 @@ export function UserMenu({
               href="/admin"
               role="menuitem"
               onClick={() => setOpen(false)}
-              className="flex items-center gap-2 px-3 py-2.5 text-sm text-primary transition hover:bg-surface-soft"
+              className="flex items-center gap-2 px-3 py-2 text-sm text-primary transition hover:bg-surface-soft"
             >
               <Shield className="h-4 w-4 shrink-0" />
               {t("common.admin")}
@@ -194,7 +200,7 @@ export function UserMenu({
             type="button"
             role="menuitem"
             onClick={() => void signOut()}
-            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-red-400 transition hover:bg-red-500/10"
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-400 transition hover:bg-red-500/10"
           >
             <LogOut className="h-4 w-4 shrink-0" />
             {t("common.signOut")}

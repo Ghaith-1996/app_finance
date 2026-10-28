@@ -107,16 +107,16 @@ export default async function DigestPage({
       showAdminLink={showAdminLink}
     >
       <div className="space-y-6">
-        <Panel className="space-y-4 rounded-[2rem]">
+        <Panel className="space-y-4 rounded-4xl">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="space-y-2">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
+              <p className="text-xs font-semibold text-slate-500">
                 Window
               </p>
               <h2 className="text-2xl font-semibold tracking-tight text-white">
                 {formatEtWindowLabel(digest.windowStart, digest.windowEnd)}
               </h2>
-              <p className="text-sm leading-7 text-slate-400">
+              <p className="text-sm text-slate-400">
                 {digest.summaryLine}
               </p>
             </div>
@@ -145,13 +145,13 @@ export default async function DigestPage({
                 id={`story-${story.newsItemId}`}
                 className={
                   story.newsItemId === activeStoryId
-                    ? "rounded-[2rem] border-brand/40 bg-brand/5"
-                    : "rounded-[2rem]"
+                    ? "rounded-4xl border-brand/40 bg-brand/5"
+                    : "rounded-4xl"
                 }
               >
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div className="space-y-3">
-                    <div className="flex flex-wrap items-center gap-2 text-xs uppercase tracking-[0.16em] text-slate-500">
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
                       <span>#{index + 1}</span>
                       <span>{story.source}</span>
                       <span>{formatPublishedAt(story.publishedAt)}</span>
@@ -159,7 +159,7 @@ export default async function DigestPage({
                     <h3 className="text-xl font-semibold tracking-tight text-white">
                       {story.headline}
                     </h3>
-                    <p className="text-sm leading-7 text-slate-400">
+                    <p className="text-sm text-slate-400">
                       {story.aiSummary || story.whyItMatters || "No stored summary for this story."}
                     </p>
                   </div>

@@ -1,6 +1,8 @@
 import Link from "next/link";
 
-import { ArrowRight, BrainCircuit, RefreshCw } from "lucide-react";
+import { ArrowRight } from "@phosphor-icons/react/dist/ssr/ArrowRight";
+import { Brain as BrainCircuit } from "@phosphor-icons/react/dist/ssr/Brain";
+import { ArrowsClockwise as RefreshCw } from "@phosphor-icons/react/dist/ssr/ArrowsClockwise";
 
 import { AnalysisRunTrigger } from "@/components/app/analysis-run-trigger";
 import { AppShell } from "@/components/app/app-shell";
@@ -68,7 +70,7 @@ export default async function AnalysisPage({
                 <h2 className="text-3xl font-semibold text-white">
                   Create a portfolio first
                 </h2>
-                <p className="max-w-2xl text-sm leading-7 text-slate-400">
+                <p className="max-w-2xl text-sm text-slate-400">
                   Go to onboarding to add a portfolio. Once created, your feed will update
                   automatically every 20 minutes.
                 </p>
@@ -92,7 +94,7 @@ export default async function AnalysisPage({
                 <RefreshCw className="h-5 w-5" />
               </div>
               <div>
-                <p className="text-sm uppercase tracking-[0.18em] text-slate-500">
+                <p className="text-sm text-slate-500">
                   Insight priorities
                 </p>
                 <p className="text-lg font-semibold text-white">
@@ -107,11 +109,11 @@ export default async function AnalysisPage({
                     key={insight.title}
                     className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-4"
                   >
-                    <p className="text-sm uppercase tracking-[0.18em] text-slate-500">
+                    <p className="text-sm text-slate-500">
                       {insight.title}
                     </p>
                     <p className="mt-2 text-lg font-semibold text-white">{insight.value}</p>
-                    <p className="mt-2 text-sm leading-7 text-slate-400">{insight.detail}</p>
+                    <p className="mt-2 text-sm text-slate-400">{insight.detail}</p>
                   </div>
                 ))
               ) : (

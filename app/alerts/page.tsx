@@ -11,7 +11,7 @@ export default async function AlertsPage() {
   return (
     <AppShell
       eyebrow="Signals"
-      title="Alert Center"
+      title="Alert center"
       description="Review smart alerts generated from critical news, earnings reports, price moves, and concentration rules."
       activePath="/alerts"
       showOnboardingNav={showOnboardingNav}

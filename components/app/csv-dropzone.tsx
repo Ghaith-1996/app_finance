@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { FileUp, X } from "lucide-react";
+import { FileArrowUp as FileUp } from "@phosphor-icons/react/dist/ssr/FileArrowUp";
+import { X } from "@phosphor-icons/react/dist/ssr/X";
 import { cn } from "@/lib/utils";
 
 interface CSVDropzoneProps {

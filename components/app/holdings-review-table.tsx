@@ -63,20 +63,20 @@ export function HoldingsReviewTable({
       <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-white/[0.06]">
           <thead className="bg-white/[0.03]">
-            <tr className="text-left text-xs uppercase tracking-[0.22em] text-slate-500">
-              <th className="px-5 py-4">Symbol</th>
-              <th className="px-5 py-4">Company</th>
-              <th className="px-5 py-4">Shares</th>
-              <th className="px-5 py-4">Avg Cost</th>
-              <th className="px-5 py-4">Source</th>
-              <th className="px-5 py-4">Status</th>
-              <th className="px-5 py-4">Action</th>
+            <tr className="text-left text-xs text-slate-500">
+              <th className="px-6 py-4">Symbol</th>
+              <th className="px-6 py-4">Company</th>
+              <th className="px-6 py-4">Shares</th>
+              <th className="px-6 py-4">Avg cost</th>
+              <th className="px-6 py-4">Source</th>
+              <th className="px-6 py-4">Status</th>
+              <th className="px-6 py-4">Action</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-white/[0.06]">
             {drafts.map((draft) => (
               <tr key={draft.tempId} className="transition hover:bg-white/[0.02]">
-                <td className="px-5 py-4">
+                <td className="px-6 py-4">
                   <span className="text-sm font-semibold text-white">
                     {draft.symbol || "—"}
                   </span>
@@ -84,21 +84,21 @@ export function HoldingsReviewTable({
                     <span className="ml-2 text-xs text-slate-500">{draft.market}</span>
                   )}
                 </td>
-                <td className="px-5 py-4 text-sm text-slate-400">
+                <td className="px-6 py-4 text-sm text-slate-400">
                   {draft.company || "—"}
                 </td>
-                <td className="px-5 py-4 text-sm text-white">
+                <td className="px-6 py-4 text-sm text-white">
                   {draft.quantity > 0 ? draft.quantity : "—"}
                 </td>
-                <td className="px-5 py-4 text-sm text-white">
+                <td className="px-6 py-4 text-sm text-white">
                   {draft.averageCost > 0 ? formatPrice(draft.averageCost) : "—"}
                 </td>
-                <td className="px-5 py-4">
+                <td className="px-6 py-4">
                   <Badge tone="neutral">
                     {draft.importSource === "csv" ? "CSV" : "Manual"}
                   </Badge>
                 </td>
-                <td className="px-5 py-4">
+                <td className="px-6 py-4">
                   {draft.status === "confirmed" && (
                     <Badge tone="success">Confirmed</Badge>
                   )}
@@ -116,7 +116,7 @@ export function HoldingsReviewTable({
                     <Badge tone="neutral">Skipped</Badge>
                   )}
                 </td>
-                <td className="px-5 py-4">
+                <td className="px-6 py-4">
                   <div className="flex flex-col gap-1">
                     {draft.candidates.length > 0 && draft.status === "unresolved" && (
                       <div className="space-y-1">
@@ -125,7 +125,7 @@ export function HoldingsReviewTable({
                             key={c.symbol}
                             type="button"
                             onClick={() => selectCandidate(draft.tempId, c)}
-                            className="block w-full rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-1.5 text-left text-xs transition hover:border-brand/30 hover:bg-brand/5"
+                            className="block w-full rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-2 text-left text-xs transition hover:border-brand/30 hover:bg-brand/5"
                           >
                             <span className="font-semibold text-white">{c.symbol}</span>{" "}
                             <span className="text-slate-500">{c.name}</span>

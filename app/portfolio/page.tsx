@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { ArrowRight, Bookmark } from "lucide-react";
+import { ArrowRight } from "@phosphor-icons/react/dist/ssr/ArrowRight";
+import { BookmarkSimple as Bookmark } from "@phosphor-icons/react/dist/ssr/BookmarkSimple";
 
 import { AppShell } from "@/components/app/app-shell";
 import { PortfolioValueCard } from "@/components/app/portfolio-value-card";
@@ -17,7 +18,7 @@ function formatStoryTime(iso: string): string {
 
 function storyTickerTag(h: PortfolioFeedHighlight): string {
   if (h.holdings.length > 0) return h.holdings[0];
-  if (h.sectors.length > 0) return h.sectors[0].slice(0, 8).toUpperCase();
+  if (h.sectors.length > 0) return h.sectors[0];
   return "News";
 }
 
@@ -41,11 +42,11 @@ export default async function PortfolioPage() {
         showOnboardingNav={showOnboardingNav}
         showAdminLink={showAdminLink}
       >
-        <div className="rounded-2xl border border-white/[0.06] bg-surface-raised p-5 sm:p-8 text-center">
+        <div className="rounded-2xl border border-white/[0.06] bg-surface-raised p-6 sm:p-8 text-center">
           <p className="text-slate-400">
             You don&apos;t have a portfolio yet. Complete onboarding to add one.
           </p>
-          <Link href="/onboarding" className="mt-4 inline-block rounded-xl bg-brand px-5 py-2.5 font-medium text-[#080c11] transition hover:bg-brand-strong">
+          <Link href="/onboarding" className="mt-4 inline-block rounded-xl bg-brand px-6 py-2 font-medium text-brand-foreground transition hover:bg-brand-strong">
             Start onboarding
           </Link>
         </div>
@@ -65,8 +66,8 @@ export default async function PortfolioPage() {
   );
   const hasCompletedAnalysis = Boolean(portfolioOverview.lastAnalyzedAt);
   const analysisStatusLabel = hasCompletedAnalysis
-    ? "ANALYSIS READY"
-    : "ANALYSIS PENDING";
+    ? "Analysis ready"
+    : "Analysis pending";
   const analysisStatusClasses = hasCompletedAnalysis
     ? "bg-brand/10 text-brand"
     : "bg-amber-500/10 text-amber-300";
@@ -74,7 +75,7 @@ export default async function PortfolioPage() {
   return (
     <AppShell
       eyebrow=""
-      title="Portfolio Overview"
+      title="Portfolio overview"
       description="Welcome back. Here's your market snapshot for today."
       activePath="/portfolio"
       showOnboardingNav={showOnboardingNav}
@@ -88,31 +89,31 @@ export default async function PortfolioPage() {
             portfolioId={portfolioId}
           />
 
-          <div className="flex flex-col justify-between rounded-2xl border border-white/[0.06] bg-surface-raised p-5 sm:p-8 min-h-[180px]">
+          <div className="flex flex-col justify-between rounded-2xl border border-white/[0.06] bg-surface-raised p-6 sm:p-8 min-h-[180px]">
             <div>
-              <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">
-                IMPORT METHOD
+              <p className="text-xs font-bold text-slate-500">
+                Import method
               </p>
-              <p className="mt-4 text-xl sm:text-[26px] font-bold tracking-tight text-white">{sourceDisplayLabel}</p>
+              <p className="mt-4 text-xl sm:text-2xl font-bold tracking-tight text-white">{sourceDisplayLabel}</p>
             </div>
             <div className="mt-auto pt-4 flex">
-              <span className="inline-flex items-center gap-1.5 rounded-lg bg-brand/10 px-3 py-1.5 text-[11px] font-bold tracking-widest text-brand">
+              <span className="inline-flex items-center gap-2 rounded-lg bg-brand/10 px-3 py-2 text-xs font-bold text-brand">
                 <span className="h-1.5 w-1.5 rounded-full bg-brand" />
-                {sourceStatusLabel.toUpperCase()}
+                {sourceStatusLabel}
               </span>
             </div>
           </div>
 
-          <div className="flex flex-col justify-between rounded-2xl border border-white/[0.06] bg-surface-raised p-5 sm:p-8 min-h-[180px]">
+          <div className="flex flex-col justify-between rounded-2xl border border-white/[0.06] bg-surface-raised p-6 sm:p-8 min-h-[180px]">
             <div>
-              <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">
-                LAST ANALYZED
+              <p className="text-xs font-bold text-slate-500">
+                Last analyzed
               </p>
-              <p className="mt-4 text-xl sm:text-[26px] font-bold tracking-tight text-white">{portfolioOverview.lastAnalyzedAt || "Never"}</p>
+              <p className="mt-4 text-xl sm:text-2xl font-bold tracking-tight text-white">{portfolioOverview.lastAnalyzedAt || "Never"}</p>
             </div>
             <div className="mt-auto pt-4 flex">
               <span
-                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-bold tracking-widest ${analysisStatusClasses}`}
+                className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-bold ${analysisStatusClasses}`}
               >
                 {hasCompletedAnalysis ? (
                   <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
@@ -131,20 +132,20 @@ export default async function PortfolioPage() {
 
         {/* Action cards row */}
         <div className="grid gap-4 md:grid-cols-[1.2fr_0.8fr]">
-          <Link href="/portfolio/full" className="group relative flex items-center justify-between overflow-hidden rounded-2xl bg-brand p-5 sm:p-8 text-[#080c11] transition-all hover:bg-brand-strong">
+          <Link href="/portfolio/full" className="group relative flex items-center justify-between overflow-hidden rounded-2xl bg-brand p-6 sm:p-8 text-brand-foreground transition-all hover:bg-brand-strong">
             <div className="relative z-10 pl-2">
-              <h2 className="text-xl sm:text-[26px] font-bold tracking-tight">See Full Portfolio</h2>
-              <p className="mt-2 text-[15px] text-[#080c11]/70">Drill down into individual asset performance.</p>
+              <h2 className="text-xl sm:text-2xl font-bold tracking-tight">See full portfolio</h2>
+              <p className="mt-2 text-sm text-brand-foreground/70">Drill down into individual asset performance.</p>
             </div>
             <div className="relative z-10 rounded-xl bg-black/10 p-4 transition-colors group-hover:bg-black/20 mr-2">
               <ArrowRight className="h-5 w-5" />
             </div>
           </Link>
 
-          <Link href="/watchlist" className="group relative flex items-center justify-between overflow-hidden rounded-2xl border border-white/[0.06] bg-surface-raised p-5 sm:p-8 text-white transition-all hover:bg-surface-hover">
+          <Link href="/watchlist" className="group relative flex items-center justify-between overflow-hidden rounded-2xl border border-white/[0.06] bg-surface-raised p-6 sm:p-8 text-white transition-all hover:bg-surface-hover">
             <div className="relative z-10 pl-2">
-              <h2 className="text-xl sm:text-[26px] font-bold tracking-tight">Watch List</h2>
-              <p className="mt-2 text-slate-500 text-[15px]">Track your potential next big moves.</p>
+              <h2 className="text-xl sm:text-2xl font-bold tracking-tight">Watchlist</h2>
+              <p className="mt-2 text-slate-500 text-sm">Track your potential next big moves.</p>
             </div>
             <div className="relative z-10 rounded-xl bg-white/5 p-4 transition-colors group-hover:bg-white/10 mr-2">
               <ArrowRight className="h-5 w-5" />
@@ -155,22 +156,22 @@ export default async function PortfolioPage() {
         {/* Top Stories section */}
         <div className="pt-6">
           <div className="flex items-end justify-between mb-6">
-            <h2 className="text-xl font-bold text-white tracking-tight">Top Stories</h2>
+            <h2 className="text-xl font-bold text-white tracking-tight">Top stories</h2>
             <Link href="/feed" className="text-sm font-bold text-brand hover:text-brand-strong">
-              View All Feed
+              Open feed
             </Link>
           </div>
 
           <div className="grid gap-6 md:grid-cols-3">
             {topStories.length === 0 ? (
-              <div className="md:col-span-3 flex flex-col items-center justify-center rounded-2xl border border-dashed border-white/10 bg-surface-raised px-8 py-14 text-center">
-                <p className="max-w-md text-[15px] font-medium text-slate-400">
+              <div className="md:col-span-3 flex flex-col items-center justify-center rounded-2xl border border-dashed border-white/10 bg-surface-raised px-8 py-16 text-center">
+                <p className="max-w-md text-sm font-medium text-slate-400">
                   No feed stories yet. Run analysis with news refresh to match articles to your
                   holdings—they will show up here and in your feed.
                 </p>
                 <Link
                   href="/analysis"
-                  className="mt-5 text-sm font-bold text-brand hover:text-brand-strong"
+                  className="mt-6 text-sm font-bold text-brand hover:text-brand-strong"
                 >
                   Go to Analysis
                 </Link>
@@ -181,7 +182,7 @@ export default async function PortfolioPage() {
                   story.aiSummary?.trim() ||
                   story.whyItMatters?.trim() ||
                   "Open your feed for the full summary and match context.";
-                const categoryTag = categoryLabel(story.category).toUpperCase();
+                const categoryTag = categoryLabel(story.category);
                 const when = formatStoryTime(story.publishedAt);
                 return (
                   <Link
@@ -191,22 +192,22 @@ export default async function PortfolioPage() {
                   >
                     <div className="flex flex-1 flex-col p-6">
                       <div className="mb-4 flex flex-wrap gap-2">
-                        <span className="rounded-md bg-white/5 px-2 py-0.5 text-[10px] font-bold tracking-widest text-slate-500">
+                        <span className="rounded-md bg-white/5 px-2 py-0.5 text-xs font-bold text-slate-500">
                           {storyTickerTag(story)}
                         </span>
-                        <span className="rounded-md bg-white/5 px-2 py-0.5 text-[10px] font-bold tracking-widest text-slate-500">
+                        <span className="rounded-md bg-white/5 px-2 py-0.5 text-xs font-bold text-slate-500">
                           {categoryTag}
                         </span>
                         {story.relevanceScore > 0 ? (
-                          <span className="rounded-md bg-brand/10 px-2 py-0.5 text-[10px] font-bold tracking-widest text-brand">
+                          <span className="rounded-md bg-brand/10 px-2 py-0.5 text-xs font-bold text-brand">
                             {Math.round(story.relevanceScore)}% match
                           </span>
                         ) : null}
                       </div>
-                      <h3 className="text-[17px] font-bold leading-snug tracking-tight text-white group-hover:text-brand">
+                      <h3 className="text-base font-bold tracking-tight text-white group-hover:text-brand">
                         {story.headline}
                       </h3>
-                      <p className="mt-3 line-clamp-3 text-[14px] leading-relaxed text-slate-500">
+                      <p className="mt-3 line-clamp-3 text-sm text-slate-500">
                         {snippet}
                       </p>
                       <div className="mt-8 flex items-center justify-between pt-2 text-xs font-medium text-slate-600">

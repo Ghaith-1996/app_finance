@@ -1,6 +1,7 @@
 import Link from "next/link";
 
-import { ArrowLeft, ArrowRight } from "lucide-react";
+import { ArrowLeft } from "@phosphor-icons/react/dist/ssr/ArrowLeft";
+import { ArrowRight } from "@phosphor-icons/react/dist/ssr/ArrowRight";
 
 import { AppLogo } from "@/components/brand/app-logo";
 import { DemoWorkspace } from "@/components/marketing/demo-workspace";
@@ -20,7 +21,7 @@ export default function DemoPage() {
           <Link href="/" className="inline-flex items-center gap-3">
             <AppLogo size="md" />
             <span>
-              <span className="block text-sm font-semibold uppercase tracking-[0.18em] text-primary">
+              <span className="block text-sm font-semibold text-primary">
                 Pulsefolio demo
               </span>
               <span className="block text-xs text-secondary">

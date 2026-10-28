@@ -38,7 +38,7 @@ function writeCookie(name: string, value: string) {
 }
 
 function resolveBrowserTheme(): Theme {
-  if (typeof window === "undefined") return "dark";
+  if (typeof window === "undefined") return "light";
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 

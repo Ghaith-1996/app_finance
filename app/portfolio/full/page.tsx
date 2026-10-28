@@ -1,13 +1,11 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
-import {
-  BarChart3,
-  Cpu,
-  Landmark,
-  Layers3,
-  Sparkles,
-  Zap,
-} from "lucide-react";
+import { ChartBar as BarChart3 } from "@phosphor-icons/react/dist/ssr/ChartBar";
+import { Cpu } from "@phosphor-icons/react/dist/ssr/Cpu";
+import { Bank as Landmark } from "@phosphor-icons/react/dist/ssr/Bank";
+import { Stack as Layers3 } from "@phosphor-icons/react/dist/ssr/Stack";
+import { Sparkle as Sparkles } from "@phosphor-icons/react/dist/ssr/Sparkle";
+import { Lightning as Zap } from "@phosphor-icons/react/dist/ssr/Lightning";
 
 import { PortfolioCopilotPanel } from "@/components/app/portfolio-copilot-panel";
 import { PortfolioPricingSection } from "@/components/app/portfolio-pricing-section";
@@ -285,7 +283,7 @@ export default async function FullPortfolioPage() {
           </Link>
         }
       >
-        <div className="space-y-4 rounded-[2rem] border border-white/[0.06] bg-surface-raised p-8 text-center shadow-sm">
+        <div className="space-y-4 rounded-4xl border border-white/[0.06] bg-surface-raised p-8 text-center shadow-sm">
           <p className="text-slate-400">
             You need a portfolio before the full holdings breakdown can load.
           </p>
@@ -326,7 +324,7 @@ export default async function FullPortfolioPage() {
   return (
     <AppShell
       eyebrow=""
-      title="Portfolio Strategy"
+      title="Portfolio strategy"
       description="Positions, performance and insights for the portfolio you track in Pulsefolio."
       activePath="/portfolio"
       backHref="/portfolio"
@@ -335,7 +333,7 @@ export default async function FullPortfolioPage() {
     >
       {/* Audit F02: no overflow clipping; the rail stacks below the content until there is room
           for both columns, and the content column can shrink (minmax(0,1fr)). */}
-      <div className="rounded-[1.75rem] bg-surface-panel p-4 shadow-inner sm:rounded-[2.25rem] sm:p-6 lg:p-8 xl:p-10">
+      <div className="rounded-4xl bg-surface-panel p-4 shadow-inner sm:rounded-4xl sm:p-6 lg:p-8 xl:p-10">
         <div className="grid grid-cols-1 gap-8 xl:grid-cols-[minmax(0,1fr)_340px] xl:gap-10 2xl:grid-cols-[minmax(0,1fr)_360px] 2xl:gap-12">
           <PortfolioPricingSection
             portfolioId={portfolioId}
@@ -345,8 +343,8 @@ export default async function FullPortfolioPage() {
             initialValueSnapshots={portfolioValueSnapshots}
           >
             <div>
-              <h2 className="mb-6 text-[22px] font-bold tracking-tight text-white">
-                Allocation & Position
+              <h2 className="mb-6 text-xl font-bold tracking-tight text-white">
+                Allocation and positions
               </h2>
               <div className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-3">
                 {sectorCards.map((card) => {
@@ -355,26 +353,26 @@ export default async function FullPortfolioPage() {
                   return (
                     <div
                       key={card.label}
-                      className="rounded-[1.5rem] border border-white/[0.06] bg-surface-raised p-6 shadow-sm"
+                      className="rounded-3xl border border-white/[0.06] bg-surface-raised p-6 shadow-sm"
                     >
                       <div className="mb-4 flex items-start justify-between">
-                        <div className={`rounded-xl p-2.5 ${card.iconClassName}`}>
+                        <div className={`rounded-xl p-3 ${card.iconClassName}`}>
                           <Icon className="h-5 w-5" />
                         </div>
                         <span
-                          className={`text-[14px] font-bold ${
-                            card.label === "Energy"
-                              ? "text-amber-400"
-                              : card.label === "Others"
-                                ? "text-slate-400"
-                                : "text-brand"
-                          }`}
+                          className={`text-sm font-bold ${
+ card.label === "Energy"
+ ? "text-amber-400"
+ : card.label === "Others"
+ ? "text-slate-400"
+ : "text-brand"
+ }`}
                         >
                           {Math.round(card.percent)}%
                         </span>
                       </div>
                       <h3 className="font-bold text-white">{card.label}</h3>
-                      <p className="mt-1 text-[12px] text-slate-500">{card.detail}</p>
+                      <p className="mt-1 text-xs text-slate-500">{card.detail}</p>
                       <div className="mt-4 h-1.5 w-full overflow-hidden rounded-full bg-white/5">
                         <div
                           className={`h-full rounded-full ${card.barClassName}`}
@@ -389,29 +387,27 @@ export default async function FullPortfolioPage() {
           </PortfolioPricingSection>
 
           <div className="w-full min-w-0 space-y-4">
-            <div className="relative overflow-hidden rounded-[2.5rem] border border-white/[0.06] bg-surface-raised p-5 sm:p-8 shadow-sm">
-              <div className="pointer-events-none absolute top-0 right-0 h-32 w-32 rounded-bl-full bg-gradient-to-bl from-white/5 to-transparent" />
-
+            <div className="relative overflow-hidden rounded-4xl border border-white/[0.06] bg-surface-raised p-6 sm:p-8 shadow-sm">
               <div className="mb-8 flex items-center gap-3">
                 <div className="text-brand">
                   <Sparkles className="h-6 w-6 fill-current" />
                 </div>
-                <h2 className="text-[20px] font-bold tracking-tight text-white">
-                  Insight Summary
+                <h2 className="text-xl font-bold tracking-tight text-white">
+                  Insight summary
                 </h2>
               </div>
 
               <div className="space-y-8">
                 <div>
-                  <p className="mb-4 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
-                    MOST EXPOSED THEME
+                  <p className="mb-4 text-xs font-bold text-slate-400">
+                    Most exposed theme
                   </p>
                   <div className="flex items-center gap-4">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand text-white shadow-sm shadow-brand/20">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand text-brand-foreground shadow-sm shadow-brand/20">
                       <Cpu className="h-6 w-6" />
                     </div>
                     <div>
-                      <p className="text-[15px] font-bold text-white">
+                      <p className="text-sm font-bold text-white">
                         {insightSummary.topTheme.value}
                       </p>
                       <p className="mt-0.5 text-sm text-slate-400">
@@ -422,15 +418,15 @@ export default async function FullPortfolioPage() {
                 </div>
 
                 <div>
-                  <p className="mb-4 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
-                    MACRO WATCH
+                  <p className="mb-4 text-xs font-bold text-slate-400">
+                    Macro watch
                   </p>
                   <div className="flex items-center gap-4">
                     <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-slate-500">
                       <BarChart3 className="h-6 w-6" />
                     </div>
                     <div>
-                      <p className="text-[15px] font-bold text-white">
+                      <p className="text-sm font-bold text-white">
                         {insightSummary.macroWatch.value}
                       </p>
                       <p className="mt-0.5 text-sm text-slate-400">
@@ -441,14 +437,14 @@ export default async function FullPortfolioPage() {
                 </div>
 
                 <div>
-                  <p className="mb-4 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
-                    FRESH CATALYST
+                  <p className="mb-4 text-xs font-bold text-slate-400">
+                    Fresh catalyst
                   </p>
-                  <div className="flex flex-col gap-2 rounded-2xl border-l-4 border-brand bg-surface-raised p-4 shadow-sm">
-                    <p className="text-[14px] font-bold text-white">
+                  <div className="flex flex-col gap-2 rounded-2xl border border-brand/30 bg-surface-raised p-4 shadow-sm">
+                    <p className="text-sm font-bold text-white">
                       {insightSummary.freshCatalyst.value}
                     </p>
-                    <p className="text-[13px] leading-snug text-slate-400">
+                    <p className="text-xs text-slate-400">
                       {insightSummary.freshCatalyst.detail}
                     </p>
                   </div>
@@ -464,24 +460,24 @@ export default async function FullPortfolioPage() {
               initialTurnstileVerified={initialCopilotTurnstileVerified}
             />
 
-            <div className="rounded-[2.5rem] border border-brand/15 bg-brand/10 p-5 sm:p-8 shadow-sm">
-              <p className="mb-3 text-[13px] font-bold text-brand">Emerald Advisor</p>
-              <p className="text-[15px] leading-relaxed text-slate-400">
+            <div className="rounded-4xl border border-brand/15 bg-brand/10 p-6 sm:p-8 shadow-sm">
+              <p className="mb-3 text-xs font-bold text-brand">Emerald Advisor</p>
+              <p className="text-sm text-slate-400">
                 {feedHighlights[0]?.whyItMatters ||
                   insights[0]?.detail ||
                   "Run analysis to surface a more specific recommendation for this portfolio."}
               </p>
-              <div className="mt-5">
+              <div className="mt-6">
                 <Link
                   href="/analysis"
-                  className="inline-flex items-center gap-1 border-b-2 border-brand/20 pb-0.5 text-[14px] font-bold text-white transition-colors hover:border-brand"
+                  className="inline-flex items-center gap-1 border-b-2 border-brand/20 pb-0.5 text-sm font-bold text-white transition-colors hover:border-brand"
                 >
-                  Review Analysis
+                  Review analysis
                 </Link>
               </div>
             </div>
 
-            <div className="rounded-[2rem] border border-white/[0.06] bg-surface-raised p-5 shadow-sm">
+            <div className="rounded-4xl border border-white/[0.06] bg-surface-raised p-6 shadow-sm">
               <div className="flex items-center gap-3">
                 <Landmark className="h-5 w-5 text-slate-500" />
                 <div>
@@ -491,7 +487,7 @@ export default async function FullPortfolioPage() {
                   </p>
                 </div>
               </div>
-              <p className="mt-4 text-sm leading-7 text-slate-400">
+              <p className="mt-4 text-sm text-slate-400">
                 {portfolioOverview.coverage}. {portfolioOverview.primaryGoal}
               </p>
             </div>

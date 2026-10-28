@@ -14,8 +14,8 @@ export function Panel({
   return (
     <div
       className={cn(
-        "glass-surface rounded-2xl border border-subtle bg-surface-raised p-6 shadow-[var(--surface-shadow)] backdrop-blur-xl",
-        glow && "shadow-[0_0_40px_rgba(16,185,129,0.12)]",
+        "rounded-2xl border border-subtle bg-surface-raised p-6 shadow-[var(--surface-shadow)]",
+        glow && "border-strong",
         className,
       )}
       {...props}

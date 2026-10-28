@@ -34,16 +34,16 @@ export function BillingSettingsPanel({
   );
 
   return (
-    <Panel className="space-y-5 rounded-[2rem] p-6">
+    <Panel className="space-y-6 rounded-4xl p-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="space-y-2">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
+          <p className="text-xs font-semibold text-slate-500">
             Billing
           </p>
           <h2 className="text-2xl font-semibold tracking-tight text-white">
             {PLAN_LABELS[billingSummary.planKey]} plan
           </h2>
-          <p className="max-w-2xl text-sm leading-7 text-slate-400">
+          <p className="max-w-2xl text-sm text-slate-400">
             Model access: {allowedTiers.join(", ")}. AI usage: {billingSummary.aiQuotaUsed.toLocaleString()} / {billingSummary.aiQuotaLimit.toLocaleString()} {formatQuotaWindow(billingSummary.aiQuotaWindow)} requests.
           </p>
         </div>
@@ -60,7 +60,7 @@ export function BillingSettingsPanel({
 
       <div className="grid gap-4 md:grid-cols-4">
         <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-4">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+          <p className="text-xs font-semibold text-slate-500">
             Current plan
           </p>
           <p className="mt-2 text-lg font-semibold text-white">
@@ -68,7 +68,7 @@ export function BillingSettingsPanel({
           </p>
         </div>
         <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-4">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+          <p className="text-xs font-semibold text-slate-500">
             {renewalLabel}
           </p>
           <p className="mt-2 text-lg font-semibold text-white">
@@ -76,15 +76,15 @@ export function BillingSettingsPanel({
           </p>
         </div>
         <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-4">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+          <p className="text-xs font-semibold text-slate-500">
             Manage access
           </p>
-          <p className="mt-2 text-sm leading-7 text-slate-400">
+          <p className="mt-2 text-sm text-slate-400">
             Stripe Checkout starts new subscriptions. Existing paid subscriptions are updated in the billing portal.
           </p>
         </div>
         <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-4">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+          <p className="text-xs font-semibold text-slate-500">
             AI quota
           </p>
           <p className="mt-2 text-lg font-semibold text-white">
@@ -123,7 +123,7 @@ export function BillingSettingsPanel({
 
         <Link
           href="/pricing"
-          className="inline-flex items-center justify-center rounded-xl border border-white/10 px-5 text-sm font-semibold text-slate-200 transition hover:border-white/20 hover:bg-white/5"
+          className="inline-flex items-center justify-center rounded-xl border border-white/10 px-6 text-sm font-semibold text-slate-200 transition hover:border-white/20 hover:bg-white/5"
         >
           View pricing
         </Link>

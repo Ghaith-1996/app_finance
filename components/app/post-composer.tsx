@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Send } from "lucide-react";
+import { PaperPlaneTilt as Send } from "@phosphor-icons/react/dist/ssr/PaperPlaneTilt";
 
 import { createPost } from "@/lib/actions/community";
 import { TurnstileBlock, useTurnstile } from "@/components/security/turnstile-widget";
@@ -57,11 +57,11 @@ export function PostComposer({ onPostCreated }: Props) {
       />
 
       {(tickers.length > 0 || hashtags.length > 0) && (
-        <div className="mt-2 flex flex-wrap gap-1.5">
+        <div className="mt-2 flex flex-wrap gap-2">
           {tickers.map((t) => (
             <span
               key={t}
-              className="rounded-md bg-brand/10 px-2 py-0.5 text-[11px] font-bold text-brand"
+              className="rounded-md bg-brand/10 px-2 py-0.5 text-xs font-bold text-brand"
             >
               ${t}
             </span>
@@ -69,7 +69,7 @@ export function PostComposer({ onPostCreated }: Props) {
           {hashtags.map((tag) => (
             <span
               key={tag}
-              className="rounded-md bg-sky-500/10 px-2 py-0.5 text-[11px] font-bold text-sky-300"
+              className="rounded-md bg-sky-500/10 px-2 py-0.5 text-xs font-bold text-sky-300"
             >
               #{tag}
             </span>
@@ -80,11 +80,11 @@ export function PostComposer({ onPostCreated }: Props) {
       <TurnstileBlock turnstile={turnstile} action="community-post" />
 
       <div className="mt-3 flex items-center justify-between">
-        <span className={cn("text-[11px]", charCount > 1800 ? "text-amber-400" : "text-slate-600")}>
+        <span className={cn("text-xs", charCount > 1800 ? "text-amber-400" : "text-slate-600")}>
           {charCount}/2000
         </span>
         <div className="flex items-center gap-3">
-          {error && <span className="text-[11px] text-red-400">{error}</span>}
+          {error && <span className="text-xs text-red-400">{error}</span>}
           <button
             type="button"
             disabled={!canSubmit}
@@ -92,7 +92,7 @@ export function PostComposer({ onPostCreated }: Props) {
             className={cn(
               "flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold transition",
               canSubmit
-                ? "bg-brand text-[#080c11] hover:bg-brand-strong"
+                ? "bg-brand text-brand-foreground hover:bg-brand-strong"
                 : "cursor-not-allowed bg-white/5 text-slate-600",
             )}
           >

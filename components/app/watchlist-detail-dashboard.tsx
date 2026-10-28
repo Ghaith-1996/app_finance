@@ -2,19 +2,17 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import {
-  BarChart3,
-  Building2,
-  Calendar,
-  DollarSign,
-  ExternalLink,
-  Globe,
-  Lightbulb,
-  Newspaper,
-  TrendingDown,
-  TrendingUp,
-  Users,
-} from "lucide-react";
+import { ChartBar as BarChart3 } from "@phosphor-icons/react/dist/ssr/ChartBar";
+import { Buildings as Building2 } from "@phosphor-icons/react/dist/ssr/Buildings";
+import { Calendar } from "@phosphor-icons/react/dist/ssr/Calendar";
+import { CurrencyDollar as DollarSign } from "@phosphor-icons/react/dist/ssr/CurrencyDollar";
+import { ArrowSquareOut as ExternalLink } from "@phosphor-icons/react/dist/ssr/ArrowSquareOut";
+import { Globe } from "@phosphor-icons/react/dist/ssr/Globe";
+import { Lightbulb } from "@phosphor-icons/react/dist/ssr/Lightbulb";
+import { Newspaper } from "@phosphor-icons/react/dist/ssr/Newspaper";
+import { TrendDown as TrendingDown } from "@phosphor-icons/react/dist/ssr/TrendDown";
+import { TrendUp as TrendingUp } from "@phosphor-icons/react/dist/ssr/TrendUp";
+import { Users } from "@phosphor-icons/react/dist/ssr/Users";
 import {
   Area,
   AreaChart,
@@ -85,12 +83,12 @@ function toTooltipNumber(value: unknown): number | null {
 
 function formatPriceTooltip(value: unknown): [string, string] {
   const numericValue = toTooltipNumber(value);
-  return [numericValue == null ? "â€”" : `$${numericValue.toFixed(2)}`, "Price"];
+  return [numericValue == null ? "—" : `$${numericValue.toFixed(2)}`, "Price"];
 }
 
 function formatFinancialTooltip(value: unknown): [string, undefined] {
   const numericValue = toTooltipNumber(value);
-  return [numericValue == null ? "â€”" : `$${fmtBig(numericValue)}`, undefined];
+  return [numericValue == null ? "—" : `$${fmtBig(numericValue)}`, undefined];
 }
 
 // ---------------------------------------------------------------------------
@@ -173,7 +171,7 @@ export function WatchlistDetailDashboard({ symbol }: Props) {
             type="button"
             onClick={() => setTab(t)}
             className={cn(
-              "flex-1 rounded-lg px-3 py-2 text-xs font-bold uppercase tracking-widest transition",
+              "flex-1 rounded-lg px-3 py-2 text-xs font-bold transition",
               tab === t
                 ? "bg-brand/15 text-brand"
                 : "text-slate-500 hover:text-slate-300",
@@ -216,11 +214,11 @@ function DashboardSkeleton() {
 function HeroRow({ data, up }: { data: WatchlistDetailData; up: boolean }) {
   const { summary } = data;
   return (
-    <div className="rounded-2xl border border-white/[0.06] bg-surface-raised p-5">
+    <div className="rounded-2xl border border-white/[0.06] bg-surface-raised p-6">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 className="truncate text-xl font-bold tracking-tight text-white">{data.symbol}</h2>
-          <p className="mt-0.5 truncate text-[13px] text-slate-500">
+          <p className="mt-0.5 truncate text-xs text-slate-500">
             {summary.company}
             {summary.exchange ? ` · ${summary.exchange}` : ""}
           </p>
@@ -229,7 +227,7 @@ function HeroRow({ data, up }: { data: WatchlistDetailData; up: boolean }) {
           {summary.price != null ? (
             <p className="text-xl font-bold text-white">
               ${fmt(summary.price)}
-              <span className="ml-1 text-[10px] font-medium text-slate-600">{summary.currency}</span>
+              <span className="ml-1 text-xs font-medium text-slate-600">{summary.currency}</span>
             </p>
           ) : (
             <p className="text-lg text-slate-600">—</p>
@@ -249,7 +247,7 @@ function HeroRow({ data, up }: { data: WatchlistDetailData; up: boolean }) {
             </p>
           )}
           {summary.isMarketOpen != null && (
-            <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-slate-600">
+            <p className="mt-1 text-xs font-bold text-slate-600">
               {summary.isMarketOpen ? "Market open" : "Market closed"}
             </p>
           )}
@@ -276,20 +274,20 @@ function WatchlistIntelligenceCard({ data }: { data: WatchlistDetailData }) {
   const intelligence = buildWatchlistIntelligence(data);
 
   return (
-    <div className="rounded-2xl border border-white/[0.06] bg-surface-raised p-5">
+    <div className="rounded-2xl border border-white/[0.06] bg-surface-raised p-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-brand">
+          <div className="flex items-center gap-2 text-xs font-bold text-brand">
             <Lightbulb className="h-3.5 w-3.5" />
             Watchlist intelligence
           </div>
-          <p className="mt-3 text-sm leading-6 text-slate-400">
+          <p className="mt-3 text-sm text-slate-400">
             {intelligence.summary}
           </p>
         </div>
         <Link
           href={`/feed?ticker=${encodeURIComponent(data.symbol)}`}
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-brand/25 bg-brand/10 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-brand transition hover:border-brand/40 hover:bg-brand/15"
+          className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-brand/25 bg-brand/10 px-3 py-2 text-xs font-bold text-brand transition hover:border-brand/40 hover:bg-brand/15"
         >
           <Newspaper className="h-3.5 w-3.5" />
           News
@@ -304,14 +302,14 @@ function WatchlistIntelligenceCard({ data }: { data: WatchlistDetailData }) {
           >
             <span
               className={cn(
-                "inline-flex rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider",
+                "inline-flex rounded-md border px-2 py-0.5 text-xs font-bold",
                 signalToneClass(signal.tone),
               )}
             >
               {signal.label}
             </span>
             <p className="mt-2 text-sm font-bold text-white">{signal.value}</p>
-            <p className="mt-1 text-xs leading-5 text-slate-500">
+            <p className="mt-1 text-xs text-slate-500">
               {signal.detail}
             </p>
           </div>
@@ -347,7 +345,7 @@ function OverviewTab({ data, up }: { data: WatchlistDetailData; up: boolean }) {
 // ---------------------------------------------------------------------------
 
 function PriceChartSection({ chart, up }: { chart: ChartPoint[]; up: boolean }) {
-  const color = up ? "#34d399" : "#f87171";
+  const color = up ? "var(--positive)" : "var(--negative)";
 
   const tickFormatter = (val: string) => {
     const parts = val.split("-");
@@ -364,8 +362,8 @@ function PriceChartSection({ chart, up }: { chart: ChartPoint[]; up: boolean }) 
   }, [chart]);
 
   return (
-    <div className="rounded-2xl border border-white/[0.06] bg-surface-raised p-5">
-      <div className="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-slate-600">
+    <div className="rounded-2xl border border-white/[0.06] bg-surface-raised p-6">
+      <div className="mb-3 flex items-center gap-2 text-xs font-bold text-slate-600">
         <BarChart3 className="h-3.5 w-3.5" />
         30-Day Price
       </div>
@@ -381,7 +379,7 @@ function PriceChartSection({ chart, up }: { chart: ChartPoint[]; up: boolean }) 
           <XAxis dataKey="timestamp" tick={{ fontSize: 10, fill: "#64748b" }} tickFormatter={tickFormatter} interval="preserveStartEnd" axisLine={false} tickLine={false} />
           <YAxis domain={domain} tick={{ fontSize: 10, fill: "#64748b" }} tickFormatter={(v: number) => `$${v.toFixed(0)}`} axisLine={false} tickLine={false} />
           <Tooltip
-            contentStyle={{ background: "#151c28", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, fontSize: 12 }}
+            contentStyle={{ background: "var(--surface-raised)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)", borderRadius: 10, fontSize: 12 }}
             labelStyle={{ color: "#94a3b8" }}
             formatter={formatPriceTooltip}
           />
@@ -416,20 +414,20 @@ function EarningsCard({
   const chartData = earnings.filter((e) => e.epsActual != null || e.epsEstimate != null);
 
   return (
-    <div className="rounded-2xl border border-white/[0.06] bg-surface-raised p-5">
-      <div className="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-slate-600">
+    <div className="rounded-2xl border border-white/[0.06] bg-surface-raised p-6">
+      <div className="mb-3 flex items-center gap-2 text-xs font-bold text-slate-600">
         <Calendar className="h-3.5 w-3.5" />
         Earnings
       </div>
 
       <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
-        <div className="flex flex-wrap gap-x-5 gap-y-2">
+        <div className="flex flex-wrap gap-x-6 gap-y-2">
           {latest && (
             <div>
-              <p className="text-[10px] text-slate-500">Last EPS</p>
+              <p className="text-xs text-slate-500">Last EPS</p>
               <p className="text-sm font-bold text-white">${fmt(latest.epsActual)}</p>
               {latest.surprise != null && (
-                <p className={cn("text-[10px] font-bold", latest.surprise >= 0 ? "text-emerald-400" : "text-red-400")}>
+                <p className={cn("text-xs font-bold", latest.surprise >= 0 ? "text-emerald-400" : "text-red-400")}>
                   {latest.surprise >= 0 ? "+" : ""}{fmt(latest.surprise)}% surprise
                 </p>
               )}
@@ -437,9 +435,9 @@ function EarningsCard({
           )}
           {upcoming && (
             <div>
-              <p className="text-[10px] text-slate-500">Next Est.</p>
+              <p className="text-xs text-slate-500">Next Est.</p>
               <p className="text-sm font-bold text-white">${fmt(upcoming.epsEstimate)}</p>
-              <p className="text-[10px] text-slate-500">{upcoming.date}</p>
+              <p className="text-xs text-slate-500">{upcoming.date}</p>
             </div>
           )}
         </div>
@@ -451,19 +449,19 @@ function EarningsCard({
                 href={safeReportUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 rounded-lg border border-brand/25 bg-brand/10 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-brand transition hover:border-brand/40 hover:bg-brand/15"
+                className="inline-flex items-center gap-2 rounded-lg border border-brand/25 bg-brand/10 px-3 py-2 text-xs font-bold text-brand transition hover:border-brand/40 hover:bg-brand/15"
               >
                 <ExternalLink className="h-3.5 w-3.5" />
                 Latest earnings report
               </a>
             ) : (
-              <div className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+              <div className="inline-flex items-center gap-2 rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-2 text-xs font-bold text-slate-500">
                 <ExternalLink className="h-3.5 w-3.5" />
                 Latest earnings report
               </div>
             )}
             {(latestEarningsReportSource || latestEarningsReportDate) && (
-              <p className="text-[10px] text-slate-500">
+              <p className="text-xs text-slate-500">
                 {[latestEarningsReportSource?.toUpperCase() ?? null, latestEarningsReportDate]
                   .filter(Boolean)
                   .join(" · ")}
@@ -480,11 +478,11 @@ function EarningsCard({
             <XAxis dataKey="date" tick={{ fontSize: 9, fill: "#64748b" }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
             <YAxis tick={{ fontSize: 9, fill: "#64748b" }} axisLine={false} tickLine={false} />
             <Tooltip
-              contentStyle={{ background: "#151c28", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, fontSize: 11 }}
+              contentStyle={{ background: "var(--surface-raised)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)", borderRadius: 10, fontSize: 11 }}
               labelStyle={{ color: "#94a3b8" }}
             />
             <Bar dataKey="epsEstimate" name="Estimate" fill="#64748b" radius={[3, 3, 0, 0]} barSize={14} />
-            <Bar dataKey="epsActual" name="Actual" fill="#10b981" radius={[3, 3, 0, 0]} barSize={14} />
+            <Bar dataKey="epsActual" name="Actual" fill="var(--brand)" radius={[3, 3, 0, 0]} barSize={14} />
           </BarChart>
         </ResponsiveContainer>
       )}
@@ -520,13 +518,13 @@ function KeyStatsGrid({ data }: { data: WatchlistDetailData }) {
   if (items.length === 0) return null;
 
   return (
-    <div className="rounded-2xl border border-white/[0.06] bg-surface-raised p-5">
-      <h4 className="mb-3 text-[10px] font-bold uppercase tracking-widest text-slate-600">Key Stats</h4>
-      <div className="grid grid-cols-2 gap-x-5 gap-y-2.5 sm:grid-cols-3">
+    <div className="rounded-2xl border border-white/[0.06] bg-surface-raised p-6">
+      <h4 className="mb-3 text-xs font-bold text-slate-600">Key stats</h4>
+      <div className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3">
         {items.map((s) => (
           <div key={s.label}>
-            <p className="text-[10px] text-slate-500">{s.label}</p>
-            <p className="text-[13px] font-bold text-white">{s.value}</p>
+            <p className="text-xs text-slate-500">{s.label}</p>
+            <p className="text-xs font-bold text-white">{s.value}</p>
           </div>
         ))}
       </div>
@@ -541,21 +539,21 @@ function KeyStatsGrid({ data }: { data: WatchlistDetailData }) {
 function EmployeesCard({ profile }: { profile: WatchlistDetailData["profile"] }) {
   if (!profile.employees && !profile.ceo) return null;
   return (
-    <div className="rounded-2xl border border-white/[0.06] bg-surface-raised p-5">
-      <div className="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-slate-600">
+    <div className="rounded-2xl border border-white/[0.06] bg-surface-raised p-6">
+      <div className="mb-3 flex items-center gap-2 text-xs font-bold text-slate-600">
         <Users className="h-3.5 w-3.5" />
         Leadership
       </div>
       <div className="flex flex-wrap gap-x-6 gap-y-2">
         {profile.ceo && (
           <div>
-            <p className="text-[10px] text-slate-500">CEO</p>
+            <p className="text-xs text-slate-500">CEO</p>
             <p className="text-sm font-bold text-white">{profile.ceo}</p>
           </div>
         )}
         {profile.employees != null && (
           <div>
-            <p className="text-[10px] text-slate-500">Employees</p>
+            <p className="text-xs text-slate-500">Employees</p>
             <p className="text-sm font-bold text-white">{profile.employees.toLocaleString()}</p>
           </div>
         )}
@@ -576,24 +574,24 @@ function ProfileBlock({ data }: { data: WatchlistDetailData }) {
   if (!hasProfile) return null;
 
   return (
-    <div className="rounded-2xl border border-white/[0.06] bg-surface-raised p-5">
-      <div className="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-slate-600">
+    <div className="rounded-2xl border border-white/[0.06] bg-surface-raised p-6">
+      <div className="mb-3 flex items-center gap-2 text-xs font-bold text-slate-600">
         <Building2 className="h-3.5 w-3.5" />
         About
       </div>
-      <div className="space-y-2.5">
+      <div className="space-y-3">
         {(profile.sector || profile.industry) && (
           <div className="flex flex-wrap gap-2">
             {profile.sector && (
-              <span className="rounded-lg bg-brand/10 px-2.5 py-1 text-[11px] font-bold text-brand">{profile.sector}</span>
+              <span className="rounded-lg bg-brand/10 px-3 py-1 text-xs font-bold text-brand">{profile.sector}</span>
             )}
             {profile.industry && (
-              <span className="rounded-lg bg-white/5 px-2.5 py-1 text-[11px] font-bold text-slate-400">{profile.industry}</span>
+              <span className="rounded-lg bg-white/5 px-3 py-1 text-xs font-bold text-slate-400">{profile.industry}</span>
             )}
           </div>
         )}
         {profile.country && (
-          <div className="flex items-center gap-1.5 text-sm text-slate-400">
+          <div className="flex items-center gap-2 text-sm text-slate-400">
             <Globe className="h-3.5 w-3.5 shrink-0 text-slate-600" />
             {profile.country}
           </div>
@@ -604,20 +602,20 @@ function ProfileBlock({ data }: { data: WatchlistDetailData }) {
               href={safeWebsiteUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-sm text-brand transition hover:text-brand-strong"
+              className="inline-flex items-center gap-2 text-sm text-brand transition hover:text-brand-strong"
             >
               <ExternalLink className="h-3.5 w-3.5 shrink-0" />
               {websiteLabel}
             </a>
           ) : (
-            <div className="inline-flex items-center gap-1.5 text-sm text-slate-400">
+            <div className="inline-flex items-center gap-2 text-sm text-slate-400">
               <ExternalLink className="h-3.5 w-3.5 shrink-0" />
               {websiteLabel}
             </div>
           )
         )}
         {profile.description && (
-          <p className="text-[12px] leading-relaxed text-slate-400">{profile.description}</p>
+          <p className="text-xs text-slate-400">{profile.description}</p>
         )}
       </div>
     </div>
@@ -663,8 +661,8 @@ function RevenueIncomeChart({ financials }: { financials: FinancialDataPoint[] }
   }));
 
   return (
-    <div className="rounded-2xl border border-white/[0.06] bg-surface-raised p-5">
-      <div className="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-slate-600">
+    <div className="rounded-2xl border border-white/[0.06] bg-surface-raised p-6">
+      <div className="mb-3 flex items-center gap-2 text-xs font-bold text-slate-600">
         <DollarSign className="h-3.5 w-3.5" />
         Revenue &amp; Net Income
       </div>
@@ -674,12 +672,12 @@ function RevenueIncomeChart({ financials }: { financials: FinancialDataPoint[] }
           <XAxis dataKey="date" tick={{ fontSize: 9, fill: "#64748b" }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
           <YAxis tick={{ fontSize: 9, fill: "#64748b" }} tickFormatter={(v: number) => fmtBig(v)} axisLine={false} tickLine={false} />
           <Tooltip
-            contentStyle={{ background: "#151c28", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, fontSize: 11 }}
+            contentStyle={{ background: "var(--surface-raised)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)", borderRadius: 10, fontSize: 11 }}
             labelStyle={{ color: "#94a3b8" }}
             formatter={formatFinancialTooltip}
           />
           <Bar dataKey="Revenue" fill="#3b82f6" radius={[3, 3, 0, 0]} barSize={16} />
-          <Bar dataKey="Net Income" fill="#10b981" radius={[3, 3, 0, 0]} barSize={16} />
+          <Bar dataKey="Net Income" fill="var(--brand)" radius={[3, 3, 0, 0]} barSize={16} />
         </BarChart>
       </ResponsiveContainer>
     </div>
@@ -702,8 +700,8 @@ function DebtCashChart({ financials }: { financials: FinancialDataPoint[] }) {
   }));
 
   return (
-    <div className="rounded-2xl border border-white/[0.06] bg-surface-raised p-5">
-      <div className="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-slate-600">
+    <div className="rounded-2xl border border-white/[0.06] bg-surface-raised p-6">
+      <div className="mb-3 flex items-center gap-2 text-xs font-bold text-slate-600">
         <BarChart3 className="h-3.5 w-3.5" />
         Debt, Cash &amp; Free Cash Flow
       </div>
@@ -713,12 +711,12 @@ function DebtCashChart({ financials }: { financials: FinancialDataPoint[] }) {
           <XAxis dataKey="date" tick={{ fontSize: 9, fill: "#64748b" }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
           <YAxis tick={{ fontSize: 9, fill: "#64748b" }} tickFormatter={(v: number) => fmtBig(v)} axisLine={false} tickLine={false} />
           <Tooltip
-            contentStyle={{ background: "#151c28", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, fontSize: 11 }}
+            contentStyle={{ background: "var(--surface-raised)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)", borderRadius: 10, fontSize: 11 }}
             labelStyle={{ color: "#94a3b8" }}
             formatter={formatFinancialTooltip}
           />
           <Bar dataKey="Debt" fill="#ef4444" radius={[3, 3, 0, 0]} barSize={12} />
-          <Bar dataKey="Cash" fill="#10b981" radius={[3, 3, 0, 0]} barSize={12} />
+          <Bar dataKey="Cash" fill="var(--brand)" radius={[3, 3, 0, 0]} barSize={12} />
           <Bar dataKey="FCF" fill="#8b5cf6" radius={[3, 3, 0, 0]} barSize={12} />
         </BarChart>
       </ResponsiveContainer>
@@ -735,8 +733,8 @@ function EarningsVsEstimateChart({ earnings }: { earnings: EarningsDataPoint[] }
   if (chartData.length < 2) return null;
 
   return (
-    <div className="rounded-2xl border border-white/[0.06] bg-surface-raised p-5">
-      <div className="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-slate-600">
+    <div className="rounded-2xl border border-white/[0.06] bg-surface-raised p-6">
+      <div className="mb-3 flex items-center gap-2 text-xs font-bold text-slate-600">
         <Calendar className="h-3.5 w-3.5" />
         EPS: Actual vs Estimate
       </div>
@@ -746,11 +744,11 @@ function EarningsVsEstimateChart({ earnings }: { earnings: EarningsDataPoint[] }
           <XAxis dataKey="date" tick={{ fontSize: 9, fill: "#64748b" }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
           <YAxis tick={{ fontSize: 9, fill: "#64748b" }} axisLine={false} tickLine={false} />
           <Tooltip
-            contentStyle={{ background: "#151c28", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, fontSize: 11 }}
+            contentStyle={{ background: "var(--surface-raised)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)", borderRadius: 10, fontSize: 11 }}
             labelStyle={{ color: "#94a3b8" }}
           />
           <Bar dataKey="epsEstimate" name="Estimate" fill="#64748b" radius={[3, 3, 0, 0]} barSize={14} />
-          <Bar dataKey="epsActual" name="Actual" fill="#10b981" radius={[3, 3, 0, 0]} barSize={14} />
+          <Bar dataKey="epsActual" name="Actual" fill="var(--brand)" radius={[3, 3, 0, 0]} barSize={14} />
         </BarChart>
       </ResponsiveContainer>
     </div>

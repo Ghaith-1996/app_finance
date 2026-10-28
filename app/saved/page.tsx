@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight } from "@phosphor-icons/react/dist/ssr/ArrowRight";
 
 import { AppShell } from "@/components/app/app-shell";
 import { SavedArticlesList } from "@/components/app/saved-articles-list";
@@ -15,7 +15,7 @@ export default async function SavedArticlesPage() {
   return (
     <AppShell
       eyebrow="Reading list"
-      title="Saved Articles"
+      title="Saved articles"
       description="Keep important stories in one place and reopen them in the portfolio-aware feed."
       activePath="/saved"
       showOnboardingNav={showOnboardingNav}

@@ -2,7 +2,11 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Bookmark, ExternalLink, Newspaper, Search, Trash2 } from "lucide-react";
+import { BookmarkSimple as Bookmark } from "@phosphor-icons/react/dist/ssr/BookmarkSimple";
+import { ArrowSquareOut as ExternalLink } from "@phosphor-icons/react/dist/ssr/ArrowSquareOut";
+import { Newspaper } from "@phosphor-icons/react/dist/ssr/Newspaper";
+import { MagnifyingGlass as Search } from "@phosphor-icons/react/dist/ssr/MagnifyingGlass";
+import { Trash as Trash2 } from "@phosphor-icons/react/dist/ssr/Trash";
 
 import { setSavedArticleState } from "@/lib/actions/saved-articles";
 import type { SavedArticleItem } from "@/lib/server/saved-articles";
@@ -77,7 +81,7 @@ export function SavedArticlesList({
           {filteredArticles.map((article) => (
             <article
               key={article.id}
-              className="rounded-2xl border border-white/[0.06] bg-surface-raised p-5"
+              className="rounded-2xl border border-white/[0.06] bg-surface-raised p-6"
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
@@ -86,14 +90,14 @@ export function SavedArticlesList({
                     <Badge tone={effectTone(article.effect)}>
                       {effectLabel(article.effect)}
                     </Badge>
-                    <span className="inline-flex items-center rounded-lg bg-white/[0.04] px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                    <span className="inline-flex items-center rounded-lg bg-white/[0.04] px-3 py-1 text-xs font-semibold text-slate-500">
                       {formatSavedAt(article.savedAt)}
                     </span>
                   </div>
-                  <h2 className="mt-4 text-lg font-bold leading-snug tracking-tight text-white">
+                  <h2 className="mt-4 text-lg font-bold tracking-tight text-white">
                     {article.headline}
                   </h2>
-                  <p className="mt-2 text-sm font-semibold uppercase tracking-[0.16em] text-slate-600">
+                  <p className="mt-2 text-sm font-semibold text-slate-600">
                     {article.source}
                   </p>
                 </div>
@@ -101,7 +105,7 @@ export function SavedArticlesList({
               </div>
 
               {article.summary ? (
-                <p className="mt-4 line-clamp-3 text-sm leading-7 text-slate-400">
+                <p className="mt-4 line-clamp-3 text-sm text-slate-400">
                   {article.summary}
                 </p>
               ) : null}
@@ -111,7 +115,7 @@ export function SavedArticlesList({
                   {article.stockTags.slice(0, 8).map((tag) => (
                     <span
                       key={tag}
-                      className="rounded-lg bg-white/[0.04] px-2.5 py-1 text-[11px] font-bold uppercase text-slate-400"
+                      className="rounded-lg bg-white/[0.04] px-3 py-1 text-xs font-bold text-slate-400"
                     >
                       #{tag}
                     </span>
@@ -119,10 +123,10 @@ export function SavedArticlesList({
                 </div>
               ) : null}
 
-              <div className="mt-5 flex flex-wrap gap-2 border-t border-white/[0.06] pt-4">
+              <div className="mt-6 flex flex-wrap gap-2 border-t border-white/[0.06] pt-4">
                 <Link
                   href={`/feed?story=${encodeURIComponent(article.newsItemId)}`}
-                  className="inline-flex items-center gap-2 rounded-xl bg-brand px-4 py-2.5 text-sm font-bold text-[#080c11] transition hover:bg-brand-strong"
+                  className="inline-flex items-center gap-2 rounded-xl bg-brand px-4 py-2 text-sm font-bold text-brand-foreground transition hover:bg-brand-strong"
                 >
                   <Newspaper className="h-4 w-4" />
                   Open in feed
@@ -132,7 +136,7 @@ export function SavedArticlesList({
                     href={article.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-bold text-slate-200 transition hover:bg-white/10"
+                    className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-bold text-slate-200 transition hover:bg-white/10"
                   >
                     <ExternalLink className="h-4 w-4" />
                     Source
@@ -143,7 +147,7 @@ export function SavedArticlesList({
                   onClick={() => void removeSaved(article)}
                   disabled={removingId === article.newsItemId}
                   className={cn(
-                    "inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-bold text-slate-300 transition hover:bg-white/10",
+                    "inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-bold text-slate-300 transition hover:bg-white/10",
                     removingId === article.newsItemId && "opacity-60",
                   )}
                 >
@@ -160,7 +164,7 @@ export function SavedArticlesList({
           <h2 className="mt-4 text-xl font-bold text-white">
             {articles.length === 0 ? "No saved articles yet" : "No saved article matches"}
           </h2>
-          <p className="mx-auto mt-2 max-w-xl text-sm leading-7 text-slate-500">
+          <p className="mx-auto mt-2 max-w-xl text-sm text-slate-500">
             Save stories from the feed detail panel to build a reading list you can
             revisit after the market close.
           </p>

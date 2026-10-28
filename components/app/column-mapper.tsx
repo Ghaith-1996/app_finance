@@ -50,12 +50,12 @@ export function ColumnMapper({
   }
 
   return (
-    <Panel className="space-y-5">
+    <Panel className="space-y-6">
       <div>
-        <p className="text-sm font-semibold uppercase tracking-[0.24em] text-brand">
+        <p className="text-sm font-semibold text-brand">
           Map CSV columns
         </p>
-        <p className="mt-2 text-sm leading-7 text-slate-400">
+        <p className="mt-2 text-sm text-slate-400">
           We couldn&apos;t auto-detect all columns. Map each field to a CSV header below.
         </p>
       </div>

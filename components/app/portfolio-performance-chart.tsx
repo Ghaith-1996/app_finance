@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { TrendingUp } from "lucide-react";
+import { TrendUp as TrendingUp } from "@phosphor-icons/react/dist/ssr/TrendUp";
 import {
   Area,
   AreaChart,
@@ -281,7 +281,7 @@ function CustomTooltip({
 
   return (
     <div className="rounded-xl border border-white/10 bg-surface-raised px-4 py-3 shadow-xl">
-      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+      <p className="text-xs font-semibold text-slate-500">
         {point.label}
       </p>
       <p className="text-xs text-slate-500">
@@ -401,10 +401,10 @@ export function PortfolioPerformanceChart({
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">
-            Total Portfolio Value
+          <p className="text-xs font-bold text-slate-500">
+            Total portfolio value
           </p>
-          <p className="mt-2 text-[34px] font-bold leading-none tracking-tight text-white sm:text-[42px]">
+          <p className="mt-2 text-3xl font-bold leading-none tracking-tight text-white sm:text-4xl">
             {hero.value}
           </p>
           {heroAsOf ? <p className="mt-2 text-xs text-slate-500">{`As of ${heroAsOf}`}</p> : null}
@@ -414,7 +414,7 @@ export function PortfolioPerformanceChart({
             </p>
           ))}
         </div>
-        <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center sm:gap-5">
+        <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center sm:gap-6">
           <div
             className={cn(
               "flex items-center gap-2 rounded-xl border px-4 py-2",
@@ -432,7 +432,7 @@ export function PortfolioPerformanceChart({
             </span>
           </div>
           <div className="sm:text-right">
-            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">
+            <p className="text-xs font-bold text-slate-500">
               Day change
             </p>
             <p
@@ -455,10 +455,10 @@ export function PortfolioPerformanceChart({
         <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <div className="flex items-center gap-2">
-              <p className="text-sm font-bold uppercase tracking-[0.15em] text-white">
-                Portfolio Performance
+              <p className="text-sm font-bold text-white">
+                Portfolio performance
               </p>
-              <span className="rounded bg-brand/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-brand">
+              <span className="rounded bg-brand/15 px-2 py-0.5 text-xs font-bold text-brand">
                 {snapshot.source === "snapshots" ? "Hourly snapshots" : "Live quotes"}
               </span>
             </div>
@@ -467,15 +467,15 @@ export function PortfolioPerformanceChart({
             </p>
           </div>
           <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-end">
-            <span className="rounded-xl border border-white/[0.06] bg-white/[0.03] px-3 py-1.5 text-xs font-bold text-slate-400">
+            <span className="rounded-xl border border-white/[0.06] bg-white/[0.03] px-3 py-2 text-xs font-bold text-slate-400">
               {snapshot.source === "snapshots" ? "Stored hourly values" : "Actual holdings"}
             </span>
             {historyChange !== null && historyStart !== null ? (
-              <span className="rounded-xl border border-white/[0.06] bg-white/[0.03] px-3 py-1.5 text-xs font-bold text-slate-400">
+              <span className="rounded-xl border border-white/[0.06] bg-white/[0.03] px-3 py-2 text-xs font-bold text-slate-400">
                 {`Since ${new Date(historyStart).toLocaleDateString("en-US", { month: "short", day: "numeric" })}: ${formatSignedUsd(historyChange)}`}
               </span>
             ) : live.previousCloseValue > 0 ? (
-              <span className="rounded-xl border border-white/[0.06] bg-white/[0.03] px-3 py-1.5 text-xs font-bold text-slate-400">
+              <span className="rounded-xl border border-white/[0.06] bg-white/[0.03] px-3 py-2 text-xs font-bold text-slate-400">
                 Prev close {formatCurrency(Math.round(live.previousCloseValue))}
               </span>
             ) : null}
@@ -490,9 +490,9 @@ export function PortfolioPerformanceChart({
             >
               <defs>
                 <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#10b981" stopOpacity={0.35} />
-                  <stop offset="60%" stopColor="#10b981" stopOpacity={0.08} />
-                  <stop offset="100%" stopColor="#10b981" stopOpacity={0} />
+                  <stop offset="0%" stopColor="var(--brand)" stopOpacity={0.35} />
+                  <stop offset="60%" stopColor="var(--brand)" stopOpacity={0.08} />
+                  <stop offset="100%" stopColor="var(--brand)" stopOpacity={0} />
                 </linearGradient>
               </defs>
 
@@ -535,7 +535,7 @@ export function PortfolioPerformanceChart({
               <Area
                 type="monotone"
                 dataKey="value"
-                stroke="#10b981"
+                stroke="var(--brand)"
                 strokeWidth={2.5}
                 fill={`url(#${gradientId})`}
                 animationDuration={800}
@@ -543,7 +543,7 @@ export function PortfolioPerformanceChart({
                 dot={false}
                 activeDot={{
                   r: 5,
-                  fill: "#10b981",
+                  fill: "var(--brand)",
                   stroke: "#0a0f15",
                   strokeWidth: 2.5,
                 }}

@@ -78,7 +78,7 @@ export default function TermsPage() {
       <section>
         <h2 className="mb-3 text-lg font-semibold text-white">6. Acceptable Use</h2>
         <p>You agree not to:</p>
-        <ul className="mt-2 list-disc space-y-1 pl-5">
+        <ul className="mt-2 list-disc space-y-1 pl-6">
           <li>Use the Service for unlawful, fraudulent, abusive, or deceptive activity.</li>
           <li>Attempt to reverse engineer, interfere with, or bypass security or access controls.</li>
           <li>Scrape, harvest, or bulk extract data beyond authorized use of the Service.</li>
@@ -211,7 +211,7 @@ export default function TermsPage() {
         <p>
           For legal notices or questions about these Terms, contact <strong>{LEGAL_OPERATOR_NAME}</strong>.
         </p>
-        <ul className="mt-3 list-disc space-y-1 pl-5">
+        <ul className="mt-3 list-disc space-y-1 pl-6">
           <li>Email: {LEGAL_CONTACT_EMAIL}</li>
           <li>Mail: {LEGAL_MAILING_ADDRESS}</li>
         </ul>

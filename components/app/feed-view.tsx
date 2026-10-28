@@ -2,15 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import {
-  ArrowRight,
-  ChevronDown,
-  MessageSquare,
-  RefreshCw,
-  ShieldCheck,
-  X,
-  Zap,
-} from "lucide-react";
+import { ArrowRight } from "@phosphor-icons/react/dist/ssr/ArrowRight";
+import { CaretDown as ChevronDown } from "@phosphor-icons/react/dist/ssr/CaretDown";
+import { ChatText as MessageSquare } from "@phosphor-icons/react/dist/ssr/ChatText";
+import { ArrowsClockwise as RefreshCw } from "@phosphor-icons/react/dist/ssr/ArrowsClockwise";
+import { ShieldCheck } from "@phosphor-icons/react/dist/ssr/ShieldCheck";
+import { X } from "@phosphor-icons/react/dist/ssr/X";
+import { Lightning as Zap } from "@phosphor-icons/react/dist/ssr/Lightning";
 import { createClient } from "@/lib/supabase/client";
 
 import {
@@ -81,7 +79,7 @@ const sourceTypeOptions = [
 ];
 
 const selectTriggerClass =
-  "themed-select w-full min-w-0 appearance-none rounded-xl border border-subtle bg-surface-raised py-2.5 pl-3 pr-9 text-sm font-medium text-primary shadow-[var(--surface-shadow)] focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20";
+  "themed-select w-full min-w-0 appearance-none rounded-xl border border-subtle bg-surface-raised py-2 pl-3 pr-10 text-sm font-medium text-primary shadow-[var(--surface-shadow)] focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20";
 
 const DESKTOP_CHAT_BREAKPOINT = 1280;
 const DEFAULT_CHAT_ACTIVITY: ArticleChatActivityState = {
@@ -800,13 +798,13 @@ export function FeedView({
       >
       <div className="space-y-6">
         {/* Audit D01: filters stay reachable while reading on wide screens. */}
-        <div className="rounded-2xl border border-white/[0.06] bg-surface-raised p-5 shadow-sm lg:sticky lg:top-4 lg:z-20">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+        <div className="rounded-2xl border border-white/[0.06] bg-surface-raised p-6 shadow-sm lg:sticky lg:top-4 lg:z-20">
+          <div className="flex flex-col gap-6 2xl:flex-row 2xl:items-end 2xl:justify-between">
             <ModeToggle mode={mode} onChange={handleModeChange} />
             {mode === "personal" ? (
               <div className="grid flex-1 gap-4 sm:grid-cols-2 lg:max-w-4xl lg:grid-cols-3 lg:justify-self-end">
-                <label className="block min-w-0 space-y-1.5">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                <label className="block min-w-0 space-y-2">
+                  <span className="text-xs font-semibold text-slate-500">
                     Select holding
                   </span>
                   <div className="relative">
@@ -824,8 +822,8 @@ export function FeedView({
                     <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
                   </div>
                 </label>
-                <label className="block min-w-0 space-y-1.5">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                <label className="block min-w-0 space-y-2">
+                  <span className="text-xs font-semibold text-slate-500">
                     Sort
                   </span>
                   <div className="relative">
@@ -846,8 +844,8 @@ export function FeedView({
                     <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
                   </div>
                 </label>
-                <label className="block min-w-0 space-y-1.5">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                <label className="block min-w-0 space-y-2">
+                  <span className="text-xs font-semibold text-slate-500">
                     Recency
                   </span>
                   <div className="relative">
@@ -867,9 +865,9 @@ export function FeedView({
                 </label>
               </div>
             ) : (
-              <div className="grid flex-1 gap-4 sm:grid-cols-2 lg:max-w-6xl lg:grid-cols-5 lg:justify-self-end">
-                <label className="block min-w-0 space-y-1.5">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+              <div className="grid flex-1 gap-4 sm:grid-cols-2 lg:max-w-6xl lg:grid-cols-3 2xl:grid-cols-5 lg:justify-self-end">
+                <label className="block min-w-0 space-y-2">
+                  <span className="text-xs font-semibold text-slate-500">
                     Source
                   </span>
                   <div className="relative">
@@ -887,8 +885,8 @@ export function FeedView({
                     <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
                   </div>
                 </label>
-                <label className="block min-w-0 space-y-1.5">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                <label className="block min-w-0 space-y-2">
+                  <span className="text-xs font-semibold text-slate-500">
                     Sort
                   </span>
                   <div className="relative">
@@ -909,8 +907,8 @@ export function FeedView({
                     <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
                   </div>
                 </label>
-                <label className="block min-w-0 space-y-1.5">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                <label className="block min-w-0 space-y-2">
+                  <span className="text-xs font-semibold text-slate-500">
                     Category
                   </span>
                   <div className="relative">
@@ -928,8 +926,8 @@ export function FeedView({
                     <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
                   </div>
                 </label>
-                <label className="block min-w-0 space-y-1.5">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                <label className="block min-w-0 space-y-2">
+                  <span className="text-xs font-semibold text-slate-500">
                     Recency
                   </span>
                   <div className="relative">
@@ -947,12 +945,12 @@ export function FeedView({
                     <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
                   </div>
                 </label>
-                <label className="block min-w-0 space-y-1.5">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                <label className="block min-w-0 space-y-2">
+                  <span className="text-xs font-semibold text-slate-500">
                     Ticker
                   </span>
                   <input
-                    className="w-full rounded-xl border border-white/10 bg-surface-raised px-3 py-2.5 text-sm text-slate-200 shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+                    className="w-full rounded-xl border border-white/10 bg-surface-raised px-3 py-2 text-sm text-slate-200 shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
                     placeholder="e.g. NVDA"
                     value={tickerInput}
                     onChange={(e) => setTickerInput(e.target.value)}
@@ -979,8 +977,8 @@ export function FeedView({
                 </span>
               </summary>
               <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                <label className="block min-w-0 space-y-1.5">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                <label className="block min-w-0 space-y-2">
+                  <span className="text-xs font-semibold text-slate-500">
                     Sector
                   </span>
                   <div className="relative">
@@ -998,8 +996,8 @@ export function FeedView({
                     <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
                   </div>
                 </label>
-                <label className="block min-w-0 space-y-1.5">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                <label className="block min-w-0 space-y-2">
+                  <span className="text-xs font-semibold text-slate-500">
                     Category
                   </span>
                   <div className="relative">
@@ -1027,7 +1025,7 @@ export function FeedView({
             <button
               type="button"
               onClick={resetFilters}
-              className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 transition hover:text-slate-300"
+              className="inline-flex items-center gap-2 text-xs font-semibold text-slate-500 transition hover:text-slate-300"
             >
               <RefreshCw className="h-3.5 w-3.5" />
               Reset filters
@@ -1047,7 +1045,7 @@ export function FeedView({
             <button
               type="button"
               onClick={() => setDeepLinkNoticeDismissed(true)}
-              className="shrink-0 text-xs font-semibold uppercase tracking-[0.14em]"
+              className="shrink-0 text-xs font-semibold"
             >
               Dismiss
             </button>
@@ -1063,7 +1061,7 @@ export function FeedView({
           />
         ) : (
           <div className="space-y-4">
-            <div className="flex flex-col gap-5">
+            <div className="flex flex-col gap-6">
               {visibleStories.map((story) => (
                 <div key={story.id} id={`feed-story-${story.newsItemId || story.id}`}>
                   <NewsFeedCard
@@ -1118,7 +1116,7 @@ export function FeedView({
         )}
       </div>
 
-      <div className="flex flex-col gap-5 xl:sticky xl:top-28 xl:self-start xl:max-h-[calc(100vh-8rem)] xl:overflow-y-auto">
+      <div className="flex flex-col gap-6 xl:sticky xl:top-28 xl:self-start xl:max-h-[calc(100vh-8rem)] xl:overflow-y-auto">
         <FeedMomentumCard insights={insights} />
         {isDesktopChatLayout ? (
           <GlobalAskAiButton
@@ -1156,7 +1154,7 @@ export function FeedView({
           article opens in a sheet and Ask AI stays reachable from a floating button (F01). */}
       {!isDesktopChatLayout && selectedStory && !chatOpen ? (
         <ModalDialog label="Article details" onClose={handleCloseStory} testId="story-detail-sheet">
-          <div className="flex-1 overflow-y-auto px-5 py-6">
+          <div className="flex-1 overflow-y-auto px-6 py-6">
             <DetailPanel
               story={selectedStory}
               mode={mode}
@@ -1173,7 +1171,7 @@ export function FeedView({
           type="button"
           data-testid="floating-ask-ai-button"
           onClick={handleGlobalAskAiClick}
-          className="fixed bottom-5 right-5 z-40 inline-flex items-center gap-2 rounded-full bg-brand px-5 py-3 text-sm font-semibold text-[#080c11] shadow-[0_8px_30px_rgba(16,185,129,0.35)] transition hover:bg-brand-strong"
+          className="fixed bottom-5 right-5 z-40 inline-flex items-center gap-2 rounded-full bg-brand px-6 py-3 text-sm font-semibold text-brand-foreground transition hover:bg-brand-strong"
         >
           <MessageSquare className="h-4 w-4" aria-hidden="true" />
           Ask AI
@@ -1232,16 +1230,16 @@ function FeedMomentumCard({ insights }: { insights: PortfolioInsight[] }) {
         </span>
         <h3 className="text-base font-semibold tracking-tight">Feed momentum</h3>
       </div>
-      <div className="mt-5 space-y-6">
+      <div className="mt-6 space-y-6">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-secondary">
+          <p className="text-xs font-semibold text-secondary">
             Most exposed theme
           </p>
           <p className="mt-2 text-lg font-semibold text-primary">
             {themeInsight?.value ?? "—"}
           </p>
           {themeInsight?.detail ? (
-            <p className="mt-1 text-sm leading-relaxed text-secondary">
+            <p className="mt-1 text-sm text-secondary">
               {themeInsight.detail}
             </p>
           ) : (
@@ -1251,7 +1249,7 @@ function FeedMomentumCard({ insights }: { insights: PortfolioInsight[] }) {
           )}
         </div>
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-secondary">
+          <p className="text-xs font-semibold text-secondary">
             Macro watch
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -1259,13 +1257,13 @@ function FeedMomentumCard({ insights }: { insights: PortfolioInsight[] }) {
               {macroInsight?.value ?? "—"}
             </p>
             {macroCritical ? (
-              <span className="rounded-full bg-rose-500/20 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-rose-300">
+              <span className="rounded-full bg-rose-500/20 px-3 py-0.5 text-xs font-bold text-rose-300">
                 Critical
               </span>
             ) : null}
           </div>
           {macroInsight?.detail ? (
-            <p className="mt-2 text-sm leading-relaxed text-secondary">
+            <p className="mt-2 text-sm text-secondary">
               {macroInsight.detail}
             </p>
           ) : (
@@ -1275,10 +1273,10 @@ function FeedMomentumCard({ insights }: { insights: PortfolioInsight[] }) {
           )}
         </div>
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-secondary">
+          <p className="text-xs font-semibold text-secondary">
             Fresh catalyst
           </p>
-          <p className="mt-2 text-sm leading-relaxed text-secondary">
+          <p className="mt-2 text-sm text-secondary">
             {catalystInsight?.detail ??
               "New regulatory, earnings, or M&A catalysts will appear here after the next refresh."}
           </p>
@@ -1302,13 +1300,13 @@ function StoryChatHeader({
   return (
     <div className="flex items-start justify-between gap-4">
       <div className="space-y-2">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-brand">
+        <p className="text-xs font-semibold text-brand">
           {isStoryContext ? "Story chat" : "Portfolio / market chat"}
         </p>
-        <h2 className="text-lg font-semibold leading-snug tracking-tight text-white">
+        <h2 className="text-lg font-semibold tracking-tight text-white">
           {isStoryContext ? story.headline : "No active article"}
         </h2>
-        <p className="text-sm leading-6 text-slate-400">
+        <p className="text-sm text-slate-400">
           {isStoryContext
             ? "Ask follow-up questions about the selected story without leaving the feed."
             : "Ask about your portfolio, watchlist, or today's market, then select a story any time to switch into article context."}
@@ -1354,7 +1352,7 @@ function StoryChatSidebar({
   return (
     <Panel
       data-testid="story-chat-sidebar"
-      className="h-fit space-y-5 rounded-2xl border-white/[0.06] bg-surface-raised p-6 shadow-sm"
+      className="h-fit space-y-6 rounded-2xl border-white/[0.06] bg-surface-raised p-6 shadow-sm"
     >
       <StoryChatHeader context={context} story={story} onClose={onClose} />
       <ArticleChatPanel
@@ -1411,10 +1409,10 @@ function StoryChatMobileSheet({
       overlayClassName="xl:hidden"
       initialFocusSelector="textarea"
     >
-      <div className="flex-1 overflow-y-auto px-5 py-6">
-        <div className="rounded-2xl border border-white/[0.06] bg-surface-raised p-5 shadow-sm">
+      <div className="flex-1 overflow-y-auto px-6 py-6">
+        <div className="rounded-2xl border border-white/[0.06] bg-surface-raised p-6 shadow-sm">
           <StoryChatHeader context={context} story={story} onClose={onClose} />
-          <div className="mt-5">
+          <div className="mt-6">
             <ArticleChatPanel
               portfolioId={portfolioId}
               newsItemId={isStoryContext ? story.newsItemId : undefined}
@@ -1458,11 +1456,11 @@ function GlobalAskAiButton({
         className="flex w-full items-center justify-between gap-3 rounded-2xl border border-brand/25 bg-brand/10 px-4 py-4 text-left text-white transition hover:border-brand/40 hover:bg-brand/15"
       >
         <span className="flex items-center gap-3">
-          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-brand text-[#080c11] shadow-[0_0_20px_rgba(16,185,129,0.2)]">
+          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-brand text-brand-foreground">
             <MessageSquare className="h-4 w-4" />
           </span>
           <span className="space-y-1">
-            <span className="block text-sm font-semibold uppercase tracking-[0.18em] text-brand">
+            <span className="block text-sm font-semibold text-brand">
               Ask AI
             </span>
             <span className="block text-sm text-slate-300">
@@ -1470,7 +1468,7 @@ function GlobalAskAiButton({
             </span>
           </span>
         </span>
-        <span className="text-sm font-semibold text-white/90">
+        <span className="text-sm font-semibold text-slate-400">
           {isOpen ? "Close" : hasSelectedStory ? "Selected story" : "No article selected"}
         </span>
       </button>
@@ -1495,13 +1493,13 @@ function StorySwitchConfirmDialog({
     >
       <div>
         <div className="space-y-3">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-brand">
+          <p className="text-xs font-semibold text-brand">
             Switch story?
           </p>
           <h2 className="text-xl font-semibold tracking-tight text-white">
             Keep this chat or switch to the new article
           </h2>
-          <p className="text-sm leading-7 text-slate-400">
+          <p className="text-sm text-slate-400">
             The current story chat has messages or an unsent draft. Switching will replace the active story context in the chat panel.
           </p>
         </div>
@@ -1526,30 +1524,30 @@ function ModeToggle({
   onChange: (m: FeedMode) => void;
 }) {
   return (
-    <div className="inline-flex rounded-full bg-white/5 p-1">
+    <div className="inline-flex self-start rounded-full bg-white/5 p-1">
       <button
         type="button"
         onClick={() => onChange("personal")}
         className={cn(
-          "rounded-full px-5 py-2.5 text-sm font-semibold transition",
+          "rounded-full px-6 py-2 text-sm font-semibold transition",
           mode === "personal"
             ? "bg-brand/15 text-brand"
             : "text-slate-500 hover:text-slate-300",
         )}
       >
-        Personal Feed
+        Personal feed
       </button>
       <button
         type="button"
         onClick={() => onChange("market")}
         className={cn(
-          "rounded-full px-5 py-2.5 text-sm font-semibold transition",
+          "rounded-full px-6 py-2 text-sm font-semibold transition",
           mode === "market"
             ? "bg-brand/15 text-brand"
             : "text-slate-500 hover:text-slate-300",
         )}
       >
-        Full Market
+        Full market
       </button>
     </div>
   );
@@ -1573,13 +1571,13 @@ function DetailPanel({
   const scoreExplanation = buildScoreExplanation(story, mode);
 
   return (
-    <Panel className="h-fit space-y-5 rounded-2xl border-white/[0.06] bg-surface-raised p-6 shadow-sm">
+    <Panel className="h-fit space-y-6 rounded-2xl border-white/[0.06] bg-surface-raised p-6 shadow-sm">
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-2">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
+          <p className="text-xs font-semibold text-slate-500">
             Article detail
           </p>
-          <h2 className="text-xl font-semibold leading-snug tracking-tight text-white">
+          <h2 className="text-xl font-semibold tracking-tight text-white">
             {story.headline}
           </h2>
         </div>
@@ -1593,7 +1591,7 @@ function DetailPanel({
         </button>
       </div>
 
-      <div className="space-y-5">
+      <div className="space-y-6">
           {/* Badges */}
           <div className="flex flex-wrap gap-2">
             <Badge tone="neutral">
@@ -1644,7 +1642,7 @@ function DetailPanel({
           {/* Per-ticker impacts */}
           {story.tickerImpacts.length > 0 && (
             <div className="space-y-2">
-              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
+              <p className="text-sm font-semibold text-slate-500">
                 Ticker impacts
               </p>
               <div className="flex flex-wrap gap-2">
@@ -1659,10 +1657,10 @@ function DetailPanel({
 
           {/* Summary */}
           <div className="space-y-3">
-            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
+            <p className="text-sm font-semibold text-slate-500">
               {isMarket ? "Summary" : "AI summary"}
             </p>
-            <p className="text-sm leading-7 text-slate-400">
+            <p className="text-sm text-slate-400">
               {story.globalSummary || story.aiSummary || ""}
             </p>
           </div>
@@ -1670,28 +1668,28 @@ function DetailPanel({
           {/* Why it matters — personal only */}
           {!isMarket && story.whyItMatters && (
             <div className="space-y-3">
-              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
+              <p className="text-sm font-semibold text-slate-500">
                 Why it matters
               </p>
-              <p className="text-sm leading-7 text-slate-400">
+              <p className="text-sm text-slate-400">
                 {story.whyItMatters}
               </p>
             </div>
           )}
 
           {scoreExplanation.factors.length > 0 && (
-            <div className="space-y-4 border-t border-white/[0.06] pt-5">
+            <div className="space-y-4 border-t border-white/[0.06] pt-6">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
+                <p className="text-sm font-semibold text-slate-500">
                   {scoreExplanation.title}
                 </p>
                 {scoreExplanation.scoreLabel ? (
-                  <span className="text-xs font-semibold uppercase tracking-[0.14em] text-brand">
+                  <span className="text-xs font-semibold text-brand">
                     {scoreExplanation.scoreLabel}
                   </span>
                 ) : null}
               </div>
-              <p className="text-sm leading-7 text-slate-400">
+              <p className="text-sm text-slate-400">
                 {scoreExplanation.summary}
               </p>
               <div className="grid gap-3 sm:grid-cols-2">
@@ -1700,10 +1698,10 @@ function DetailPanel({
                     key={factor.id}
                     className="border-l border-white/[0.08] pl-3"
                   >
-                    <Badge tone={factor.tone} className="text-[10px]">
+                    <Badge tone={factor.tone} className="text-xs">
                       {factor.label}
                     </Badge>
-                    <p className="mt-2 text-xs leading-5 text-slate-500">
+                    <p className="mt-2 text-xs text-slate-500">
                       {factor.detail}
                     </p>
                   </div>
@@ -1717,8 +1715,8 @@ function DetailPanel({
           )}
 
           {(story.thesisMatches ?? []).length > 0 && (
-            <div className="space-y-3 border-t border-white/[0.06] pt-5">
-              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
+            <div className="space-y-3 border-t border-white/[0.06] pt-6">
+              <p className="text-sm font-semibold text-slate-500">
                 Thesis tracker
               </p>
               <div className="grid gap-3 sm:grid-cols-2">
@@ -1729,11 +1727,11 @@ function DetailPanel({
                   >
                     <Badge
                       tone={match.tone === "watch" || match.tone === "risk" ? "warning" : "neutral"}
-                      className="text-[10px]"
+                      className="text-xs"
                     >
                       {match.label}
                     </Badge>
-                    <p className="mt-2 text-xs leading-5 text-slate-500">
+                    <p className="mt-2 text-xs text-slate-500">
                       {match.detail}
                     </p>
                   </div>
@@ -1742,7 +1740,7 @@ function DetailPanel({
             </div>
           )}
 
-          <div className="flex flex-wrap gap-3 border-t border-white/[0.06] pt-5">
+          <div className="flex flex-wrap gap-3 border-t border-white/[0.06] pt-6">
             <Button
               type="button"
               variant="secondary"
@@ -1759,7 +1757,7 @@ function DetailPanel({
           {/* Connected holdings — personal only */}
           {!isMarket && (story.holdings ?? []).length > 0 && (
             <div className="space-y-3">
-              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
+              <p className="text-sm font-semibold text-slate-500">
                 Connected holdings
               </p>
               <div className="flex flex-wrap gap-2">
@@ -1774,7 +1772,7 @@ function DetailPanel({
 
           {!isMarket && (story.matchReasonCodes ?? []).length > 0 && (
             <div className="space-y-3">
-              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
+              <p className="text-sm font-semibold text-slate-500">
                 Match reasons
               </p>
               <div className="flex flex-wrap gap-2">
@@ -1792,7 +1790,7 @@ function DetailPanel({
             (story.isPortfolioMatch || story.isWatchlistMatch) &&
             (story.matchedStockTags ?? []).length > 0 && (
               <div className="space-y-3">
-                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
+                <p className="text-sm font-semibold text-slate-500">
                   {story.isPortfolioMatch && story.isWatchlistMatch
                     ? "Portfolio & watchlist matches"
                     : story.isWatchlistMatch
@@ -1848,7 +1846,7 @@ function FeedEmptyState({
               ? "No stories match these filters"
               : "No market stories match these filters"}
           </h2>
-          <p className="mx-auto max-w-xl text-sm leading-7 text-slate-400">
+          <p className="mx-auto max-w-xl text-sm text-slate-400">
             Try broadening your filters to see more articles.
           </p>
         </div>
@@ -1886,20 +1884,20 @@ function FeedEmptyState({
           <h2 className="text-2xl font-semibold text-white">
             Your personal feed is empty
           </h2>
-          <p className="mx-auto max-w-xl text-sm leading-7 text-slate-400">
+          <p className="mx-auto max-w-xl text-sm text-slate-400">
             {recent
               ? "Nothing in the current 24-hour market pool qualified for your portfolio or watchlist. New articles are checked automatically every 20 minutes."
               : "Your feed updates automatically every 20 minutes. If your feed is empty, check back soon or add more holdings and watchlist items."}
           </p>
           {failedOrPartial && ingest?.detail ? (
-            <p className="mx-auto max-w-xl text-sm leading-7 text-amber-400">
+            <p className="mx-auto max-w-xl text-sm text-amber-400">
               Last refresh: <strong>{ingest.status}</strong> — {ingest.detail}
             </p>
           ) : null}
           {allDuplicates ? (
             <p
               data-testid="ingest-hint-duplicates"
-              className="mx-auto max-w-xl text-sm leading-7 text-slate-400"
+              className="mx-auto max-w-xl text-sm text-slate-400"
             >
               The last refresh fetched {totalFetched} article{totalFetched === 1 ? "" : "s"} but
               they were already in the database — nothing new to add.
@@ -1907,7 +1905,7 @@ function FeedEmptyState({
           ) : allEmptyWindow ? (
             <p
               data-testid="ingest-hint-empty-window"
-              className="mx-auto max-w-xl text-sm leading-7 text-slate-400"
+              className="mx-auto max-w-xl text-sm text-slate-400"
             >
               No articles were returned by EDGAR, NewsAPI, GNews, NewsAPI.ai, or NewsCatcher in the current lookback window.
               Broader market stories may still appear in <strong>Market</strong> mode.
@@ -1915,7 +1913,7 @@ function FeedEmptyState({
           ) : recent &&
             ingest?.status === "empty" &&
             (bd?.total_inserted ?? 0) === 0 ? (
-            <p className="mx-auto max-w-xl text-sm leading-7 text-slate-400">
+            <p className="mx-auto max-w-xl text-sm text-slate-400">
               Last run found no new articles in the global lookback window (sources succeeded).
               Broader market stories may still appear in <strong>Market</strong> mode.
             </p>
@@ -1944,15 +1942,15 @@ function FeedEmptyState({
           <h2 className="text-2xl font-semibold text-white">
             Market feed could not load new articles
           </h2>
-          <p className="mx-auto max-w-xl text-sm leading-7 text-slate-400">
+          <p className="mx-auto max-w-xl text-sm text-slate-400">
             {ingest.detail ?? "Both news sources failed or all database writes failed."}
           </p>
           {sourceErrors.length > 0 && (
-            <ul className="mx-auto max-w-xl list-disc pl-5 text-left text-sm text-slate-400">
+            <ul className="mx-auto max-w-xl list-disc pl-6 text-left text-sm text-slate-400">
               {sourceErrors.map((line) => <li key={line}>{line}</li>)}
             </ul>
           )}
-          <p className="mx-auto max-w-xl text-sm leading-7 text-slate-400">
+          <p className="mx-auto max-w-xl text-sm text-slate-400">
             Open <strong>Analysis</strong> for the full pipeline view, or see{" "}
             <code className="rounded bg-white/5 px-1">workers/news_ingestion/TROUBLESHOOTING.md</code>{" "}
             for Python worker setup and API key notes.
@@ -1972,11 +1970,11 @@ function FeedEmptyState({
           <h2 className="text-2xl font-semibold text-white">
             Some market sources did not return articles
           </h2>
-          <p className="mx-auto max-w-xl text-sm leading-7 text-slate-400">
+          <p className="mx-auto max-w-xl text-sm text-slate-400">
             {ingest.detail}
           </p>
           {sourceErrors.length > 0 && (
-            <ul className="mx-auto max-w-xl list-disc pl-5 text-left text-sm text-slate-400">
+            <ul className="mx-auto max-w-xl list-disc pl-6 text-left text-sm text-slate-400">
               {sourceErrors.map((line) => <li key={line}>{line}</li>)}
             </ul>
           )}
@@ -2008,7 +2006,7 @@ function FeedEmptyState({
           {allDuplicates ? (
             <p
               data-testid="ingest-hint-duplicates"
-              className="mx-auto max-w-xl text-sm leading-7 text-slate-400"
+              className="mx-auto max-w-xl text-sm text-slate-400"
             >
               The last refresh fetched {totalFetched} article{totalFetched === 1 ? "" : "s"} but
               they were already in the database.
@@ -2016,12 +2014,12 @@ function FeedEmptyState({
           ) : allEmptyWindow ? (
             <p
               data-testid="ingest-hint-empty-window"
-              className="mx-auto max-w-xl text-sm leading-7 text-slate-400"
+              className="mx-auto max-w-xl text-sm text-slate-400"
             >
               No articles were returned by EDGAR, NewsAPI, GNews, NewsAPI.ai, or NewsCatcher in the current lookback window.
             </p>
           ) : (
-            <p className="mx-auto max-w-xl text-sm leading-7 text-slate-400">
+            <p className="mx-auto max-w-xl text-sm text-slate-400">
               {ingest.detail ??
                 "Sources completed without errors but returned nothing in the current lookback window."}
             </p>
@@ -2040,7 +2038,7 @@ function FeedEmptyState({
         <h2 className="text-2xl font-semibold text-white">
           No market news ingested yet
         </h2>
-        <p className="mx-auto max-w-xl text-sm leading-7 text-slate-400">
+        <p className="mx-auto max-w-xl text-sm text-slate-400">
           Run a news refresh from the Analysis page to populate the market feed
           with SEC filings and market headlines. If the feed stays empty, check the Analysis
           pipeline for EDGAR, NewsAPI, GNews, NewsAPI.ai, or NewsCatcher errors (API key, firewall, or network issues).

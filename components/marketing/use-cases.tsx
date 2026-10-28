@@ -4,7 +4,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import Link from "next/link";
 
-import { ArrowRight, MessageSquare, Sparkles } from "lucide-react";
+import { ArrowRight } from "@phosphor-icons/react/dist/ssr/ArrowRight";
+import { ChatText as MessageSquare } from "@phosphor-icons/react/dist/ssr/ChatText";
+import { Sparkle as Sparkles } from "@phosphor-icons/react/dist/ssr/Sparkle";
 
 import { Badge } from "@/components/ui/badge";
 import { buttonStyles } from "@/components/ui/button";
@@ -160,9 +162,9 @@ function UseCaseCard({
     >
       <Panel
         className={cn(
-          "space-y-4 p-5 transition-all duration-300",
+          "space-y-4 p-6 transition-all duration-300",
           isActive
-            ? "border-brand/25 bg-brand/[0.04] shadow-[0_0_24px_rgba(16,185,129,0.06)]"
+            ? "border-brand/25 bg-brand/[0.04]"
             : "hover:border-white/10",
         )}
       >
@@ -174,7 +176,7 @@ function UseCaseCard({
         <h3 className="text-lg font-semibold text-white">
           {useCase.headline}
         </h3>
-        <p className="text-sm leading-7 text-slate-400">
+        <p className="text-sm text-slate-400">
           {useCase.summary}
         </p>
 
@@ -183,7 +185,7 @@ function UseCaseCard({
           {useCase.proofPoints.map((pt) => (
             <span
               key={pt}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-1.5 text-xs text-slate-400"
+              className="inline-flex items-center gap-2 rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-2 text-xs text-slate-400"
             >
               {pt}
             </span>
@@ -201,7 +203,7 @@ function UseCaseCard({
             onClick={(e) => e.stopPropagation()}
           >
             {useCase.ctaLabel}
-            <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+            <ArrowRight className="ml-2 h-3.5 w-3.5" />
           </Link>
         )}
       </Panel>
@@ -230,18 +232,18 @@ function PreviewStage({
         inView ? "opacity-100" : "uc-pending",
       )}
     >
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.06),transparent_40%)]" />
+      <div className="absolute inset-0" />
 
       {/* key forces a fresh mount → CSS animations replay on case change */}
       <div
         key={activeCase.id}
-        className="relative grid gap-5 p-6 uc-animate-crossfade"
+        className="relative grid gap-6 p-6 uc-animate-crossfade"
       >
         {/* ── Portfolio value header ── */}
         {p.portfolioValue && (
           <div className="flex items-end justify-between uc-animate-count">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+              <p className="text-xs font-semibold text-slate-500">
                 Portfolio value
               </p>
               <p className="mt-1 text-3xl font-semibold tracking-tight text-white">
@@ -287,7 +289,7 @@ function PreviewStage({
         {/* ── Story cards (Morning Brief / Story Chat) ── */}
         {p.stories.length > 0 && (
           <div className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+            <p className="text-xs font-semibold text-slate-500">
               Top stories
             </p>
             {p.stories.map((s, i) => (
@@ -297,12 +299,12 @@ function PreviewStage({
                 style={{ animationDelay: `${400 + i * 120}ms` }}
               >
                 <div>
-                  <p className="text-sm font-semibold leading-snug text-white">
+                  <p className="text-sm font-semibold text-white">
                     {s.headline}
                   </p>
                   <p className="mt-1 text-xs text-slate-500">{s.source}</p>
                 </div>
-                <Badge tone="brand" className="shrink-0 text-[10px]">
+                <Badge tone="brand" className="shrink-0 text-xs">
                   {s.relevance}%
                 </Badge>
               </div>
@@ -325,7 +327,7 @@ function PreviewStage({
                 className="rounded-xl border border-white/[0.06] bg-white/[0.03] px-4 py-4 uc-animate-type"
                 style={{ animationDelay: "600ms" }}
               >
-                <p className="text-sm leading-7 text-slate-300">{p.answer}</p>
+                <p className="text-sm text-slate-300">{p.answer}</p>
               </div>
             )}
           </div>
@@ -334,7 +336,7 @@ function PreviewStage({
         {/* ── Chat bubbles (Story Chat) ── */}
         {p.chatBubbles && p.chatBubbles.length > 0 && (
           <div className="space-y-3 pt-2">
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+            <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
               <MessageSquare className="h-3.5 w-3.5" />
               Story chat
             </div>
@@ -342,7 +344,7 @@ function PreviewStage({
               <div
                 key={i}
                 className={cn(
-                  "max-w-[85%] rounded-xl px-4 py-3 text-sm leading-6 uc-animate-slide-in",
+                  "max-w-[85%] rounded-xl px-4 py-3 text-sm uc-animate-slide-in",
                   b.role === "user"
                     ? "ml-auto border border-brand/20 bg-brand/[0.06] text-white"
                     : "border border-white/[0.06] bg-white/[0.03] text-slate-300",

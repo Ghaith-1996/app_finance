@@ -36,7 +36,7 @@ export default function PrivacyPage() {
       <section>
         <h2 className="mb-3 text-lg font-semibold text-white">2. Information We Collect</h2>
         <p>Depending on how you use the Service, we may collect:</p>
-        <ul className="mt-2 list-disc space-y-1 pl-5">
+        <ul className="mt-2 list-disc space-y-1 pl-6">
           <li>Account and profile information, such as email address, name, handle, and avatar.</li>
           <li>Authentication details from sign-in providers such as Google or GitHub.</li>
           <li>Portfolio, holdings, watchlist, and community content you submit or generate.</li>
@@ -50,7 +50,7 @@ export default function PrivacyPage() {
       <section>
         <h2 className="mb-3 text-lg font-semibold text-white">3. How We Use Information</h2>
         <p>We use personal information only as reasonably necessary to:</p>
-        <ul className="mt-2 list-disc space-y-1 pl-5">
+        <ul className="mt-2 list-disc space-y-1 pl-6">
           <li>Authenticate users and maintain account and profile records.</li>
           <li>Store and display portfolios, holdings, watchlists, community posts, and related content.</li>
           <li>Generate personalized feed items, portfolio insights, and AI-assisted responses.</li>
@@ -68,7 +68,7 @@ export default function PrivacyPage() {
           Service, subject to contractual and operational controls. Based on the current repo and
           deployment model, those providers may include:
         </p>
-        <ul className="mt-2 list-disc space-y-1 pl-5">
+        <ul className="mt-2 list-disc space-y-1 pl-6">
           <li>Supabase for authentication, database, and application storage.</li>
           <li>Stripe for subscription billing, checkout, and billing portal operations.</li>
           <li>Vercel for application hosting and delivery infrastructure.</li>
@@ -97,7 +97,7 @@ export default function PrivacyPage() {
       <section>
         <h2 className="mb-3 text-lg font-semibold text-white">6. Cookies and Similar Technologies</h2>
         <p>At present, the current product primarily relies on essential technologies only:</p>
-        <ul className="mt-2 list-disc space-y-1 pl-5">
+        <ul className="mt-2 list-disc space-y-1 pl-6">
           <li>Authentication and session cookies needed to keep you signed in.</li>
           <li>Preference cookies or local storage for theme and language settings.</li>
           <li>Security checks, including Turnstile signals for sensitive write actions.</li>
@@ -147,7 +147,7 @@ export default function PrivacyPage() {
       <section>
         <h2 className="mb-3 text-lg font-semibold text-white">10. Your Rights and Choices</h2>
         <p>Subject to applicable law, you may have the right to:</p>
-        <ul className="mt-2 list-disc space-y-1 pl-5">
+        <ul className="mt-2 list-disc space-y-1 pl-6">
           <li>Request access to personal information we hold about you.</li>
           <li>Request correction of inaccurate or incomplete personal information.</li>
           <li>Withdraw consent for certain processing where consent is the legal basis and withdrawal is legally available.</li>
@@ -165,7 +165,7 @@ export default function PrivacyPage() {
           If you have questions, requests, or complaints about this Privacy Policy or our handling
           of personal information, contact our privacy contact:
         </p>
-        <ul className="mt-3 list-disc space-y-1 pl-5">
+        <ul className="mt-3 list-disc space-y-1 pl-6">
           <li>Privacy contact: {LEGAL_PRIVACY_CONTACT}</li>
           <li>Email: {LEGAL_CONTACT_EMAIL}</li>
           <li>Mail: {LEGAL_MAILING_ADDRESS}</li>
@@ -202,7 +202,7 @@ export default function PrivacyPage() {
           General privacy or legal correspondence for Pulsefolio may also be sent to{" "}
           <strong>{LEGAL_OPERATOR_NAME}</strong>.
         </p>
-        <ul className="mt-3 list-disc space-y-1 pl-5">
+        <ul className="mt-3 list-disc space-y-1 pl-6">
           <li>Email: {LEGAL_CONTACT_EMAIL}</li>
           <li>Mail: {LEGAL_MAILING_ADDRESS}</li>
         </ul>

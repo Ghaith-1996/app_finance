@@ -391,7 +391,15 @@ def extract_full_text_for_ids(article_ids: list[str]) -> ExtractionStats:
         return stats
 
     try:
-        client.table("news_items").update({"extraction_status": "queued"}).in_("id", article_ids).execute()
+        # A delayed duplicate worker must not reset text completed by another worker.
+        (
+            client.table("news_items")
+            .update({"extraction_status": "queued"})
+            .in_("id", article_ids)
+            .is_("extracted_content", "null")
+            .or_("extraction_status.is.null,extraction_status.neq.complete")
+            .execute()
+        )
     except Exception as exc:
         logger.warning("Could not mark articles queued: %s", exc)
 

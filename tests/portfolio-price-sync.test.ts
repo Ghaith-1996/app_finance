@@ -1,13 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { HoldingPriceUpdate } from "@/lib/services/holding-pricing";
 
-type PortfolioRow = {
+type PortfolioRow = Record<string, unknown> & {
   id: string;
   user_id: string;
   last_synced_at: string | null;
   sync_status?: string;
 };
 
-type HoldingRow = {
+type HoldingRow = Record<string, unknown> & {
   id: string;
   portfolio_id: string;
   symbol: string;
@@ -23,7 +24,7 @@ type HoldingRow = {
   fx_as_of?: string | null;
 };
 
-type EarningsReportRow = {
+type EarningsReportRow = Record<string, unknown> & {
   symbol: string;
   is_active?: boolean;
 };
@@ -44,88 +45,18 @@ const mocked = vi.hoisted(() => ({
 
 function makeBuilder(table: "portfolios" | "holdings" | "ticker_earnings_reports") {
   const filters = new Map<string, unknown>();
-  let mode: "select" | "update" = "select";
-  let payload: Record<string, unknown> | null = null;
 
-  const matches = (row: Record<string, unknown>) => {
-    for (const [key, value] of filters.entries()) {
-      if (Array.isArray(value)) {
-        if (!value.includes(row[key])) return false;
-        continue;
-      }
-      if (row[key] !== value) return false;
-    }
-    return true;
-  };
-
-  const runSelect = () => {
-    const rows =
-      table === "portfolios"
-        ? mocked.state.portfolios.filter((row) =>
-            matches(row as unknown as Record<string, unknown>),
-          )
-        : table === "holdings"
-          ? mocked.state.holdings.filter((row) =>
-            matches(row as unknown as Record<string, unknown>),
-          )
-          : mocked.state.ticker_earnings_reports.filter((row) =>
-            matches(row as unknown as Record<string, unknown>),
-          );
-
-    return { data: rows, error: null as null | { message: string } };
-  };
-
-  const runUpdate = () => {
-    const rows =
-      table === "portfolios"
-        ? mocked.state.portfolios
-        : table === "holdings"
-          ? mocked.state.holdings
-          : mocked.state.ticker_earnings_reports;
-    if (table === "holdings") {
-      const holdingId = filters.get("id");
-      if (
-        typeof holdingId === "string" &&
-        mocked.failHoldingUpdateIds.has(holdingId)
-      ) {
-        return {
-          data: null,
-          error: { message: `Failed to update holding ${holdingId}` },
-        };
-      }
-    }
-
-    if (table === "holdings") {
-      const holdingId = filters.get("id");
-      const portfolioId = filters.get("portfolio_id");
-      if (typeof holdingId === "string" && typeof portfolioId === "string") {
-        mocked.updateHolding(holdingId, portfolioId, payload);
-      }
-    }
-
-    for (const row of rows) {
-      if (!matches(row as unknown as Record<string, unknown>)) continue;
-      Object.assign(row, payload ?? {});
-    }
-
-    return { data: null, error: null as null | { message: string } };
-  };
-
-  const run = () => {
-    if (mode === "select") return runSelect();
-    return runUpdate();
-  };
+  const matches = (row: Record<string, unknown>) =>
+    [...filters].every(([key, value]) =>
+      Array.isArray(value) ? value.includes(row[key]) : row[key] === value,
+    );
+  const run = () => ({
+    data: mocked.state[table].filter(matches),
+    error: null,
+  });
 
   const builder = {
-    select: () => {
-      mode = "select";
-      return builder;
-    },
-    update: (nextPayload: Record<string, unknown>) => {
-      mode = "update";
-      payload = nextPayload;
-      return builder;
-    },
+    select: () => builder,
     eq: (column: string, value: unknown) => {
       filters.set(column, value);
       return builder;
@@ -157,7 +88,7 @@ function makeBuilder(table: "portfolios" | "holdings" | "ticker_earnings_reports
 // Emulates the apply_holding_price_updates RPC: all-or-nothing, like the SQL function.
 function applyHoldingPriceUpdates(params: {
   p_portfolio_id: string;
-  p_updates: Array<Record<string, unknown>>;
+  p_updates: HoldingPriceUpdate[];
   p_sync_state: "complete" | "partial";
   p_synced_at: string;
 }) {
@@ -166,7 +97,7 @@ function applyHoldingPriceUpdates(params: {
   );
   if (!portfolio) return { data: null, error: { code: "42501", message: "Portfolio not found or unauthorized" } };
   for (const update of params.p_updates) {
-    const id = update.id as string;
+    const id = update.id;
     if (mocked.failHoldingUpdateIds.has(id)) {
       return { data: null, error: { message: `Failed to update holding ${id}` } };
     }
@@ -175,16 +106,16 @@ function applyHoldingPriceUpdates(params: {
     const row = mocked.state.holdings.find((holding) => holding.id === update.id);
     if (!row) return { data: null, error: { message: "holding not in portfolio" } };
     mocked.updateHolding(row.id, params.p_portfolio_id, update);
-    row.allocation = update.allocation as number;
+    row.allocation = update.allocation;
     if ("price" in update) {
-      row.price = update.price as number;
-      row.current_price = update.price as number;
-      row.previous_close = (update.previousClose as number | null) ?? null;
-      row.daily_change = update.dailyChange as number;
-      row.quote_currency = update.currency as string;
-      row.quote_as_of = update.quoteAsOf as string;
-      row.fx_rate_to_usd = (update.fxRateToUsd as number | null) ?? null;
-      row.fx_as_of = (update.fxAsOf as string | null) ?? null;
+      row.price = update.price;
+      row.current_price = update.price;
+      row.previous_close = update.previousClose ?? null;
+      row.daily_change = update.dailyChange;
+      row.quote_currency = update.currency;
+      row.quote_as_of = update.quoteAsOf ?? null;
+      row.fx_rate_to_usd = update.fxRateToUsd ?? null;
+      row.fx_as_of = update.fxAsOf ?? null;
     }
   }
   if (params.p_sync_state === "complete") {
@@ -307,18 +238,20 @@ describe("portfolio price sync", () => {
     vi.useRealTimers();
   });
 
-  it("skips when portfolio last_synced_at is newer than the threshold", async () => {
-    mocked.state.portfolios[0].last_synced_at = "2026-03-25T11:59:45.000Z";
-
-    const result = await syncHoldingPricesIfStale("portfolio-1");
-
-    expect(result).toEqual({ updated: 0, skipped: true, error: null });
-    expect(mocked.getQuotes).not.toHaveBeenCalled();
-  });
-
-  it("skips when the latest holding quote_as_of is newer than the threshold", async () => {
-    mocked.state.portfolios[0].last_synced_at = "2026-03-25T11:00:00.000Z";
-    mocked.state.holdings[1].quote_as_of = "2026-03-25T11:59:40.000Z";
+  it.each([
+    {
+      name: "skips when portfolio last_synced_at is newer than the threshold",
+      syncedAt: "2026-03-25T11:59:45.000Z",
+      quoteAsOf: "2026-03-25T11:20:00.000Z",
+    },
+    {
+      name: "skips when the latest holding quote_as_of is newer than the threshold",
+      syncedAt: "2026-03-25T11:00:00.000Z",
+      quoteAsOf: "2026-03-25T11:59:40.000Z",
+    },
+  ])("$name", async ({ syncedAt, quoteAsOf }) => {
+    mocked.state.portfolios[0].last_synced_at = syncedAt;
+    mocked.state.holdings[1].quote_as_of = quoteAsOf;
 
     const result = await syncHoldingPricesIfStale("portfolio-1");
 

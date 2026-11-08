@@ -26,12 +26,20 @@ export function SiteHeader() {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") setOpen(false);
     };
+    // The menu is md:hidden, so close it (and release the lock) once the viewport reaches md.
+    const desktop = window.matchMedia?.("(min-width: 768px)");
+    const onBreakpoint = () => {
+      if (desktop?.matches) setOpen(false);
+    };
+    onBreakpoint();
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     document.addEventListener("keydown", onKeyDown);
+    desktop?.addEventListener?.("change", onBreakpoint);
     return () => {
       document.body.style.overflow = previousOverflow;
       document.removeEventListener("keydown", onKeyDown);
+      desktop?.removeEventListener?.("change", onBreakpoint);
     };
   }, [open]);
 

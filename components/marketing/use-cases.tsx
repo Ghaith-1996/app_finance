@@ -13,7 +13,6 @@ import { buttonStyles } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { useCases } from "@/lib/mock-data";
-import { prefersReducedMotion } from "@/lib/motion";
 import type { UseCase } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -29,6 +28,8 @@ export function UseCases() {
   const autoAdvanceTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const stopAutoAdvance = useCallback(() => {
+    // Remember early focus/selection even before the observer starts a timer.
+    hasAutoAdvanced.current = true;
     if (autoAdvanceTimer.current === null) return;
     clearInterval(autoAdvanceTimer.current);
     autoAdvanceTimer.current = null;
@@ -53,7 +54,14 @@ export function UseCases() {
   useEffect(() => {
     if (!inView || hasAutoAdvanced.current) return;
     hasAutoAdvanced.current = true;
-    if (prefersReducedMotion()) return;
+    const motionQuery = typeof window.matchMedia === "function"
+      ? window.matchMedia("(prefers-reduced-motion: reduce)")
+      : null;
+    if (motionQuery?.matches) return;
+    const handleMotionChange = (event: MediaQueryListEvent) => {
+      if (event.matches) stopAutoAdvance();
+    };
+    motionQuery?.addEventListener("change", handleMotionChange);
     let step = 0;
     autoAdvanceTimer.current = setInterval(() => {
       step += 1;
@@ -63,7 +71,10 @@ export function UseCases() {
       }
       setActiveId(useCases[step]!.id);
     }, 4000);
-    return stopAutoAdvance;
+    return () => {
+      motionQuery?.removeEventListener("change", handleMotionChange);
+      stopAutoAdvance();
+    };
   }, [inView, stopAutoAdvance]);
 
   const selectUseCase = (id: string) => {

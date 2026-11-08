@@ -37,7 +37,13 @@ function createSupabaseMock(rows: Array<Record<string, unknown>>) {
                 throw new Error(`Unexpected column ${idsColumn}`);
               }
               updateCalls.push({ values, ids });
-              return Promise.resolve({ error: null });
+              const result = { data: ids.map((id) => ({ id })), error: null };
+              const query = {
+                or: () => query,
+                select: async () => result,
+                then: (resolve: (value: typeof result) => unknown) => Promise.resolve(result).then(resolve),
+              };
+              return query;
             },
           };
         },

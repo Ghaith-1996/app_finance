@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocked = vi.hoisted(() => ({ analyzeArticle: vi.fn() }));
 vi.mock("@/lib/services/ai", () => ({
-  getAIProvider: () => ({ analyzeArticle: mocked.analyzeArticle }),
+  getEnrichmentProvider: () => ({ analyzeArticle: mocked.analyzeArticle }),
 }));
 
 import {

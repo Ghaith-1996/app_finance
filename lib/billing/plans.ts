@@ -1,7 +1,7 @@
 import type { AIProviderId } from "@/lib/services/ai";
 import type { ArticleChatModelTier } from "@/lib/types";
 
-export type TieredProviderId = Extract<AIProviderId, "azure" | "mistral" | "openrouter">;
+export type TieredProviderId = Extract<AIProviderId, "azure" | "nemotron" | "openrouter">;
 
 export type PlanKey = "free" | "premium" | "ultimate";
 
@@ -52,7 +52,7 @@ export function requiredPlanForTier(tier: ArticleChatModelTier): PlanKey {
 
 export function providerIdForTier(tier: ArticleChatModelTier): TieredProviderId {
   if (tier === "ultimate") return "azure";
-  if (tier === "premium") return "mistral";
+  if (tier === "premium") return "nemotron";
   return "openrouter";
 }
 

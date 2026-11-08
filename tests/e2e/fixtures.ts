@@ -15,6 +15,27 @@ export function httpFixtures(scenario: string, responses: Record<string, unknown
   writeFileSync(process.env.E2E_HTTP_FIXTURES!, JSON.stringify({ scenario, responses }));
 }
 
+export function yahooQuoteFixtures(symbols: string[]) {
+  return [
+    { origin: "https://finance.yahoo.com", method: "GET", path: "/quote/AAPL", headers: { "content-type": "text/html", "set-cookie": "A3=e2e-cookie; Domain=.yahoo.com; Path=/; Secure" }, body: "<html>Local Yahoo transport fixture</html>" },
+    { origin: "https://query1.finance.yahoo.com", method: "GET", path: "/v1/test/getcrumb", headers: { "content-type": "text/plain" }, body: "e2e-crumb" },
+    { origin: "https://query2.finance.yahoo.com", method: "GET", path: "/v7/finance/quote", body: { quoteResponse: { error: null, result: symbols.map((symbol) => ({
+      symbol, shortName: `Fixture ${symbol}`, language: "en-US", region: "US", quoteType: "EQUITY", triggerable: true,
+      marketState: "REGULAR", tradeable: false, exchange: "NMS", exchangeTimezoneName: "America/New_York", exchangeTimezoneShortName: "EDT",
+      gmtOffSetMilliseconds: -14400000, market: "us_market", esgPopulated: false, sourceInterval: 15, exchangeDataDelayedBy: 0,
+      fullExchangeName: "NasdaqGS", currency: "USD", regularMarketPrice: 20, regularMarketPreviousClose: 19,
+      regularMarketTime: Math.floor(Date.now() / 1000), regularMarketChange: 1, regularMarketChangePercent: 5.263,
+    })) } } },
+  ];
+}
+
+export function yahooSearchFixtures(symbols: string[]) {
+  return symbols.map((symbol) => ({
+    origin: "https://query2.finance.yahoo.com", method: "GET", path: "/v1/finance/search", query: { q: symbol },
+    body: { quotes: [{ symbol, shortname: `Fixture ${symbol}`, exchange: "NMS", quoteType: "EQUITY", typeDisp: "equity", score: 1, index: "quotes", isYahooFinance: true }], news: [], nav: [], lists: [], explains: [], researchReports: [], screenerFieldResults: [], count: 1, totalTime: 1, timeTakenForQuotes: 1, timeTakenForNews: 1, timeTakenForAlgowatchlist: 1, timeTakenForPredefinedScreener: 1, timeTakenForCrunchbase: 1, timeTakenForNav: 1, timeTakenForResearchReports: 1, timeTakenForScreenerField: 1, timeTakenForCulturalAssets: 1, timeTakenForSearchLists: 1 },
+  }));
+}
+
 export async function completeProfile(user: LocalUser) {
   const result = await admin.from("user_profiles").upsert({ user_id: user.id, first_name: "Fixture", last_name: "Alpha", display_name: "Fixture Alpha", handle: `alpha_${user.id.slice(0, 8)}`, accepted_terms_at: new Date().toISOString() });
   expect(result.error).toBeNull();
@@ -94,7 +115,9 @@ export const test = base.extend<Fixture>({
             window.onTurnstileLoad?.();
           })();` });
       }
-      if ([appOrigin, gateway].includes(origin)) return route.continue();
+      // Next reconstructs request.url as localhost for callback redirects; both
+      // loopback names address this container's single owned Next server.
+      if ([appOrigin, "http://localhost:3000", "http://127.0.0.1:3001", gateway].includes(origin)) return route.continue();
       appendFileSync(process.env.E2E_LEDGER!, JSON.stringify({ transport: "browser", method: route.request().method(), path: url.pathname, status: "blocked" }) + "\n");
       return route.abort("blockedbyclient");
     });

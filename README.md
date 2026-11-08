@@ -51,13 +51,14 @@ Provider configuration is needed for the features below, not just for startup.
 
 `AI_PROVIDER` selects general enrichment/analysis through [lib/services/ai/index.ts](lib/services/ai/index.ts).
 Unrecognized or absent values use the public OpenAI implementation.
-Five provider paths are maintained:
+Six provider paths are maintained:
 
 | ID | Transport | Configuration names |
 |---|---|---|
 | `azure` | Azure OpenAI Responses | `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_BASE_URL`, `AZURE_OPENAI_MODEL` (or `AZURE_OPENAI_DEPLOYMENT`), optional `AZURE_OPENAI_REASONING_EFFORT` |
 | `openrouter` | OpenRouter chat completions; StepFun default | `OPENROUTER_API_KEY`, optional `OPENROUTER_MODEL`, `OPENROUTER_HTTP_REFERER`, `OPENROUTER_APP_NAME` |
-| `mistral` | Mistral chat completions | `MISTRAL_API_KEY`, optional `MISTRAL_MODEL` |
+| `nemotron` | OpenRouter chat completions on a separate key; `nvidia/nemotron-3-ultra-550b-a55b:free` default | `OPENROUTER_NEMOTRON_API_KEY`, optional `OPENROUTER_NEMOTRON_MODEL` (shares the referer/app-name settings) |
+| `mistral` | Mistral chat completions (no longer routed by default) | `MISTRAL_API_KEY`, optional `MISTRAL_MODEL` |
 | `openai` | Public OpenAI chat completions | `OPENAI_API_KEY` |
 | `anthropic` | Anthropic Messages | `ANTHROPIC_API_KEY` |
 
@@ -65,7 +66,11 @@ Azure's base URL accepts the resource root or `/openai/v1/`; the model identifie
 An Azure AI Foundry agent endpoint is not an Azure OpenAI Responses endpoint.
 OpenRouter defaults to `stepfun/step-3.5-flash:free`; retain this path unless explicitly authorized to remove it.
 Defaults and validation live in the provider modules and [lib/env.ts](lib/env.ts), not in an independently maintained model catalog.
-Article chat and portfolio copilot select by model tier: `free` → OpenRouter, `premium` → Mistral, `ultimate` → Azure.
+Article chat and portfolio copilot select by model tier: `free` → OpenRouter, `premium` → Nemotron, `ultimate` → Azure.
+Article enrichment tries Groq first (`GROQ_API_KEY`, optional `GROQ_MODEL`; `openai/gpt-oss-120b`, medium reasoning, JSON mode) and falls back to the `AI_PROVIDER` provider (production: `nemotron`) only when Groq refuses with 401/403/429 or has no key.
+Portfolio analysis uses `AI_PROVIDER` alone, so it never spends Groq's budget.
+Free tiers cap throughput: Groq 8K tokens/minute and 200K/day (~115 articles); OpenRouter `:free` 20 requests/minute and 50/day (1,000/day after 10 purchased credits). The news cron starts enrichment batches a minute apart for Groq's per-minute limit.
+When every enrichment provider refuses with 401/403/429, the article's attempt is returned, the batch stops and the run fails instead of exhausting retries.
 [lib/billing/plans.ts](lib/billing/plans.ts) defines tier rights; [lib/security/ai-access.ts](lib/security/ai-access.ts) enforces billing, burst and durable quota checks.
 Failed answer requests release the charged quota bucket on a best-effort basis; failed requests still count against burst limits.
 `AI_PROVIDER` does not override this tier routing.
@@ -116,7 +121,7 @@ Keep results tied to a commit/working-tree state, command, runtime, initial data
 Mocks can verify application failure handling; they cannot prove database locking, rollback, RLS or atomic quotas.
 SQL execution cannot by itself prove OAuth, browser behavior, a real news source or live AI operation.
 [TEST_AUDIT.md](TEST_AUDIT.md) records the dated test cleanup decisions; its counters are historical.
-The proposed full-stack E2E transition is not yet a verified procedure here; add commands only after the runner and scenarios actually exist and execute.
+The local E2E runner below executes real application layers with external HTTP fixtures. Check each run's assertion results for the exact sub-oracles exercised; its existence alone does not establish complete coverage or verify OAuth and live providers.
 Provider smoke scripts are not E2E coverage. Current quality-gate results belong to the implementation reports, not inherited claims in this guide.
 Ordinary deterministic checks must avoid real paid generations, emails, SMS and payments.
 
@@ -161,6 +166,18 @@ Health includes freshness, enrichment backlog, failed runs, stale quotes and fai
 It does not yet fully report billing reconciliation drift or per-portfolio analysis age.
 
 ## Staging checks still requiring evidence
+
+### Isolated local E2E
+
+`npm run test:e2e` builds a disposable Node22/Python3.11/Chromium image, starts a fresh Supabase2.119.0 stack, applies all47 migrations in lexical order, and runs the production Next app and Playwright. Docker's `default` context must be available. Set `E2E_SUPABASE_BIN` to the installed2.119.0 CLI executable; install that CLI outside this checkout. On Windows use its native `supabase.exe`. Set `E2E_RESULTS_DIR` to choose an external proof directory.
+
+The runner supplies fictitious provider credentials and locally generated Auth credentials. It does not load the project `.env`. External provider HTTP is intercepted; the app, Auth, PostgREST, RLS, RPCs, SDKs, parsers and Python subprocesses execute normally. The internal Docker network blocks external egress during scenarios. OAuth redirects and real provider services still require the separately authorized staging checks below.
+
+`npm run test:e2e -- --frontend` runs the same foundation gates plus `frontend-polish.spec.ts`. It checks the landing page at 1440×900 and 390×900, scripting-disabled rendering, focus both before and after viewport entry, reduced-motion changes during cycling, native media queries/IntersectionObserver/timers/scrolling, and authenticated analysis status presentation. The default runner and CI include these scenarios too. Analysis statuses are persisted fixtures, not generated AI results; realtime delivery is not qualified because this local stack disables that service. One hydrated-feed scenario injects a missing `matchMedia` API to verify graceful scrolling fallback. Public-page screenshots are included in the sanitized proof.
+
+Normal runs remove only their own containers, network and image, including on failure. Exported proof contains versions, migration/source hashes, the patch fingerprint, assertion results and sanitized HTTP events. It excludes session cookies, tokens, request headers and provider payloads. Private diagnostics remain in the runner's temporary directory; do not upload them. CI uploads only `e2e-results/` and keeps SQL upgrade/concurrency validation in its separate job.
+
+For local debugging, `E2E_KEEP_DIAGNOSTIC=1` retains the printed owned namespace and temporary workdir. Those runs are not qualification evidence. Stop that exact Supabase workdir with `supabase stop --no-backup --workdir <printed-workdir>`, remove its `<namespace>-tests` container, then its `<namespace>` network and image. Never prune shared Docker resources. `test:e2e:browser` is an internal entry point requiring the prepared container environment, not a substitute for the runner's gates.
 
 These are open acceptance criteria; no success checkbox or deployment status is inherited from older sessions.
 Use owned test accounts/data. Real-provider and sandbox checks are a separately authorized activity.

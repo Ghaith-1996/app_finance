@@ -38,9 +38,14 @@ function pickColumns(row: Record<string, unknown>, columns: string) {
   }, {});
 }
 
+type MockQueryResult = {
+  data: Array<Record<string, unknown>> | null;
+  error: { message: string } | null;
+};
+
 function createQueryBuilder(
   rows: Array<Record<string, unknown>>,
-  columns: string,
+  selection: string | Record<string, unknown>,
   errorMessage?: string,
 ) {
   const filters: Array<(row: Record<string, unknown>) => boolean> = [];
@@ -56,74 +61,32 @@ function createQueryBuilder(
       filters.push((row) => allowed.has(row[column]));
       return builder;
     },
-    order() {
-      return builder;
-    },
+    order: () => builder,
     range(from: number, to: number) {
       window = [from, to];
       return builder;
     },
-    then<TResult1 = { data: Array<Record<string, unknown>>; error: null }, TResult2 = never>(
-      onfulfilled?: ((value: { data: Array<Record<string, unknown>> | null; error: { message: string } | null }) => TResult1 | PromiseLike<TResult1>) | null,
+    then<TResult1 = MockQueryResult, TResult2 = never>(
+      onfulfilled?: ((value: MockQueryResult) => TResult1 | PromiseLike<TResult1>) | null,
       onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
     ) {
       if (errorMessage) {
-        return Promise.resolve({
-          data: null,
-          error: { message: errorMessage },
-        }).then(onfulfilled, onrejected);
+        return Promise.resolve({ data: null, error: { message: errorMessage } })
+          .then(onfulfilled, onrejected);
       }
 
       const matched = rows.filter((row) => filters.every((filter) => filter(row)));
-      const data = (window ? matched.slice(window[0], window[1] + 1) : matched)
-        .slice(0, mockLimits.maxRows)
-        .map((row) => pickColumns(row, columns));
-
+      let data: MockQueryResult["data"] = null;
+      if (typeof selection === "string") {
+        data = (window ? matched.slice(window[0], window[1] + 1) : matched)
+          .slice(0, mockLimits.maxRows)
+          .map((row) => pickColumns(row, selection));
+      } else {
+        for (const row of matched) Object.assign(row, selection);
+      }
       return Promise.resolve({ data, error: null }).then(onfulfilled, onrejected);
     },
   };
-
-  return builder;
-}
-
-function createUpdateBuilder(
-  rows: Array<Record<string, unknown>>,
-  patch: Record<string, unknown>,
-  errorMessage?: string,
-) {
-  const filters: Array<(row: Record<string, unknown>) => boolean> = [];
-
-  const builder = {
-    eq(column: string, value: unknown) {
-      filters.push((row) => row[column] === value);
-      return builder;
-    },
-    in(column: string, values: unknown[]) {
-      const allowed = new Set(values);
-      filters.push((row) => allowed.has(row[column]));
-      return builder;
-    },
-    then<TResult1 = { data: null; error: null }, TResult2 = never>(
-      onfulfilled?: ((value: { data: null; error: { message: string } | null }) => TResult1 | PromiseLike<TResult1>) | null,
-      onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
-    ) {
-      if (errorMessage) {
-        return Promise.resolve({
-          data: null,
-          error: { message: errorMessage },
-        }).then(onfulfilled, onrejected);
-      }
-
-      for (const row of rows) {
-        if (filters.every((filter) => filter(row))) {
-          Object.assign(row, patch);
-        }
-      }
-
-      return Promise.resolve({ data: null, error: null }).then(onfulfilled, onrejected);
-    },
-  };
-
   return builder;
 }
 
@@ -170,7 +133,7 @@ function createMockSupabase(seed?: Partial<MockTables>, failures?: MockFailures)
             failures?.update?.[tableName],
             callCounts.update[tableName]++,
           );
-          return createUpdateBuilder(
+          return createQueryBuilder(
             tables[tableName],
             patch,
             failureMessage ?? undefined,
@@ -225,6 +188,56 @@ function jsonResponse(body: unknown) {
   });
 }
 
+type SecReport = NonNullable<Awaited<ReturnType<typeof resolveLatestSecEarningsReport>>>;
+type SyncDeps = NonNullable<Parameters<typeof syncTrackedEarningsReports>[1]>;
+
+function secReport(overrides: Partial<SecReport> = {}): SecReport {
+  return {
+    url: "https://www.sec.gov/Archives/edgar/data/320193/example.htm",
+    reportDate: "2026-04-30",
+    filingDate: "2026-05-01",
+    filingForm: "8-K",
+    title: "Current report",
+    sortDate: "2026-04-30",
+    score: 100,
+    acceptedAt: "20260501160000",
+    ...overrides,
+  };
+}
+
+function syncDeps(overrides: SyncDeps = {}): SyncDeps {
+  return {
+    getCompanyWebsiteSeed: async () => null,
+    discoverCompanyEarningsLink: async () => null,
+    resolveLatestSecEarningsReport: async () => null,
+    ...overrides,
+  };
+}
+
+function oldReport(symbol: string) {
+  const url = "https://old.example.com/" + symbol.toLowerCase();
+  return {
+    symbol,
+    preferred_url: url,
+    url_source: "company",
+    company_url: url,
+    sec_url: null,
+    report_date: "2025-01-01",
+    filing_form: null,
+    title: "Old link",
+    is_active: true,
+    last_checked_at: "2025-01-01T00:00:00.000Z",
+    error: null,
+  };
+}
+
+function mockFetch(routes: Record<string, () => Response>) {
+  return vi.fn<typeof fetch>(async (input) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    return routes[url]?.() ?? new Response("not found", { status: 404 });
+  });
+}
+
 describe("earnings report service", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -241,35 +254,14 @@ describe("earnings report service", () => {
   });
 
   it("discovers a company-hosted earnings link from the site seed and landing pages", async () => {
-    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
-      const url = typeof input === "string"
-        ? input
-        : input instanceof URL
-          ? input.toString()
-          : input.url;
-
-      if (url === "https://investor.example.com/") {
-        return htmlResponse(`
-          <html>
-            <body>
-              <a href="/investor-relations">Investor Relations</a>
-            </body>
-          </html>
-        `);
-      }
-
-      if (url === "https://investor.example.com/investor-relations") {
-        return htmlResponse(`
-          <html>
-            <body>
-              <a href="/press/q1-2026-results.html">Q1 2026 Results</a>
-            </body>
-          </html>
-        `);
-      }
-
-      return new Response("not found", { status: 404 });
-    }) as typeof fetch;
+    const fetchImpl = mockFetch({
+      "https://investor.example.com/": () => htmlResponse(
+        '<html><body><a href="/investor-relations">Investor Relations</a></body></html>',
+      ),
+      "https://investor.example.com/investor-relations": () => htmlResponse(
+        '<html><body><a href="/press/q1-2026-results.html">Q1 2026 Results</a></body></html>',
+      ),
+    });
 
     const result = await discoverCompanyEarningsLink("https://investor.example.com/", {
       fetchImpl,
@@ -284,7 +276,7 @@ describe("earnings report service", () => {
   });
 
   it("rejects invalid or private company website URLs before fetching", async () => {
-    const fetchImpl = vi.fn() as unknown as typeof fetch;
+    const fetchImpl = mockFetch({});
 
     const result = await discoverCompanyEarningsLink("http://127.0.0.1/internal", {
       fetchImpl,
@@ -295,22 +287,12 @@ describe("earnings report service", () => {
   });
 
   it("blocks redirect targets that resolve to private or metadata URLs", async () => {
-    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
-      const url = typeof input === "string"
-        ? input
-        : input instanceof URL
-          ? input.toString()
-          : input.url;
-
-      if (url === "https://investor.example.com/") {
-        return new Response(null, {
-          status: 302,
-          headers: { location: "http://169.254.169.254/latest/meta-data" },
-        });
-      }
-
-      return new Response("not found", { status: 404 });
-    }) as typeof fetch;
+    const fetchImpl = mockFetch({
+      "https://investor.example.com/": () => new Response(null, {
+        status: 302,
+        headers: { location: "http://169.254.169.254/latest/meta-data" },
+      }),
+    });
 
     const result = await discoverCompanyEarningsLink("https://investor.example.com/", {
       fetchImpl,
@@ -322,32 +304,15 @@ describe("earnings report service", () => {
   });
 
   it("allows redirect chains when every hop stays on a validated public target", async () => {
-    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
-      const url = typeof input === "string"
-        ? input
-        : input instanceof URL
-          ? input.toString()
-          : input.url;
-
-      if (url === "https://investor.example.com/") {
-        return new Response(null, {
-          status: 302,
-          headers: { location: "/investor-relations" },
-        });
-      }
-
-      if (url === "https://investor.example.com/investor-relations") {
-        return htmlResponse(`
-          <html>
-            <body>
-              <a href="/press/q2-2026-results.html">Q2 2026 Results</a>
-            </body>
-          </html>
-        `);
-      }
-
-      return new Response("not found", { status: 404 });
-    }) as typeof fetch;
+    const fetchImpl = mockFetch({
+      "https://investor.example.com/": () => new Response(null, {
+        status: 302,
+        headers: { location: "/investor-relations" },
+      }),
+      "https://investor.example.com/investor-relations": () => htmlResponse(
+        '<html><body><a href="/press/q2-2026-results.html">Q2 2026 Results</a></body></html>',
+      ),
+    });
 
     const result = await discoverCompanyEarningsLink("https://investor.example.com/", {
       fetchImpl,
@@ -362,90 +327,64 @@ describe("earnings report service", () => {
   });
 
   it("ignores unrelated 8-K and 6-K filings when they lack earnings markers", async () => {
-    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
-      const url = typeof input === "string"
-        ? input
-        : input instanceof URL
-          ? input.toString()
-          : input.url;
-
-      if (url === "https://www.sec.gov/files/company_tickers.json") {
-        return jsonResponse({
-          "0": { ticker: "MSFT", cik_str: 789019 },
-        });
-      }
-
-      if (url === "https://data.sec.gov/submissions/CIK0000789019.json") {
-        return jsonResponse({
-          filings: {
-            recent: {
-              form: ["8-K", "6-K"],
-              filingDate: ["2026-05-10", "2026-05-03"],
-              reportDate: ["2026-05-10", "2026-05-03"],
-              accessionNumber: [
-                "0000789019-26-000010",
-                "0000789019-26-000003",
-              ],
-              primaryDocument: ["current-report.htm", "foreign-report.htm"],
-              primaryDocDescription: [
-                "Entry into a Material Definitive Agreement",
-                "Director change notice",
-              ],
-              items: ["1.01", "5.02"],
-              acceptanceDateTime: ["20260510120000", "20260503120000"],
-            },
+    const fetchImpl = mockFetch({
+      "https://www.sec.gov/files/company_tickers.json": () => jsonResponse({
+        "0": { ticker: "MSFT", cik_str: 789019 },
+      }),
+      "https://data.sec.gov/submissions/CIK0000789019.json": () => jsonResponse({
+        filings: {
+          recent: {
+            form: ["8-K", "6-K"],
+            filingDate: ["2026-05-10", "2026-05-03"],
+            reportDate: ["2026-05-10", "2026-05-03"],
+            accessionNumber: [
+              "0000789019-26-000010",
+              "0000789019-26-000003",
+            ],
+            primaryDocument: ["current-report.htm", "foreign-report.htm"],
+            primaryDocDescription: [
+              "Entry into a Material Definitive Agreement",
+              "Director change notice",
+            ],
+            items: ["1.01", "5.02"],
+            acceptanceDateTime: ["20260510120000", "20260503120000"],
           },
-        });
-      }
-
-      return new Response("not found", { status: 404 });
-    }) as typeof fetch;
+        },
+      }),
+    });
 
     const result = await resolveLatestSecEarningsReport("MSFT", { fetchImpl });
     expect(result).toBeNull();
   });
 
   it("does not let a newer unrelated 8-K beat an older real earnings filing", async () => {
-    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
-      const url = typeof input === "string"
-        ? input
-        : input instanceof URL
-          ? input.toString()
-          : input.url;
-
-      if (url === "https://www.sec.gov/files/company_tickers.json") {
-        return jsonResponse({
-          "0": { ticker: "NVDA", cik_str: 1045810 },
-        });
-      }
-
-      if (url === "https://data.sec.gov/submissions/CIK0001045810.json") {
-        return jsonResponse({
-          filings: {
-            recent: {
-              form: ["8-K", "8-K", "10-Q"],
-              filingDate: ["2026-05-10", "2026-05-01", "2026-04-29"],
-              reportDate: ["2026-05-10", "2026-05-01", "2026-04-29"],
-              accessionNumber: [
-                "0001045810-26-000010",
-                "0001045810-26-000007",
-                "0001045810-26-000005",
-              ],
-              primaryDocument: ["other-current-report.htm", "earnings-release.htm", "quarterly-report.htm"],
-              primaryDocDescription: [
-                "Entry into a Material Definitive Agreement",
-                "First Quarter Earnings Results",
-                "Quarterly report",
-              ],
-              items: ["1.01", "2.02", null],
-              acceptanceDateTime: ["20260510130000", "20260501120000", "20260429120000"],
-            },
+    const fetchImpl = mockFetch({
+      "https://www.sec.gov/files/company_tickers.json": () => jsonResponse({
+        "0": { ticker: "NVDA", cik_str: 1045810 },
+      }),
+      "https://data.sec.gov/submissions/CIK0001045810.json": () => jsonResponse({
+        filings: {
+          recent: {
+            form: ["8-K", "8-K", "10-Q"],
+            filingDate: ["2026-05-10", "2026-05-01", "2026-04-29"],
+            reportDate: ["2026-05-10", "2026-05-01", "2026-04-29"],
+            accessionNumber: [
+              "0001045810-26-000010",
+              "0001045810-26-000007",
+              "0001045810-26-000005",
+            ],
+            primaryDocument: ["other-current-report.htm", "earnings-release.htm", "quarterly-report.htm"],
+            primaryDocDescription: [
+              "Entry into a Material Definitive Agreement",
+              "First Quarter Earnings Results",
+              "Quarterly report",
+            ],
+            items: ["1.01", "2.02", null],
+            acceptanceDateTime: ["20260510130000", "20260501120000", "20260429120000"],
           },
-        });
-      }
-
-      return new Response("not found", { status: 404 });
-    }) as typeof fetch;
+        },
+      }),
+    });
 
     const result = await resolveLatestSecEarningsReport("NVDA", { fetchImpl });
 
@@ -463,20 +402,10 @@ describe("earnings report service", () => {
       holdings: [{ symbol: "AAPL" }],
     });
 
-    const result = await syncTrackedEarningsReports(supabase as never, {
+    const result = await syncTrackedEarningsReports(supabase as never, syncDeps({
       getCompanyWebsiteSeed: async () => "https://apple.example.com",
-      discoverCompanyEarningsLink: async () => null,
-      resolveLatestSecEarningsReport: async () => ({
-        url: "https://www.sec.gov/Archives/edgar/data/320193/example.htm",
-        reportDate: "2026-04-30",
-        filingDate: "2026-05-01",
-        filingForm: "8-K",
-        title: "Current report",
-        sortDate: "2026-04-30",
-        score: 100,
-        acceptedAt: "20260501160000",
-      }),
-    });
+      resolveLatestSecEarningsReport: async () => secReport(),
+    }));
 
     expect(result).toEqual({
       processed: 1,
@@ -505,11 +434,7 @@ describe("earnings report service", () => {
       holdings: [{ symbol: "SHOP" }],
     });
 
-    const result = await syncTrackedEarningsReports(supabase as never, {
-      getCompanyWebsiteSeed: async () => null,
-      discoverCompanyEarningsLink: async () => null,
-      resolveLatestSecEarningsReport: async () => null,
-    });
+    const result = await syncTrackedEarningsReports(supabase as never, syncDeps());
 
     expect(result.missing).toBe(1);
     expect(supabase.tables.ticker_earnings_reports[0]).toEqual(
@@ -542,11 +467,7 @@ describe("earnings report service", () => {
     );
 
     await expect(
-      syncTrackedEarningsReports(supabase as never, {
-        resolveLatestSecEarningsReport: async () => null,
-        discoverCompanyEarningsLink: async () => null,
-        getCompanyWebsiteSeed: async () => null,
-      }),
+      syncTrackedEarningsReports(supabase as never, syncDeps()),
     ).rejects.toThrow("Failed to load holdings symbols: db unavailable");
 
     expect(supabase.tables.ticker_earnings_reports[0]).toEqual(
@@ -567,20 +488,12 @@ describe("earnings report service", () => {
     );
 
     await expect(
-      syncTrackedEarningsReports(supabase as never, {
-        getCompanyWebsiteSeed: async () => null,
-        discoverCompanyEarningsLink: async () => null,
-        resolveLatestSecEarningsReport: async () => ({
-          url: "https://www.sec.gov/Archives/edgar/data/320193/example.htm",
-          reportDate: "2026-04-30",
-          filingDate: "2026-05-01",
+      syncTrackedEarningsReports(supabase as never, syncDeps({
+        resolveLatestSecEarningsReport: async () => secReport({
           filingForm: "10-Q",
           title: "Quarterly report",
-          sortDate: "2026-04-30",
-          score: 100,
-          acceptedAt: "20260501160000",
         }),
-      }),
+      })),
     ).rejects.toThrow("Failed to upsert earnings report row for AAPL: write failed");
 
     // Audit J6: a failed write is surfaced without a second write that nulls report data.
@@ -600,13 +513,11 @@ describe("earnings report service", () => {
     );
 
     await expect(
-      syncTrackedEarningsReports(supabase as never, {
+      syncTrackedEarningsReports(supabase as never, syncDeps({
         getCompanyWebsiteSeed: async () => {
           throw new Error("seed lookup failed");
         },
-        discoverCompanyEarningsLink: async () => null,
-        resolveLatestSecEarningsReport: async () => null,
-      }),
+      })),
     ).rejects.toThrow("Failed to upsert earnings report row for AAPL: write failed");
 
     expect(supabase.tables.ticker_earnings_reports).toHaveLength(0);
@@ -633,11 +544,7 @@ describe("earnings report service", () => {
     );
 
     await expect(
-      syncTrackedEarningsReports(supabase as never, {
-        getCompanyWebsiteSeed: async () => null,
-        discoverCompanyEarningsLink: async () => null,
-        resolveLatestSecEarningsReport: async () => null,
-      }),
+      syncTrackedEarningsReports(supabase as never, syncDeps()),
     ).rejects.toThrow("Failed to load existing earnings report rows: read failed");
 
     expect(supabase.tables.ticker_earnings_reports).toEqual([
@@ -653,19 +560,7 @@ describe("earnings report service", () => {
       {
         holdings: [{ symbol: "AAPL" }],
         ticker_earnings_reports: [
-          {
-            symbol: "MSFT",
-            preferred_url: "https://old.example.com/msft",
-            url_source: "company",
-            company_url: "https://old.example.com/msft",
-            sec_url: null,
-            report_date: "2025-01-01",
-            filing_form: null,
-            title: "Old link",
-            is_active: true,
-            last_checked_at: "2025-01-01T00:00:00.000Z",
-            error: null,
-          },
+          oldReport("MSFT"),
         ],
       },
       {
@@ -676,20 +571,12 @@ describe("earnings report service", () => {
     );
 
     await expect(
-      syncTrackedEarningsReports(supabase as never, {
-        getCompanyWebsiteSeed: async () => null,
-        discoverCompanyEarningsLink: async () => null,
-        resolveLatestSecEarningsReport: async () => ({
-          url: "https://www.sec.gov/Archives/edgar/data/320193/example.htm",
-          reportDate: "2026-04-30",
-          filingDate: "2026-05-01",
+      syncTrackedEarningsReports(supabase as never, syncDeps({
+        resolveLatestSecEarningsReport: async () => secReport({
           filingForm: "10-Q",
           title: "Quarterly report",
-          sortDate: "2026-04-30",
-          score: 100,
-          acceptedAt: "20260501160000",
         }),
-      }),
+      })),
     ).rejects.toThrow("Failed to mark inactive earnings report rows: update failed");
 
     expect(
@@ -701,32 +588,8 @@ describe("earnings report service", () => {
     const supabase = createMockSupabase({
       holdings: [{ symbol: "AAPL" }],
       ticker_earnings_reports: [
-        {
-          symbol: "AAPL",
-          preferred_url: "https://old.example.com/aapl",
-          url_source: "company",
-          company_url: "https://old.example.com/aapl",
-          sec_url: null,
-          report_date: "2025-01-01",
-          filing_form: null,
-          title: "Old link",
-          is_active: true,
-          last_checked_at: "2025-01-01T00:00:00.000Z",
-          error: null,
-        },
-        {
-          symbol: "MSFT",
-          preferred_url: "https://old.example.com/msft",
-          url_source: "company",
-          company_url: "https://old.example.com/msft",
-          sec_url: null,
-          report_date: "2025-01-01",
-          filing_form: null,
-          title: "Old link",
-          is_active: true,
-          last_checked_at: "2025-01-01T00:00:00.000Z",
-          error: null,
-        },
+        oldReport("AAPL"),
+        oldReport("MSFT"),
       ],
     });
 
@@ -736,15 +599,8 @@ describe("earnings report service", () => {
         url: `${websiteUrl}/q1-2026-results`,
         title: "Q1 2026 Results",
       }),
-      resolveLatestSecEarningsReport: async () => ({
+      resolveLatestSecEarningsReport: async () => secReport({
         url: "https://www.sec.gov/Archives/edgar/data/example.htm",
-        reportDate: "2026-04-30",
-        filingDate: "2026-05-01",
-        filingForm: "8-K",
-        title: "Current report",
-        sortDate: "2026-04-30",
-        score: 100,
-        acceptedAt: "20260501160000",
       }),
     };
 
@@ -779,16 +635,15 @@ describe("earnings report last-known-good (audit J6)", () => {
   it("keeps a valid cached report when both discovery sources fail, and records the failure", async () => {
     const supabase = createMockSupabase({ holdings: [{ symbol: "AAPL" }], ticker_earnings_reports: [{ ...cached }] });
 
-    const result = await syncTrackedEarningsReports(supabase as never, {
+    const result = await syncTrackedEarningsReports(supabase as never, syncDeps({
       now: () => new Date("2026-10-01T09:17:00.000Z"),
       getCompanyWebsiteSeed: async () => {
         throw new Error("company seed timeout");
       },
-      discoverCompanyEarningsLink: async () => null,
       resolveLatestSecEarningsReport: async () => {
         throw new Error("SEC temporarily unavailable");
       },
-    });
+    }));
 
     expect(result).toMatchObject({ processed: 1, resolved: 0, missing: 0, failed: 1, stale: 1 });
     const row = supabase.tables.ticker_earnings_reports[0];
@@ -804,20 +659,16 @@ describe("earnings report last-known-good (audit J6)", () => {
   it("replaces the cached report once a newer one is verified", async () => {
     const supabase = createMockSupabase({ holdings: [{ symbol: "AAPL" }], ticker_earnings_reports: [{ ...cached }] });
 
-    const result = await syncTrackedEarningsReports(supabase as never, {
-      getCompanyWebsiteSeed: async () => null,
-      discoverCompanyEarningsLink: async () => null,
-      resolveLatestSecEarningsReport: async () => ({
+    const result = await syncTrackedEarningsReports(supabase as never, syncDeps({
+      resolveLatestSecEarningsReport: async () => secReport({
         url: "https://www.sec.gov/Archives/edgar/data/320193/q4.htm",
         reportDate: "2026-10-30",
         filingDate: "2026-10-31",
-        filingForm: "8-K",
         title: "Q4 results",
         sortDate: "2026-10-30",
-        score: 100,
         acceptedAt: "20261031160000",
       }),
-    });
+    }));
 
     expect(result).toMatchObject({ resolved: 1, failed: 0, stale: 0 });
     expect(supabase.tables.ticker_earnings_reports[0]).toMatchObject({
@@ -830,13 +681,11 @@ describe("earnings report last-known-good (audit J6)", () => {
   it("a symbol with no cached report and failing sources is recorded as missing with the error", async () => {
     const supabase = createMockSupabase({ holdings: [{ symbol: "MSFT" }] });
 
-    const result = await syncTrackedEarningsReports(supabase as never, {
-      getCompanyWebsiteSeed: async () => null,
-      discoverCompanyEarningsLink: async () => null,
+    const result = await syncTrackedEarningsReports(supabase as never, syncDeps({
       resolveLatestSecEarningsReport: async () => {
         throw new Error("SEC down");
       },
-    });
+    }));
 
     expect(result).toMatchObject({ missing: 1, failed: 1, stale: 0 });
     expect(supabase.tables.ticker_earnings_reports[0]).toMatchObject({ symbol: "MSFT", preferred_url: null, error: "SEC down" });
@@ -856,13 +705,11 @@ describe("earnings report last-known-good (audit J6)", () => {
 
     mockLimits.maxRows = 1_000;
     try {
-      const result = await syncTrackedEarningsReports(supabase as never, {
-        getCompanyWebsiteSeed: async () => null,
-        discoverCompanyEarningsLink: async () => null,
+      const result = await syncTrackedEarningsReports(supabase as never, syncDeps({
         resolveLatestSecEarningsReport: async () => {
           throw new Error("SEC down");
         },
-      });
+      }));
       expect(result).toMatchObject({ failed: 1, stale: 1, missing: 0 });
     } finally {
       mockLimits.maxRows = Number.POSITIVE_INFINITY;

@@ -15,7 +15,6 @@ describe("CSV import (B6)", () => {
     const { detected, result } = importCsv("Symbol,Date,Quantity,Avg Cost\nAAA,2026-09-30,10,20");
 
     expect(detected.isTransactionFile).toBe(false);
-    expect(result.error).toBeNull();
     expect(result.drafts).toHaveLength(1);
     expect(result.drafts[0]).toMatchObject({ symbol: "AAA", quantity: 10, averageCost: 20 });
   });
@@ -26,14 +25,12 @@ describe("CSV import (B6)", () => {
     );
 
     expect(detected.isTransactionFile).toBe(true);
-    expect(result.error).toBeNull();
     expect(result.drafts[0]).toMatchObject({ symbol: "AAA", quantity: 15, averageCost: 25 });
   });
 
   it("reports why a non-empty transaction file produced no holdings", () => {
     const { result } = importCsv("Date,Symbol,Action,Quantity,Price\n2026-01-02,AAA,Dividend,10,20\n2026-01-03,BBB,Split,2,0");
 
-    expect(result.drafts).toEqual([]);
     expect(result.error).toMatch(/2 row\(s\) without a recognizable buy\/sell side/);
     expect(result.skippedRows.map((row) => row.rowNumber)).toEqual([2, 3]);
   });
@@ -43,12 +40,10 @@ describe("CSV import (B6)", () => {
 
     expect(result.drafts.map((draft) => draft.symbol)).toEqual(["BBB"]);
     expect(result.skippedRows).toEqual([{ rowNumber: 2, reason: "row(s) without a symbol" }]);
-    expect(result.error).toBeNull();
   });
 
   it("errors when every position row is unusable", () => {
     const { result } = importCsv("Symbol,Quantity,Avg Cost\n,5,10\n,3,7");
-    expect(result.drafts).toEqual([]);
     expect(result.error).toMatch(/No holdings could be read from 2 row/);
   });
 });

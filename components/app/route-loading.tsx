@@ -1,4 +1,4 @@
-export default function Loading() {
+export default function RouteLoading() {
   return (
     <div className="min-h-screen bg-background px-6 py-10 lg:px-8 lg:py-12">
       <div className="mx-auto max-w-7xl space-y-6 animate-pulse">

@@ -173,7 +173,7 @@ export async function POST(request: Request) {
   } | null = null;
 
   if (insertedArticleIds.length > 0) {
-    const extractResult = await extractPublisherContent(supabase, {
+    const extractResult = await extractPublisherContent(serviceSupabase, {
       articleIds: insertedArticleIds,
     });
     extractionStats = {
@@ -224,7 +224,7 @@ export async function POST(request: Request) {
       stages.extraction = { status: "skipped", detail };
     }
 
-    const enrichResult = await ingestNewsToSupabase(supabase, {
+    const enrichResult = await ingestNewsToSupabase(serviceSupabase, {
       sourceTypes: [...ENRICHABLE_SOURCE_TYPES],
       limit: totalInserted + 5,
     });

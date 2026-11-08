@@ -15,6 +15,7 @@ import {
   toArticleChatError,
 } from "@/lib/services/ai";
 import { userFacingChatErrorMessage } from "@/lib/services/ai/ai-chat-errors";
+import { NEMOTRON_DEFAULT_MODEL } from "@/lib/services/ai/openrouter-provider";
 import { createLogger } from "@/lib/logger";
 import {
   AIUsageAccessError,
@@ -47,8 +48,8 @@ function deploymentLabelForLogs(id: TieredProviderId): string {
       "azure"
     );
   }
-  if (id === "mistral") {
-    return process.env.MISTRAL_MODEL?.trim() || "mistral-large-latest";
+  if (id === "nemotron") {
+    return process.env.OPENROUTER_NEMOTRON_MODEL?.trim() || NEMOTRON_DEFAULT_MODEL;
   }
   return process.env.OPENROUTER_MODEL?.trim() || "openrouter-default";
 }

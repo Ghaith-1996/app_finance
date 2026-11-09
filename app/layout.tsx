@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist_Mono, Manrope } from "next/font/google";
+import localFont from "next/font/local";
 import { cookies } from "next/headers";
 
 import {
@@ -10,8 +10,9 @@ import { APP_LOGO_ALT } from "@/lib/brand/logo";
 import { isTheme, THEME_COOKIE_KEY } from "@/lib/preferences";
 import "./globals.css";
 
-const manrope = Manrope({ subsets: ["latin"], variable: "--font-manrope", display: "swap" });
-const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-geist-mono", display: "swap" });
+// Bundled (OFL, see app/fonts) so builds never fetch from Google; the E2E build has no internet access.
+const manrope = localFont({ src: "./fonts/manrope-latin-variable.woff2", weight: "200 800", variable: "--font-manrope", display: "swap" });
+const geistMono = localFont({ src: "./fonts/geist-mono-variable.woff2", weight: "100 900", variable: "--font-geist-mono", display: "swap" });
 
 export const metadata: Metadata = {
   // Audit D14: route pages set a short title; the template adds the product name.

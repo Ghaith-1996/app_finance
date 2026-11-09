@@ -5,7 +5,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends python3 python3
 COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts && npx playwright install --with-deps chromium
 COPY requirements.lock ./
-RUN python3 -m venv /opt/python && /opt/python/bin/pip install --require-hashes -r requirements.lock
+# --no-deps: the lock is a full pip-compile closure; Debian's pip 23.0 re-resolves stripped extras to unpinned versions.
+RUN python3 -m venv /opt/python && /opt/python/bin/pip install --no-deps --require-hashes -r requirements.lock
 ENV PATH="/opt/python/bin:${PATH}"
 COPY . .
 CMD ["node", "tests/e2e/run.mjs", "--inside"]

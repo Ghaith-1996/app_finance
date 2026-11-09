@@ -37,7 +37,7 @@ test.describe("landing without scripts", () => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto("/");
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-    await page.locator('header a[href="#use-cases"]').click();
+    await page.getByRole("navigation", { name: "Primary", exact: true }).locator('a[href="#use-cases"]').click();
     await expect(page).toHaveURL(/#use-cases$/);
     const section = page.locator("#use-cases");
     await expect(section.getByRole("heading", { name: "See how it works in your daily investing routine" })).toBeVisible();

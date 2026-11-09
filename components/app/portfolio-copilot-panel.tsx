@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { Loader2, SendHorizonal, Sparkles } from "lucide-react";
+import { CircleNotch as Loader2 } from "@phosphor-icons/react/dist/ssr/CircleNotch";
+import { PaperPlaneRight as SendHorizonal } from "@phosphor-icons/react/dist/ssr/PaperPlaneRight";
+import { Sparkle as Sparkles } from "@phosphor-icons/react/dist/ssr/Sparkle";
 
 import { Button } from "@/components/ui/button";
 import { TurnstileBlock, useTurnstile } from "@/components/security/turnstile-widget";
@@ -177,22 +179,22 @@ export function PortfolioCopilotPanel({
   );
 
   return (
-    <div className="space-y-4 rounded-[2rem] border border-white/[0.06] bg-surface-raised p-5">
+    <div className="space-y-4 rounded-4xl border border-white/[0.06] bg-surface-raised p-6">
       <div className="flex items-center gap-3">
         <div className="text-brand">
           <Sparkles className="h-5 w-5 fill-current" />
         </div>
         <div>
-          <p className="text-[15px] font-bold text-white">Portfolio Copilot</p>
+          <p className="text-sm font-bold text-white">Portfolio Copilot</p>
           <p className="text-sm text-slate-400">
             Ask about holdings, exposure, catalysts, or your watchlist.
           </p>
         </div>
       </div>
 
-      <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 py-2.5">
+      <div className="flex flex-col gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.03] p-3">
         <div className="min-w-0 space-y-1">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+          <p className="text-xs font-semibold text-slate-500">
             Model
           </p>
           <p className="text-xs text-slate-500">{planAccessCopy}</p>
@@ -200,7 +202,7 @@ export function PortfolioCopilotPanel({
         <div
           role="group"
           aria-label="Model tier"
-          className="inline-flex rounded-full border border-white/10 bg-white/[0.04] p-1"
+          className="inline-flex self-start rounded-full border border-white/10 bg-white/[0.04] p-1"
         >
           {(["free", "premium", "ultimate"] as const).map((tier) => {
             const locked = !allowedTiers.includes(tier);
@@ -214,8 +216,8 @@ export function PortfolioCopilotPanel({
                 disabled={sending || locked}
                 onClick={() => setSelectedTier(tier)}
                 className={[
-                  "rounded-full px-3 py-1.5 text-sm font-medium transition",
-                  selected ? "bg-brand text-white shadow-sm" : "text-slate-400 hover:text-slate-200",
+                  "rounded-full px-3 py-2 text-sm font-medium transition",
+                  selected ? "bg-brand text-brand-foreground shadow-sm" : "text-slate-400 hover:text-slate-200",
                   sending || locked ? "cursor-not-allowed opacity-60" : "",
                 ].join(" ")}
               >
@@ -227,7 +229,7 @@ export function PortfolioCopilotPanel({
         </div>
       </div>
 
-      <div className="max-h-72 space-y-3 overflow-y-auto rounded-[1.5rem] border border-white/[0.06] bg-white/[0.03] p-3">
+      <div className="max-h-72 space-y-3 overflow-y-auto rounded-3xl border border-white/[0.06] bg-white/[0.03] p-3">
         {messages.length > 0 ? (
           messages.map((message) => (
             <div
@@ -238,10 +240,10 @@ export function PortfolioCopilotPanel({
                   : "ml-auto max-w-[90%] rounded-2xl bg-brand/10 p-3 text-sm text-white"
               }
             >
-              <p className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] opacity-70">
+              <p className="mb-1 text-xs font-semibold opacity-70">
                 {message.role}
               </p>
-              <p className="whitespace-pre-wrap leading-6">{message.content}</p>
+              <p className="whitespace-pre-wrap">{message.content}</p>
             </div>
           ))
         ) : (
@@ -272,7 +274,7 @@ export function PortfolioCopilotPanel({
           onChange={(event) => setDraft(event.target.value)}
           rows={4}
           placeholder="Ask anything about your portfolio or watchlist."
-          className="w-full rounded-[1.5rem] border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-slate-200 outline-none transition focus:border-brand/40"
+          className="w-full rounded-3xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-slate-200 outline-none transition focus:border-brand/40"
         />
         {/* Hide the challenge once the portfolio copilot scope is granted;
             it re-appears only if the scope changes or a turnstile_failed
@@ -308,7 +310,7 @@ export function PortfolioCopilotPanel({
             ) : (
               <SendHorizonal className="mr-2 h-4 w-4" />
             )}
-            Ask Copilot
+            Ask copilot
           </Button>
         </div>
       </div>

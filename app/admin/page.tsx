@@ -32,7 +32,7 @@ export default async function AdminPage() {
   return (
     <AppShell
       eyebrow="Admin"
-      title="Admin Console"
+      title="Admin console"
       description="Allowlist-only controls for model access and manual news operations. Stripe plan state remains unchanged; admin status only overrides AI model tier access."
       activePath="/admin"
       backHref="/settings"
@@ -42,7 +42,7 @@ export default async function AdminPage() {
       actions={
         <Link
           href="/settings"
-          className="inline-flex items-center justify-center rounded-xl border border-white/10 px-5 text-sm font-semibold text-slate-200 transition hover:border-white/20 hover:bg-white/5"
+          className="inline-flex items-center justify-center rounded-xl border border-white/10 px-6 text-sm font-semibold text-slate-200 transition hover:border-white/20 hover:bg-white/5"
         >
           Open settings
         </Link>
@@ -58,20 +58,20 @@ export default async function AdminPage() {
         </div>
 
         <div className="grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
-          <Panel className="space-y-5 rounded-[2rem] p-6">
+          <Panel className="space-y-6 rounded-4xl p-6">
             <div className="space-y-2">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
+              <p className="text-xs font-semibold text-slate-500">
                 Model access
               </p>
               <h2 className="text-2xl font-semibold tracking-tight text-white">
                 Admin access now bypasses billing tier gates
               </h2>
-              <p className="text-sm leading-7 text-slate-400">
+              <p className="text-sm text-slate-400">
                 Your current Stripe plan is still tracked as <span className="font-semibold text-slate-200">{billingSummary.planKey}</span>, but admin status now unlocks free, premium, and ultimate model tiers across feed chat and portfolio copilot.
               </p>
             </div>
             <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+              <p className="text-xs font-semibold text-slate-500">
                 Allowed tiers
               </p>
               <p className="mt-2 text-lg font-semibold text-white">
@@ -83,15 +83,15 @@ export default async function AdminPage() {
             </div>
           </Panel>
 
-          <Panel className="space-y-5 rounded-[2rem] p-6">
+          <Panel className="space-y-6 rounded-4xl p-6">
             <div className="space-y-2">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
+              <p className="text-xs font-semibold text-slate-500">
                 Operational shortcuts
               </p>
               <h2 className="text-2xl font-semibold tracking-tight text-white">
                 Manual news controls
               </h2>
-              <p className="text-sm leading-7 text-slate-400">
+              <p className="text-sm text-slate-400">
                 These actions hit the existing admin-only routes using your current session cookie. Use them for diagnostics and manual refreshes without exposing the old debug endpoints in the public UI.
               </p>
             </div>

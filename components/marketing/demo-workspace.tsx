@@ -2,18 +2,16 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-import {
-  BellRing,
-  Bot,
-  CheckCircle2,
-  CircleAlert,
-  MessageSquare,
-  Newspaper,
-  ShieldCheck,
-  Sparkles,
-  TrendingUp,
-  WalletCards,
-} from "lucide-react";
+import { BellRinging as BellRing } from "@phosphor-icons/react/dist/ssr/BellRinging";
+import { Robot as Bot } from "@phosphor-icons/react/dist/ssr/Robot";
+import { CheckCircle as CheckCircle2 } from "@phosphor-icons/react/dist/ssr/CheckCircle";
+import { WarningCircle as CircleAlert } from "@phosphor-icons/react/dist/ssr/WarningCircle";
+import { ChatText as MessageSquare } from "@phosphor-icons/react/dist/ssr/ChatText";
+import { Newspaper } from "@phosphor-icons/react/dist/ssr/Newspaper";
+import { ShieldCheck } from "@phosphor-icons/react/dist/ssr/ShieldCheck";
+import { Sparkle as Sparkles } from "@phosphor-icons/react/dist/ssr/Sparkle";
+import { TrendUp as TrendingUp } from "@phosphor-icons/react/dist/ssr/TrendUp";
+import { Wallet as WalletCards } from "@phosphor-icons/react/dist/ssr/Wallet";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -222,9 +220,9 @@ export function DemoWorkspace() {
   const selectedPrompt = advisorPrompts[selectedPromptIndex]!;
 
   return (
-    <div className="mx-auto grid max-w-[90rem] gap-5 xl:grid-cols-[320px_minmax(0,1fr)]">
+    <div className="mx-auto grid max-w-[90rem] gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
       <aside className="space-y-4">
-        <Panel className="space-y-4 p-5">
+        <Panel className="space-y-4 p-6">
           <Badge tone="brand">Sample portfolio</Badge>
           <div>
             <p className="text-3xl font-semibold tracking-tight text-white">
@@ -294,13 +292,13 @@ export function DemoWorkspace() {
                     >
                       <Icon className="h-4 w-4" />
                     </span>
-                    <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                    <span className="text-xs font-semibold text-slate-500">
                       {item.eyebrow}
                     </span>
                   </div>
                   <div>
                     <h2 className="text-base font-semibold text-white">{item.title}</h2>
-                    <p className="mt-2 text-sm leading-6 text-slate-400">
+                    <p className="mt-2 text-sm text-slate-400">
                       {item.description}
                     </p>
                   </div>
@@ -357,7 +355,7 @@ function DailyBriefDemo({
   onSelectStory: (id: string) => void;
 }) {
   return (
-    <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
       <Panel glow className="space-y-6 p-6 lg:p-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
@@ -365,13 +363,13 @@ function DailyBriefDemo({
             <h1 className="mt-4 text-3xl font-semibold tracking-tight text-white lg:text-4xl">
               Your portfolio is up because AI infrastructure is leading.
             </h1>
-            <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-400">
+            <p className="mt-4 max-w-3xl text-sm text-slate-400">
               The demo ranks the same market news differently once it knows the
               account owns NVIDIA, Microsoft, Lilly, Visa, and Exxon.
             </p>
           </div>
-          <div className="rounded-2xl border border-brand/20 bg-brand/10 px-5 py-4 text-right">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand">
+          <div className="rounded-2xl border border-brand/20 bg-brand/10 px-6 py-4 text-right">
+            <p className="text-xs font-semibold text-brand">
               Today
             </p>
             <p className="mt-1 text-2xl font-semibold text-white">
@@ -389,11 +387,11 @@ function DailyBriefDemo({
               key={insight.title}
               className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-4"
             >
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+              <p className="text-xs font-semibold text-slate-500">
                 {insight.title}
               </p>
               <p className="mt-3 text-lg font-semibold text-white">{insight.value}</p>
-              <p className="mt-2 text-sm leading-6 text-slate-400">{insight.detail}</p>
+              <p className="mt-2 text-sm text-slate-400">{insight.detail}</p>
             </div>
           ))}
         </div>
@@ -412,7 +410,7 @@ function DailyBriefDemo({
         </div>
       </Panel>
 
-      <Panel className="space-y-5 p-6">
+      <Panel className="space-y-6 p-6">
         <div className="flex items-center gap-3">
           <WalletCards className="h-5 w-5 text-brand" />
           <h2 className="text-lg font-semibold text-white">Why this is useful</h2>
@@ -423,7 +421,7 @@ function DailyBriefDemo({
             "Ranks stories by relevance to actual holdings.",
             "Explains both the upside catalyst and the offsetting risks.",
           ].map((item) => (
-            <div key={item} className="flex gap-3 text-sm leading-6 text-slate-400">
+            <div key={item} className="flex gap-3 text-sm text-slate-400">
               <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-brand" />
               <span>{item}</span>
             </div>
@@ -446,8 +444,8 @@ function ArticleImpactDemo({
   const affectedHoldings = matchHoldings(story);
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[360px_minmax(0,1fr)]">
-      <Panel className="space-y-3 p-5">
+    <div className="grid gap-6 lg:grid-cols-[360px_minmax(0,1fr)]">
+      <Panel className="space-y-3 p-6">
         <Badge tone="neutral">Choose a story</Badge>
         {newsFeed.slice(0, 5).map((item) => (
           <button
@@ -474,26 +472,26 @@ function ArticleImpactDemo({
 
         <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_320px]">
           <div className="space-y-4">
-            <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-5">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+            <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-6">
+              <p className="text-xs font-semibold text-slate-500">
                 Why it matters
               </p>
-              <p className="mt-3 text-sm leading-7 text-slate-300">
+              <p className="mt-3 text-sm text-slate-300">
                 {story.whyItMatters || story.aiSummary || story.globalSummary}
               </p>
             </div>
-            <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-5">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+            <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-6">
+              <p className="text-xs font-semibold text-slate-500">
                 AI summary
               </p>
-              <p className="mt-3 text-sm leading-7 text-slate-300">
+              <p className="mt-3 text-sm text-slate-300">
                 {story.aiSummary || story.globalSummary}
               </p>
             </div>
           </div>
 
           <div className="space-y-3">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+            <p className="text-xs font-semibold text-slate-500">
               Affected holdings
             </p>
             {affectedHoldings.map((holding) => (
@@ -510,7 +508,7 @@ function ArticleImpactDemo({
                     {formatPercent(holding.dailyChange)}
                   </Badge>
                 </div>
-                <p className="mt-3 text-sm leading-6 text-slate-400">
+                <p className="mt-3 text-sm text-slate-400">
                   {holding.thesis}
                 </p>
               </div>
@@ -518,8 +516,8 @@ function ArticleImpactDemo({
           </div>
         </div>
 
-        <div className="rounded-2xl border border-brand/20 bg-brand/[0.06] p-5">
-          <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.18em] text-brand">
+        <div className="rounded-2xl border border-brand/20 bg-brand/[0.06] p-6">
+          <div className="flex items-center gap-2 text-sm font-semibold text-brand">
             <MessageSquare className="h-4 w-4" />
             Article chat
           </div>
@@ -527,7 +525,7 @@ function ArticleImpactDemo({
             <p className="ml-auto max-w-xl rounded-2xl border border-brand/20 bg-brand/10 px-4 py-3 text-sm text-white">
               What is the main risk here for my portfolio?
             </p>
-            <div className="max-w-3xl space-y-4 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-4 py-4 text-sm leading-7 text-slate-300">
+            <div className="max-w-3xl space-y-4 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-4 py-4 text-sm text-slate-300">
               <p>
                 The main risk is not the headline itself. The headline is
                 positive for the portfolio because it supports cloud spending,
@@ -537,7 +535,7 @@ function ArticleImpactDemo({
               </p>
               <div>
                 <p className="font-semibold text-white">Portfolio impact</p>
-                <ul className="mt-2 list-disc space-y-2 pl-5">
+                <ul className="mt-2 list-disc space-y-2 pl-6">
                   <li>
                     MSFT benefits through Azure demand and enterprise AI
                     adoption, so the story supports the second-largest holding.
@@ -586,7 +584,7 @@ function AdvisorDemo({
           <h1 className="mt-4 text-3xl font-semibold tracking-tight text-white">
             Ask questions that start from the portfolio.
           </h1>
-          <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-400">
+          <p className="mt-3 max-w-3xl text-sm text-slate-400">
             This demo shows the difference between a generic chatbot and one
             that already knows positions, weights, and matched stories.
           </p>
@@ -606,34 +604,34 @@ function AdvisorDemo({
         </div>
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="space-y-4">
-          <div className="rounded-2xl border border-brand/20 bg-brand/[0.06] p-5">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-brand">
+          <div className="rounded-2xl border border-brand/20 bg-brand/[0.06] p-6">
+            <p className="text-xs font-semibold text-brand">
               Prompt
             </p>
             <p className="mt-3 text-lg font-semibold text-white">
               {selectedPrompt.prompt}
             </p>
           </div>
-          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-5">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-6">
+            <p className="text-xs font-semibold text-slate-500">
               Answer
             </p>
             <div className="mt-4 space-y-4">
               {selectedPrompt.answerSections.map((section) => (
                 <div
                   key={section.title}
-                  className="rounded-2xl border border-white/[0.06] bg-[#0b1118]/55 p-4"
+                  className="rounded-2xl border border-white/[0.06] bg-surface-soft p-4"
                 >
                   <p className="text-sm font-semibold text-white">
                     {section.title}
                   </p>
-                  <p className="mt-2 text-sm leading-7 text-slate-300">
+                  <p className="mt-2 text-sm text-slate-300">
                     {section.body}
                   </p>
                   {section.items ? (
-                    <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-slate-400">
+                    <ul className="mt-3 list-disc space-y-2 pl-6 text-sm text-slate-400">
                       {section.items.map((item) => (
                         <li key={item}>{item}</li>
                       ))}
@@ -646,7 +644,7 @@ function AdvisorDemo({
         </div>
 
         <div className="space-y-3">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+          <p className="text-xs font-semibold text-slate-500">
             Grounded context
           </p>
           {selectedPrompt.connected.map((symbol) => {
@@ -663,7 +661,7 @@ function AdvisorDemo({
                     {holding.allocation}%
                   </p>
                 </div>
-                <p className="mt-2 text-sm leading-6 text-slate-400">
+                <p className="mt-2 text-sm text-slate-400">
                   {holding.thesis}
                 </p>
               </div>
@@ -692,7 +690,7 @@ function GuardrailsDemo({
         <h1 className="mt-4 text-3xl font-semibold tracking-tight text-white">
           Find the positions that deserve a second look.
         </h1>
-        <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-400">
+        <p className="mt-3 max-w-3xl text-sm text-slate-400">
           Pulsefolio does not need to trade for the user. A useful version can
           simply reveal concentration, catalysts, and risk before decisions.
         </p>
@@ -722,9 +720,9 @@ function GuardrailsDemo({
         />
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-3">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+          <p className="text-xs font-semibold text-slate-500">
             Largest exposure
           </p>
           {concentration.map((holding) => (
@@ -749,12 +747,12 @@ function GuardrailsDemo({
           ))}
         </div>
 
-        <div className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.06] p-5">
-          <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.18em] text-amber-400">
+        <div className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.06] p-6">
+          <div className="flex items-center gap-2 text-sm font-semibold text-amber-400">
             <Sparkles className="h-4 w-4" />
             Next best action
           </div>
-          <p className="mt-4 text-sm leading-7 text-slate-300">
+          <p className="mt-4 text-sm text-slate-300">
             Read the AI infrastructure story first, then check whether the
             exposure still fits the desired risk level. The demo points to the
             decision, not just the headline.
@@ -784,7 +782,7 @@ function StoryRow({
     >
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-sm font-semibold leading-6 text-white">
+          <p className="text-sm font-semibold text-white">
             {story.headline}
           </p>
           <p className="mt-1 text-xs text-slate-500">
@@ -796,7 +794,7 @@ function StoryRow({
         </Badge>
       </div>
       {!compact ? (
-        <p className="mt-3 text-sm leading-6 text-slate-400">
+        <p className="mt-3 text-sm text-slate-400">
           {story.aiSummary || story.globalSummary}
         </p>
       ) : null}
@@ -823,15 +821,15 @@ function GuardrailCard({
       : "bg-brand/10 text-brand";
 
   return (
-    <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-5">
+    <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-6">
       <div className={cn("inline-flex rounded-xl p-3", toneClass)}>
         <Icon className="h-5 w-5" />
       </div>
-      <p className="mt-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+      <p className="mt-4 text-xs font-semibold text-slate-500">
         {title}
       </p>
       <p className="mt-2 text-xl font-semibold text-white">{value}</p>
-      <p className="mt-2 text-sm leading-6 text-slate-400">{detail}</p>
+      <p className="mt-2 text-sm text-slate-400">{detail}</p>
     </div>
   );
 }

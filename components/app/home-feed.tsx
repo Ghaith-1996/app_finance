@@ -2,12 +2,10 @@
 
 import { useCallback, useEffect, useState, useTransition } from "react";
 import Link from "next/link";
-import {
-  BookmarkPlus,
-  Loader2,
-  Newspaper,
-  RefreshCw,
-} from "lucide-react";
+import { BookmarkSimple as BookmarkPlus } from "@phosphor-icons/react/dist/ssr/BookmarkSimple";
+import { CircleNotch as Loader2 } from "@phosphor-icons/react/dist/ssr/CircleNotch";
+import { Newspaper } from "@phosphor-icons/react/dist/ssr/Newspaper";
+import { ArrowsClockwise as RefreshCw } from "@phosphor-icons/react/dist/ssr/ArrowsClockwise";
 
 import { getHomeFeed, getTrendingTickers, getActiveDiscussions } from "@/lib/actions/community";
 import type { CommunityPost, TrendingTicker, ActiveDiscussion } from "@/lib/community/types";
@@ -96,7 +94,7 @@ export function HomeFeedClient() {
       {/* Left rail */}
       <aside className="hidden space-y-4 lg:block">
         <div className="rounded-2xl border border-white/[0.06] bg-surface-raised p-4">
-          <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-slate-600">Quick Links</p>
+          <p className="mb-3 text-xs font-bold text-slate-600">Quick links</p>
           <nav className="space-y-1">
             <Link
               href="/watchlist"
@@ -110,7 +108,7 @@ export function HomeFeedClient() {
               className="flex items-center gap-2 rounded-lg px-2 py-2 text-sm text-slate-400 transition hover:bg-white/5 hover:text-slate-200"
             >
               <Newspaper className="h-3.5 w-3.5" />
-              News Feed
+              News feed
             </Link>
           </nav>
         </div>
@@ -121,12 +119,12 @@ export function HomeFeedClient() {
       {/* Center feed */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-bold uppercase tracking-widest text-slate-500">Community</h2>
+          <h2 className="text-sm font-bold text-slate-500">Community</h2>
           <button
             type="button"
             onClick={handleRefresh}
             disabled={isRefreshing}
-            className="flex items-center gap-1.5 text-[11px] font-medium text-slate-500 transition hover:text-brand"
+            className="flex items-center gap-2 text-xs font-medium text-slate-500 transition hover:text-brand"
           >
             <RefreshCw className={cn("h-3.5 w-3.5", isRefreshing && "animate-spin")} />
             Refresh
@@ -160,7 +158,7 @@ export function HomeFeedClient() {
                   type="button"
                   onClick={handleLoadMore}
                   disabled={loadingMore}
-                  className="rounded-xl bg-white/5 px-6 py-2.5 text-sm font-medium text-slate-400 transition hover:bg-white/8 hover:text-slate-200"
+                  className="rounded-xl bg-white/5 px-6 py-2 text-sm font-medium text-slate-400 transition hover:bg-white/8 hover:text-slate-200"
                 >
                   {loadingMore ? "Loading…" : "Load more"}
                 </button>

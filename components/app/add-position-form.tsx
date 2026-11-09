@@ -1,7 +1,9 @@
 "use client";
 
 import { useId, useRef, useState } from "react";
-import { ChevronDown, ChevronUp, Plus } from "lucide-react";
+import { CaretDown as ChevronDown } from "@phosphor-icons/react/dist/ssr/CaretDown";
+import { CaretUp as ChevronUp } from "@phosphor-icons/react/dist/ssr/CaretUp";
+import { Plus } from "@phosphor-icons/react/dist/ssr/Plus";
 import { useRouter } from "next/navigation";
 import { addPortfolioPosition } from "@/lib/actions/portfolio";
 import { buttonStyles } from "@/components/ui/button";
@@ -35,7 +37,7 @@ export function AddPositionForm({ portfolioId }: { portfolioId: string }) {
   };
 
   const inputClass =
-    "w-full rounded-xl border border-white/10 bg-surface-raised px-3 py-2.5 text-sm text-white outline-none placeholder:text-slate-600 focus:border-brand focus:ring-1 focus:ring-brand aria-[invalid=true]:border-amber-400";
+    "w-full rounded-xl border border-white/10 bg-surface-raised px-3 py-2 text-sm text-white outline-none placeholder:text-slate-600 focus:border-brand focus:ring-1 focus:ring-brand aria-[invalid=true]:border-amber-400";
 
   function validate(): FieldErrors {
     const next: FieldErrors = {};
@@ -98,7 +100,7 @@ export function AddPositionForm({ portfolioId }: { portfolioId: string }) {
   }
 
   return (
-    <div className="mb-6 rounded-[1.5rem] border border-white/[0.06] bg-surface-raised/80 shadow-sm">
+    <div className="mb-6 rounded-3xl border border-white/[0.06] bg-surface-raised/80 shadow-sm">
       <button
         type="button"
         onClick={() => {
@@ -108,7 +110,7 @@ export function AddPositionForm({ portfolioId }: { portfolioId: string }) {
         }}
         aria-expanded={open}
         aria-controls={ids.form}
-        className="flex w-full items-center justify-between gap-3 rounded-[1.5rem] px-5 py-4 text-left transition hover:bg-white/[0.03]"
+        className="flex w-full items-center justify-between gap-3 rounded-3xl px-6 py-4 text-left transition hover:bg-white/[0.03]"
       >
         <span className="flex items-center gap-2 text-sm font-semibold text-white">
           <Plus className="h-4 w-4 text-brand" aria-hidden="true" />
@@ -127,7 +129,7 @@ export function AddPositionForm({ portfolioId }: { portfolioId: string }) {
           onSubmit={handleSubmit}
           noValidate
           aria-label="Add position"
-          className="space-y-4 border-t border-white/[0.06] px-5 pb-5 pt-2"
+          className="space-y-4 border-t border-white/[0.06] px-6 pb-6 pt-2"
         >
           <p className="text-sm text-slate-500">
             Enter a ticker, your share quantity, and average cost per share. We&apos;ll look up the
@@ -135,7 +137,7 @@ export function AddPositionForm({ portfolioId }: { portfolioId: string }) {
           </p>
           <div className="grid gap-4 sm:grid-cols-3">
             <div>
-              <label htmlFor={ids.symbol} className="mb-1 block text-xs uppercase tracking-[0.18em] text-slate-400">
+              <label htmlFor={ids.symbol} className="mb-1 block text-xs text-slate-400">
                 Symbol
               </label>
               <input
@@ -151,7 +153,7 @@ export function AddPositionForm({ portfolioId }: { portfolioId: string }) {
               {fieldError("symbol")}
             </div>
             <div>
-              <label htmlFor={ids.quantity} className="mb-1 block text-xs uppercase tracking-[0.18em] text-slate-400">
+              <label htmlFor={ids.quantity} className="mb-1 block text-xs text-slate-400">
                 Quantity
               </label>
               <input
@@ -167,7 +169,7 @@ export function AddPositionForm({ portfolioId }: { portfolioId: string }) {
               {fieldError("quantity")}
             </div>
             <div>
-              <label htmlFor={ids.averageCost} className="mb-1 block text-xs uppercase tracking-[0.18em] text-slate-400">
+              <label htmlFor={ids.averageCost} className="mb-1 block text-xs text-slate-400">
                 Avg cost / share
               </label>
               <input

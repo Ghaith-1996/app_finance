@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BrainCircuit, Clock } from "lucide-react";
+import { Brain as BrainCircuit } from "@phosphor-icons/react/dist/ssr/Brain";
+import { Clock } from "@phosphor-icons/react/dist/ssr/Clock";
 import { formatAppDateTime } from "@/lib/time/format";
 import { createClient } from "@/lib/supabase/client";
 import { Badge } from "@/components/ui/badge";
@@ -185,7 +186,7 @@ export function AnalysisRunTrigger({
                   ? "Building portfolio-aware explanations"
                   : "Waiting for next update"}
           </h2>
-          <p className="max-w-2xl text-sm leading-7 text-slate-300">
+          <p className="max-w-2xl text-sm text-slate-300">
             {run?.status === "complete"
               ? "Open the feed to see personalized stories matched to your portfolio and watchlist."
               : run?.status === "degraded"
@@ -199,8 +200,8 @@ export function AnalysisRunTrigger({
             <span>New stories are checked every 20 minutes; analysis re-runs only when there are new ones</span>
           </div>
         </div>
-        <div className="rounded-3xl border border-white/10 bg-white/6 p-5">
-          <p className="text-sm uppercase tracking-[0.18em] text-slate-400">
+        <div className="rounded-3xl border border-white/10 bg-white/6 p-6">
+          <p className="text-sm text-slate-400">
             Progress
           </p>
           <p className="mt-2 text-4xl font-semibold text-white">
@@ -214,7 +215,7 @@ export function AnalysisRunTrigger({
 
       <div className="h-3 overflow-hidden rounded-full bg-white/8">
         <div
-          className="h-full rounded-full bg-gradient-to-r from-brand to-brand-strong transition-all duration-500"
+          className="h-full rounded-full bg-brand transition-all duration-500"
           style={{ width: `${run?.progress ?? 0}%` }}
         />
       </div>
@@ -226,7 +227,7 @@ export function AnalysisRunTrigger({
             <div
               key={stage}
               className={cn(
-                "rounded-3xl border p-5",
+                "rounded-3xl border p-6",
                 stepStatus === "current"
                   ? "border-brand/24 bg-brand/10"
                   : "border-white/10 bg-white/6",
@@ -235,7 +236,7 @@ export function AnalysisRunTrigger({
               <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                 <div className="space-y-2">
                   <p className="text-lg font-semibold text-white">{meta.title}</p>
-                  <p className="text-sm leading-7 text-slate-200">{meta.detail}</p>
+                  <p className="text-sm text-slate-200">{meta.detail}</p>
                 </div>
                 <Badge
                   tone={
@@ -255,7 +256,7 @@ export function AnalysisRunTrigger({
       </div>
 
       {!isRunActive && !run?.status && (
-        <div className="rounded-2xl border border-white/10 bg-white/4 p-5">
+        <div className="rounded-2xl border border-white/10 bg-white/4 p-6">
           <p className="text-sm text-slate-400">
             Your feed is built from a shared news pool that is checked for new stories
             every 20 minutes. Articles are matched against your portfolio holdings

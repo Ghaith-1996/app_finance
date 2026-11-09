@@ -18,13 +18,13 @@ export function SectionHeading({
         align === "center" && "mx-auto text-center",
       )}
     >
-      <p className="text-sm font-semibold uppercase tracking-[0.24em] text-brand">
+      <p className="text-sm font-semibold text-brand">
         {eyebrow}
       </p>
       <h2 className="text-3xl font-semibold tracking-tight text-primary sm:text-4xl">
         {title}
       </h2>
-      <p className="text-base leading-7 text-secondary sm:text-lg">
+      <p className="text-base text-secondary sm:text-lg">
         {description}
       </p>
     </div>

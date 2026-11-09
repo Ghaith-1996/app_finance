@@ -3,15 +3,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import {
-  Loader2,
-  MoreVertical,
-  Newspaper,
-  RefreshCw,
-  Trash2,
-  TrendingDown,
-  TrendingUp,
-} from "lucide-react";
+import { CircleNotch as Loader2 } from "@phosphor-icons/react/dist/ssr/CircleNotch";
+import { DotsThreeVertical as MoreVertical } from "@phosphor-icons/react/dist/ssr/DotsThreeVertical";
+import { Newspaper } from "@phosphor-icons/react/dist/ssr/Newspaper";
+import { ArrowsClockwise as RefreshCw } from "@phosphor-icons/react/dist/ssr/ArrowsClockwise";
+import { Trash as Trash2 } from "@phosphor-icons/react/dist/ssr/Trash";
+import { TrendDown as TrendingDown } from "@phosphor-icons/react/dist/ssr/TrendDown";
+import { TrendUp as TrendingUp } from "@phosphor-icons/react/dist/ssr/TrendUp";
 
 import { deleteWatchlistItem, refreshWatchlistPrices } from "@/lib/actions/watchlist";
 import type { WatchlistItemData } from "@/lib/watchlist/watchlist-data";
@@ -100,9 +98,9 @@ export function WatchlistItems({ initialItems, selectedSymbol, onSelectSymbol }:
         </p>
       )}
 
-      <div className="grid grid-cols-[2fr_1fr_auto] items-end gap-2 px-3 pb-2 text-[10px] font-bold uppercase tracking-widest text-slate-600 sm:gap-4 sm:px-6">
-        <div>ASSET</div>
-        <div className="hidden sm:block">PERFORMANCE</div>
+      <div className="grid grid-cols-[2fr_1fr_auto] items-end gap-2 px-3 pb-2 text-xs font-bold text-slate-600 sm:gap-4 sm:px-6">
+        <div>Asset</div>
+        <div className="hidden sm:block">Performance</div>
         <div className="flex flex-col items-end gap-2">
           <button
             type="button"
@@ -111,7 +109,7 @@ export function WatchlistItems({ initialItems, selectedSymbol, onSelectSymbol }:
             className={buttonStyles({
               variant: "secondary",
               size: "md",
-              className: "gap-2 text-[11px] font-bold uppercase tracking-wider disabled:opacity-50",
+              className: "gap-2 text-xs font-bold disabled:opacity-50",
             })}
             aria-label="Refresh all prices"
           >
@@ -119,11 +117,11 @@ export function WatchlistItems({ initialItems, selectedSymbol, onSelectSymbol }:
             {refreshingAll ? "Refreshing..." : "Refresh prices"}
           </button>
           {refreshMode === "auto" ? (
-            <div className="w-full text-right text-[10px] font-medium normal-case tracking-normal text-slate-500">
+            <div className="w-full text-right text-xs font-medium normal-case tracking-normal text-slate-500">
               Auto-refreshing...
             </div>
           ) : null}
-          <div className="hidden w-full text-right sm:block">STATUS</div>
+          <div className="hidden w-full text-right sm:block">Status</div>
         </div>
       </div>
 
@@ -187,7 +185,7 @@ function WatchlistRow({
     <div
       ref={rowRef}
       className={cn(
-        "grid cursor-pointer grid-cols-[2fr_1fr_auto] items-center gap-2 rounded-2xl border px-3 py-3 transition-all duration-200 hover:-translate-y-0.5 sm:gap-4 sm:px-6 sm:py-5",
+        "grid cursor-pointer grid-cols-[2fr_1fr_auto] items-center gap-2 rounded-2xl border px-3 py-3 transition-all duration-200 hover:-translate-y-0.5 sm:gap-4 sm:px-6 sm:py-6",
         selected
           ? "border-brand/30 bg-brand/5"
           : "border-white/[0.06] bg-surface-raised hover:border-white/10",
@@ -208,8 +206,8 @@ function WatchlistRow({
           {item.company.charAt(0) || item.symbol.charAt(0)}
         </div>
         <div>
-          <p className="text-[15px] font-bold text-white">{item.company || item.symbol}</p>
-          <p className="mt-0.5 text-[11px] font-bold uppercase tracking-widest text-slate-600">
+          <p className="text-sm font-bold text-white">{item.company || item.symbol}</p>
+          <p className="mt-0.5 text-xs font-bold text-slate-600">
             {item.symbol}
             {item.exchange ? ` - ${item.exchange}` : ""}
           </p>
@@ -217,7 +215,7 @@ function WatchlistRow({
       </div>
 
       <div>
-        <p className="text-[15px] font-bold text-white">
+        <p className="text-sm font-bold text-white">
           {item.price != null && item.price > 0 ? (
             `$${item.price.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
           ) : (
@@ -227,7 +225,7 @@ function WatchlistRow({
         {item.dayChange != null ? (
           <p
             className={cn(
-              "mt-0.5 flex items-center gap-1 text-[13px] font-bold",
+              "mt-0.5 flex items-center gap-1 text-xs font-bold",
               item.dayChange >= 0 ? "text-emerald-400" : "text-red-400",
             )}
           >
@@ -240,7 +238,7 @@ function WatchlistRow({
             {item.dayChange}%
           </p>
         ) : (
-          <p className="mt-0.5 text-[13px] font-medium text-slate-600">-</p>
+          <p className="mt-0.5 text-xs font-medium text-slate-600">-</p>
         )}
       </div>
 
@@ -248,7 +246,7 @@ function WatchlistRow({
         <Link
           href={`/feed?ticker=${encodeURIComponent(item.symbol)}`}
           onClick={(e) => e.stopPropagation()}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-brand/25 bg-brand/10 px-3 py-2 text-[11px] font-bold text-brand transition hover:border-brand/40 hover:bg-brand/15"
+          className="inline-flex items-center gap-2 rounded-lg border border-brand/25 bg-brand/10 px-3 py-2 text-xs font-bold text-brand transition hover:border-brand/40 hover:bg-brand/15"
         >
           <Newspaper className="h-3.5 w-3.5" />
           News
@@ -284,7 +282,7 @@ function WatchlistRow({
                   e.stopPropagation();
                   onDelete();
                 }}
-                className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-red-400 transition hover:bg-red-500/10"
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-400 transition hover:bg-red-500/10"
               >
                 {deleting ? (
                   <Loader2 className="h-4 w-4 shrink-0 animate-spin" />

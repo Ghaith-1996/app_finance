@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { Bookmark, BookmarkCheck } from "lucide-react";
+import { BookmarkSimple as Bookmark } from "@phosphor-icons/react/dist/ssr/BookmarkSimple";
+import { BookmarksSimple as BookmarkCheck } from "@phosphor-icons/react/dist/ssr/BookmarksSimple";
 
 import {
   getSavedArticleState,

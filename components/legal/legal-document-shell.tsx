@@ -43,8 +43,8 @@ export function LegalDocumentShell({
 
         <div className="space-y-4">
           <h1 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">{title}</h1>
-          <p className="max-w-3xl text-sm leading-7 text-slate-300">{description}</p>
-          <div className="flex flex-wrap gap-x-6 gap-y-2 text-xs uppercase tracking-[0.16em] text-slate-500">
+          <p className="max-w-3xl text-sm text-slate-300">{description}</p>
+          <div className="flex flex-wrap gap-x-6 gap-y-2 text-xs text-slate-500">
             <p>Effective date: {effectiveDate}</p>
             <p>Last updated: {lastUpdated}</p>
           </div>
@@ -63,7 +63,7 @@ export function LegalDocumentShell({
           ) : null}
         </div>
 
-        <div className="mt-10 space-y-10 text-sm leading-relaxed text-slate-300">{children}</div>
+        <div className="mt-10 space-y-10 text-sm text-slate-300">{children}</div>
       </div>
     </div>
   );

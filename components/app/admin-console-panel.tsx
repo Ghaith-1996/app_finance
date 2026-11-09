@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Activity, RefreshCw, Shield } from "lucide-react";
+import { Pulse as Activity } from "@phosphor-icons/react/dist/ssr/Pulse";
+import { ArrowsClockwise as RefreshCw } from "@phosphor-icons/react/dist/ssr/ArrowsClockwise";
+import { Shield } from "@phosphor-icons/react/dist/ssr/Shield";
 
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
@@ -126,14 +128,14 @@ export function AdminConsolePanel() {
           const Icon = action.icon;
           const isActive = state.activeId === action.id;
           return (
-            <Panel key={action.id} className="space-y-4 rounded-[1.75rem] p-5">
+            <Panel key={action.id} className="space-y-4 rounded-4xl p-6">
               <div className="flex items-start gap-3">
                 <span className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-3 text-brand">
                   <Icon className="h-5 w-5" />
                 </span>
                 <div className="space-y-1">
                   <p className="text-sm font-semibold text-white">{action.label}</p>
-                  <p className="text-sm leading-6 text-slate-400">{action.description}</p>
+                  <p className="text-sm text-slate-400">{action.description}</p>
                 </div>
               </div>
               <Button
@@ -149,10 +151,10 @@ export function AdminConsolePanel() {
         })}
       </div>
 
-      <Panel className="space-y-3 rounded-[1.75rem] p-5">
+      <Panel className="space-y-3 rounded-4xl p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
+            <p className="text-xs font-semibold text-slate-500">
               Latest response
             </p>
             <p className="mt-1 text-sm text-slate-400">
@@ -160,7 +162,7 @@ export function AdminConsolePanel() {
             </p>
           </div>
           {state.status !== null ? (
-            <span className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-slate-300">
+            <span className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1 text-xs font-semibold text-slate-300">
               HTTP {state.status}
             </span>
           ) : null}
@@ -170,7 +172,7 @@ export function AdminConsolePanel() {
           <p className="text-sm text-rose-400">{state.error}</p>
         ) : null}
 
-        <pre className="max-h-[480px] overflow-auto rounded-2xl border border-white/[0.06] bg-surface-input p-4 text-xs leading-6 text-slate-300">
+        <pre className="max-h-[480px] overflow-auto rounded-2xl border border-white/[0.06] bg-surface-input p-4 text-xs text-slate-300">
           {state.output ?? "Run an admin action to inspect the response here."}
         </pre>
       </Panel>

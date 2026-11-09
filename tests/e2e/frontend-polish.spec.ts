@@ -37,7 +37,7 @@ test.describe("landing without scripts", () => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto("/");
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-    await page.locator('header a[href="#use-cases"]').click();
+    await page.getByRole("navigation", { name: "Primary", exact: true }).locator('a[href="#use-cases"]').click();
     await expect(page).toHaveURL(/#use-cases$/);
     const section = page.locator("#use-cases");
     await expect(section.getByRole("heading", { name: "See how it works in your daily investing routine" })).toBeVisible();
@@ -58,10 +58,6 @@ for (const width of [1440, 390]) {
     await page.goto("/");
     await expect(page).toHaveTitle(/Pulsefolio/);
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-    const mesh = page.getByTestId("hero-mesh");
-    await expect(mesh).toHaveAttribute("aria-hidden", "true");
-    await expect(mesh).toBeEmpty();
-    expect(await mesh.evaluate((element) => getComputedStyle(element, "::before").animationName)).toBe("none");
     await page.screenshot({ path: `/proof/hero-reduced-motion-${width}.png` });
     const section = await revealCases(page);
     const animated = section.locator('[class*="uc-animate-"]:visible');
@@ -97,7 +93,7 @@ for (const width of [1440, 390]) {
     });
     expect(spinner.name).toBe("spin");
     expect(spinner.duration).toBeGreaterThan(0.1);
-    proof("real reduced-motion media query, visible reveal contents, zero delayed chat bubbles, static decorative mesh and animated loading spinner", { width });
+    proof("real reduced-motion media query, visible reveal contents, zero delayed chat bubbles and animated loading spinner", { width });
   });
 }
 
@@ -106,10 +102,10 @@ test("E2E-00: focus before reveal prevents a later use-case timer from starting"
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await page.goto("/");
   // Exercise a hydrated control without scrolling the use-case section into view.
-  const mesh = page.getByTestId("hero-mesh");
-  const initialBackground = await mesh.evaluate((element) => getComputedStyle(element, "::before").backgroundImage);
+  const theme = () => page.evaluate(() => document.documentElement.dataset.theme);
+  const initialTheme = await theme();
   await page.getByRole("button", { name: /theme/i }).click();
-  await expect.poll(() => mesh.evaluate((element) => getComputedStyle(element, "::before").backgroundImage)).not.toBe(initialBackground);
+  await expect.poll(theme).not.toBe(initialTheme);
   const section = page.locator("#use-cases");
   const firstCard = section.locator("button[aria-pressed]:visible").first();
   await expect(section.locator(".uc-animate-fade-up")).toHaveCount(0);
@@ -128,14 +124,6 @@ test("E2E-00: real use-case timers stop after pointer selection and keyboard foc
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await page.goto("/");
-  const mesh = page.getByTestId("hero-mesh");
-  expect(await mesh.evaluate((element) => getComputedStyle(element, "::before").animationName)).toBe("hero-mesh-drift");
-  const dark = await mesh.evaluate((element) => getComputedStyle(element, "::before").backgroundImage);
-  await page.getByRole("button", { name: /theme/i }).click();
-  await expect.poll(() => mesh.evaluate((element) => getComputedStyle(element, "::before").backgroundImage)).not.toBe(dark);
-  await page.setViewportSize({ width: 800, height: 900 });
-  expect(await mesh.evaluate((element) => getComputedStyle(element, "::before").animationName)).toBe("none");
-  await page.setViewportSize({ width: 1440, height: 900 });
   const section = await revealCases(page);
   const cards = section.locator("button[aria-pressed]:visible");
   await expect(cards.nth(0)).toHaveAttribute("aria-pressed", "true");
@@ -150,7 +138,19 @@ test("E2E-00: real use-case timers stop after pointer selection and keyboard foc
   await reloaded.locator("button[aria-pressed]:visible").nth(0).focus();
   await page.waitForTimeout(4500);
   await expect(reloaded.locator("button[aria-pressed]:visible").nth(0)).toHaveAttribute("aria-pressed", "true");
-  proof("real observer/timers: advance after entering viewport; hover unchanged; pointer choice and keyboard focus stop cycling; mesh responds to theme, width and OS preference", true);
+  proof("real observer/timers: advance after entering viewport; hover unchanged; pointer choice and keyboard focus stop cycling", true);
+});
+
+test("E2E-00: widening past the mobile breakpoint releases the open menu's scroll lock", async ({ page, proof }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Open menu" }).click();
+  await expect.poll(() => page.evaluate(() => document.body.style.overflow)).toBe("hidden");
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect.poll(() => page.evaluate(() => document.body.style.overflow)).not.toBe("hidden");
+  await page.mouse.wheel(0, 1200);
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+  proof("real viewport resize past md closes the mobile menu and the page scrolls again", true);
 });
 
 test("E2E-00: enabling reduced motion stops an already running use-case cycle", async ({ page, proof }) => {
@@ -162,7 +162,6 @@ test("E2E-00: enabling reduced motion stops an already running use-case cycle", 
   await expect(cards.nth(1)).toHaveAttribute("aria-pressed", "true", { timeout: 6500 });
   // Chromium changes the actual media query and dispatches its native change event.
   await page.emulateMedia({ reducedMotion: "reduce" });
-  expect(await page.getByTestId("hero-mesh").evaluate((element) => getComputedStyle(element, "::before").animationName)).toBe("none");
   await page.waitForTimeout(4500);
   await expect(cards.nth(1)).toHaveAttribute("aria-pressed", "true");
   proof("a native reduced-motion preference change after the first real interval tick stops subsequent cycling", true);

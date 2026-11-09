@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { TrendingDown, TrendingUp } from "lucide-react";
+import { TrendDown as TrendingDown } from "@phosphor-icons/react/dist/ssr/TrendDown";
+import { TrendUp as TrendingUp } from "@phosphor-icons/react/dist/ssr/TrendUp";
 
 import { RefreshPricesButton } from "@/components/app/refresh-prices-button";
 import { describeOverview, refreshedOverview } from "@/lib/portfolio/value-display";
@@ -39,7 +40,7 @@ export function ActivePortfolioValueCard({
   if (compact) {
     return (
       <div className="min-w-0 space-y-1">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
+        <p className="text-xs font-semibold text-slate-500">
           Active portfolio value
         </p>
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -64,7 +65,7 @@ export function ActivePortfolioValueCard({
   return (
     <div className="flex flex-col justify-between rounded-2xl border border-white/[0.06] bg-surface-raised p-6">
       <div>
-        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
+        <p className="text-xs font-semibold text-slate-500">
           Active portfolio value
         </p>
         <p className="mt-2 text-3xl font-semibold tracking-tight text-white">

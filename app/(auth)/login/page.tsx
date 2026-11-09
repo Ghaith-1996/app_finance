@@ -50,7 +50,7 @@ export default function LoginPage() {
           <Link href="/" className="inline-flex items-center gap-3 text-primary no-underline">
             <AppLogo size="lg" priority />
             <div className="text-left">
-              <p className="text-xs uppercase tracking-[0.22em] text-secondary">Pulsefolio</p>
+              <p className="text-xs text-secondary">Pulsefolio</p>
               <p className="text-base font-semibold text-primary">{t("login.tagline")}</p>
             </div>
           </Link>
@@ -91,7 +91,7 @@ export default function LoginPage() {
               {loading === "github" ? t("login.redirecting") : t("login.github")}
             </button>
           </div>
-          <p className="text-center text-xs leading-6 text-secondary">
+          <p className="text-center text-xs text-secondary">
             {t("login.legalNoticeStart")}{" "}
             <Link href="/terms" className="text-brand underline underline-offset-2 hover:text-brand-strong">
               {t("common.termsOfService")}

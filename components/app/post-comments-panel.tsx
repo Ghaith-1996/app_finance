@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { ArrowLeft, Loader2, Send } from "lucide-react";
+import { ArrowLeft } from "@phosphor-icons/react/dist/ssr/ArrowLeft";
+import { CircleNotch as Loader2 } from "@phosphor-icons/react/dist/ssr/CircleNotch";
+import { PaperPlaneTilt as Send } from "@phosphor-icons/react/dist/ssr/PaperPlaneTilt";
 
 import { getPostComments, createComment } from "@/lib/actions/community";
 import { validateCommentBody } from "@/lib/community/types";
@@ -67,7 +69,7 @@ export function PostCommentsPanel({ postId, source, onClose }: Props) {
         <button
           type="button"
           onClick={onClose}
-          className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm text-slate-400 transition hover:bg-white/5 hover:text-slate-200"
+          className="inline-flex items-center gap-2 rounded-lg px-2 py-2 text-sm text-slate-400 transition hover:bg-white/5 hover:text-slate-200"
         >
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
           Back to community
@@ -78,7 +80,7 @@ export function PostCommentsPanel({ postId, source, onClose }: Props) {
       {source ? (
         <div className="border-b border-white/[0.06] px-4 py-3">
           <p className="text-xs text-slate-500">Original post by {source.authorName}</p>
-          <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-slate-200">{source.body}</p>
+          <p className="mt-1 whitespace-pre-wrap text-sm text-slate-200">{source.body}</p>
         </div>
       ) : null}
 
@@ -95,20 +97,20 @@ export function PostCommentsPanel({ postId, source, onClose }: Props) {
             const initials = c.author.displayName.split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
             const safeAvatarUrl = sanitizeExternalUrl(c.author.avatarUrl);
             return (
-              <div key={c.id} className="flex gap-2.5">
+              <div key={c.id} className="flex gap-3">
                 {safeAvatarUrl ? (
                   <img src={safeAvatarUrl} alt="" className="h-7 w-7 shrink-0 rounded-full object-cover" />
                 ) : (
-                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand/15 text-[9px] font-bold text-brand">
+                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand/15 text-xs font-bold text-brand">
                     {initials}
                   </div>
                 )}
                 <div className="min-w-0 flex-1">
-                  <p className="text-[12px]">
+                  <p className="text-xs">
                     <span className="font-semibold text-white">{c.author.displayName}</span>
                     <span className="ml-2 text-slate-600">{timeAgo(c.createdAt)}</span>
                   </p>
-                  <p className="mt-0.5 whitespace-pre-wrap text-[12px] leading-relaxed text-slate-400">{c.body}</p>
+                  <p className="mt-0.5 whitespace-pre-wrap text-xs text-slate-400">{c.body}</p>
                 </div>
               </div>
             );
@@ -118,7 +120,7 @@ export function PostCommentsPanel({ postId, source, onClose }: Props) {
 
       {/* Composer */}
       <div className="border-t border-white/[0.06] p-3">
-        {error && <p className="mb-2 text-[11px] text-red-400">{error}</p>}
+        {error && <p className="mb-2 text-xs text-red-400">{error}</p>}
         <TurnstileBlock turnstile={turnstile} action="community-comment" />
         <div className="flex gap-2">
           <input
@@ -135,8 +137,8 @@ export function PostCommentsPanel({ postId, source, onClose }: Props) {
             disabled={!canSubmit}
             onClick={handleSubmit}
             className={cn(
-              "shrink-0 rounded-xl p-2.5 transition",
-              canSubmit ? "bg-brand text-[#080c11] hover:bg-brand-strong" : "bg-white/5 text-slate-600",
+              "shrink-0 rounded-xl p-3 transition",
+              canSubmit ? "bg-brand text-brand-foreground hover:bg-brand-strong" : "bg-white/5 text-slate-600",
             )}
           >
             <Send className="h-4 w-4" />

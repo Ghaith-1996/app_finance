@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { ReactNode } from "react";
-import { Activity } from "lucide-react";
+import { Pulse as Activity } from "@phosphor-icons/react/dist/ssr/Pulse";
 
 import { RefreshPricesButton } from "@/components/app/refresh-prices-button";
 import { Panel } from "@/components/ui/panel";
@@ -28,13 +28,13 @@ export function PortfolioSnapshotPanel({
   }
 
   return (
-    <Panel className="space-y-5">
+    <Panel className="space-y-6">
       <div className="flex items-center gap-3">
         <div className="rounded-xl border border-white/[0.06] bg-white/5 p-3 text-brand">
           <Activity className="h-5 w-5" />
         </div>
         <div>
-          <p className="text-sm uppercase tracking-[0.18em] text-slate-500">
+          <p className="text-sm text-slate-500">
             Portfolio snapshot
           </p>
           <p className="text-lg font-semibold text-white">
@@ -63,7 +63,7 @@ export function PortfolioSnapshotPanel({
                 <RefreshPricesButton
                   presentation="inline"
                   portfolioId={portfolioId}
-                  className="h-6 px-1.5 text-[10px]"
+                  className="h-6 px-2 text-xs"
                   onRefreshed={handleRefreshed}
                 />
               ) : null}
@@ -79,7 +79,7 @@ export function PortfolioSnapshotPanel({
 function Metric({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-4">
-      <p className="text-sm uppercase tracking-[0.18em] text-slate-500">{label}</p>
+      <p className="text-sm text-slate-500">{label}</p>
       <div className="mt-2 text-lg font-semibold text-white">{value}</div>
     </div>
   );

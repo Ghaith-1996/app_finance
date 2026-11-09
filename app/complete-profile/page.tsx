@@ -38,7 +38,7 @@ export default async function CompleteProfilePage({
     <div className="flex min-h-screen flex-col items-center justify-center gap-8 bg-background px-6 py-12">
       <Link href="/" className="inline-flex items-center gap-3 text-primary no-underline">
         <AppLogo size="lg" priority />
-        <span className="text-sm font-semibold uppercase tracking-[0.18em]">Pulsefolio</span>
+        <span className="text-sm font-semibold">Pulsefolio</span>
       </Link>
       <ProfileForm
         initialProfile={

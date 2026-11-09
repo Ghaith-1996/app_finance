@@ -2,7 +2,10 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, FileSpreadsheet, Loader2, X } from "lucide-react";
+import { ArrowRight } from "@phosphor-icons/react/dist/ssr/ArrowRight";
+import { FileCsv as FileSpreadsheet } from "@phosphor-icons/react/dist/ssr/FileCsv";
+import { CircleNotch as Loader2 } from "@phosphor-icons/react/dist/ssr/CircleNotch";
+import { X } from "@phosphor-icons/react/dist/ssr/X";
 
 import { CSVDropzone } from "@/components/app/csv-dropzone";
 import { ColumnMapper } from "@/components/app/column-mapper";
@@ -202,13 +205,13 @@ export function PortfolioCsvImportFlow({
 
   return (
     <div className="space-y-6">
-      <Panel className="space-y-5 border-white/[0.06] bg-surface-raised">
+      <Panel className="space-y-6 border-white/[0.06] bg-surface-raised">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-brand">
+            <p className="text-sm font-semibold text-brand">
               {title}
             </p>
-            <p className="mt-2 text-sm leading-7 text-slate-400">{description}</p>
+            <p className="mt-2 text-sm text-slate-400">{description}</p>
           </div>
           {showEntryButton ? (
             <button
@@ -259,10 +262,10 @@ export function PortfolioCsvImportFlow({
           {hasExistingPortfolio ? (
             <Panel className="space-y-4 border-white/[0.06] bg-surface-raised">
               <div>
-                <p className="text-sm font-semibold uppercase tracking-[0.24em] text-brand">
+                <p className="text-sm font-semibold text-brand">
                   Import mode
                 </p>
-                <p className="mt-2 text-sm leading-7 text-slate-400">
+                <p className="mt-2 text-sm text-slate-400">
                   Choose whether this CSV should replace the portfolio or merge into it.
                 </p>
               </div>
@@ -303,7 +306,7 @@ export function PortfolioCsvImportFlow({
 
           <div className="flex items-center justify-between gap-4">
             <div>
-              <p className="text-sm font-semibold uppercase tracking-[0.24em] text-brand">
+              <p className="text-sm font-semibold text-brand">
                 Review holdings
               </p>
               <p className="mt-1 text-sm text-slate-400">
@@ -321,7 +324,7 @@ export function PortfolioCsvImportFlow({
           />
 
           {confirmedCount > 0 ? (
-            <Panel className="flex flex-col gap-3 border-white/[0.06] bg-white/[0.03] p-5 sm:flex-row sm:items-center sm:justify-between">
+            <Panel className="flex flex-col gap-3 border-white/[0.06] bg-white/[0.03] p-6 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="text-sm text-slate-400">Estimated cost basis</p>
                 <p className="text-2xl font-semibold text-white">

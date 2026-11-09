@@ -159,7 +159,7 @@ export default async function PricingPage({
         user ? (
           <Link
             href="/settings"
-            className="inline-flex items-center justify-center rounded-xl border border-white/10 px-5 text-sm font-semibold text-slate-200 transition hover:border-white/20 hover:bg-white/5"
+            className="inline-flex items-center justify-center rounded-xl border border-white/10 px-6 text-sm font-semibold text-slate-200 transition hover:border-white/20 hover:bg-white/5"
           >
             Open settings
           </Link>
@@ -180,8 +180,8 @@ export default async function PricingPage({
         ) : null}
 
         {accountAccess ? (
-          <Panel className="rounded-2xl p-5">
-            <p className="text-sm leading-6 text-slate-300">
+          <Panel className="rounded-2xl p-6">
+            <p className="text-sm text-slate-300">
               Your account already includes every AI model. You do not need a subscription to use them.
             </p>
           </Panel>
@@ -195,13 +195,13 @@ export default async function PricingPage({
 
             return (
               // flex column + mt-auto keeps every card's action on the same baseline.
-              <Panel key={plan.key} className="flex flex-col gap-5 rounded-[2rem] p-6">
+              <Panel key={plan.key} className="flex flex-col gap-6 rounded-4xl p-6">
                 <div className="space-y-2">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
+                  <p className="text-xs font-semibold text-slate-500">
                     {PLAN_LABELS[plan.key]}
                   </p>
                   <h2 className="text-3xl font-semibold tracking-tight text-white">{priceLabel}</h2>
-                  <p className="text-sm leading-7 text-slate-400">{plan.headline}</p>
+                  <p className="text-sm text-slate-400">{plan.headline}</p>
                 </div>
 
                 <ul className="space-y-2 text-sm text-slate-300">
@@ -226,7 +226,7 @@ export default async function PricingPage({
           })}
         </div>
 
-        <Panel className="space-y-2 rounded-2xl p-5 text-sm leading-6 text-slate-400">
+        <Panel className="space-y-2 rounded-2xl p-6 text-sm text-slate-400">
           <p>
             All plans allow up to 10 AI requests per minute. Failed AI requests do not count toward
             your daily or monthly limit.

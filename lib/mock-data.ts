@@ -21,7 +21,7 @@ export const siteStats: SiteStat[] = [
   {
     label: "AI recap layers",
     value: "4",
-    hint: "Relevance, sentiment, impact, and a plain-English explanation.",
+    hint: "Relevance, sentiment, impact, and a plain English explanation.",
   },
   {
     label: "Global sources",
@@ -58,36 +58,36 @@ export const painPoints: PainPoint[] = [
 
 export const productFeatures: ProductFeature[] = [
   {
-    eyebrow: "Track everything",
-    title: "Bring your holdings into one intelligent home",
+    eyebrow: "Track",
+    title: "All your positions in one calm view",
     description:
-      "Start from a broker CSV export or manual entry and land in the same portfolio experience. Live broker linking is not available yet.",
+      "Start from a broker CSV export or manual entry. Every holding lands in the same snapshot with its latest price and weight. Live broker linking is not available yet.",
     bullets: [
       "CSV import with column mapping and review",
       "Manual portfolio creation",
-      "Unified holdings snapshot",
+      "One snapshot for every holding",
     ],
   },
   {
-    eyebrow: "Ask anything",
-    title: "Let AI explain the stories behind the moves",
+    eyebrow: "Ask",
+    title: "Answers that start from what you own",
     description:
-      "Instead of showing generic headlines, the product turns portfolio exposure into readable context and quick answers.",
+      "Ask why your account moved or which sector is under pressure. Answers point to the holdings and stories behind them.",
     bullets: [
-      "Multi-step AI analysis progress",
+      "Step by step analysis progress",
       "Ticker and sector relevance mapping",
-      "Readable explanations grounded in holdings",
+      "Explanations grounded in your holdings",
     ],
   },
   {
-    eyebrow: "Stay ahead",
-    title: "Open a personalized feed built around what users own",
+    eyebrow: "Read",
+    title: "A morning brief ranked by relevance",
     description:
-      "Each feed item surfaces the market stories most likely to matter, then explains why they matter before a user has to ask.",
+      "Each story is scored against your holdings, then summarized so you know why it is there before you read it.",
     bullets: [
       "Daily brief and ranked news stream",
       "Filters by holding, sector, and recency",
-      "Article detail panel with AI summary",
+      "Article panel with an AI summary",
     ],
   },
 ];
@@ -431,35 +431,55 @@ export const testimonials: Testimonial[] = [
   {
     quote:
       "I do not need more market headlines. I need one place that tells me what changed, what matters, and which holdings are exposed.",
-    role: "Self-directed investor",
+    role: "Self directed investor",
   },
   {
     quote:
       "I want the news feed to explain itself: a short AI summary of why a story matters to what I hold, every day.",
-    role: "Long-term portfolio builder",
+    role: "Long term portfolio builder",
   },
 ];
 
 export const faqs: FAQItem[] = [
   {
-    question: "Will live broker connections work in this first version?",
+    question: "Does Pulsefolio link to my brokerage account?",
     answer:
-      "The initial release focuses on manual portfolio import and CSV upload. Guided broker-sync flows are on the roadmap and will be added in a future update.",
+      "Not yet. You import a CSV export from your broker or add positions by hand, and Pulsefolio works only from what you give it.",
   },
   {
-    question: "Can users create a portfolio manually?",
+    question: "Can Pulsefolio trade or move money?",
     answer:
-      "Yes. The onboarding experience includes a manual portfolio path so the product still proves value before live integrations are connected.",
+      "No. It is read only. It never places orders, moves money, or asks for your brokerage login.",
+  },
+  {
+    question: "What does the free plan include?",
+    answer:
+      "Portfolio tracking, the personalized feed, alerts, the morning digest, and 100 AI requests per day on the free model. Requests reset at midnight Eastern.",
+  },
+  {
+    question: "What do the paid plans add?",
+    answer:
+      "Premium adds a stronger AI model and 5,000 requests a month. Ultimate adds our most capable reasoning model and 20,000 requests a month. Current prices are on the pricing page.",
+  },
+  {
+    question: "Which files can I import?",
+    answer:
+      "Most broker CSV exports work. You match the columns once, review every row, then save the portfolio.",
   },
   {
     question: "How is the feed different from a normal market news app?",
     answer:
-      "Each story is ranked by portfolio relevance and includes a plain-English explanation of which holdings or sectors it touches, instead of making the user infer that on their own.",
+      "Each story is ranked by how much it touches your holdings and comes with a short explanation of which positions or sectors it affects, so you do not have to work that out yourself.",
   },
   {
-    question: "What comes next for Pulsefolio?",
+    question: "Where does the news come from?",
     answer:
-      "Upcoming releases will add secure broker linking, deeper AI insights, and expanded data-source coverage to keep your portfolio context richer every day.",
+      "Market, wire, filings and macro sources, including Yahoo Finance, Reuters, the New York Times, SEC filings and the Federal Reserve.",
+  },
+  {
+    question: "Is this investment advice?",
+    answer:
+      "No. Pulsefolio explains news in the context of your holdings. It does not tell you what to buy or sell.",
   },
 ];
 
@@ -471,7 +491,7 @@ export const useCases: UseCase[] = [
     moment: "Every morning",
     headline: "Open the day with a brief shaped by what you own",
     summary:
-      "See portfolio-aware stories, top risks, and how your holdings moved overnight — before you open a single other tab.",
+      "See the stories that touch your portfolio, the top risks, and how your holdings moved overnight, before you open another tab.",
     proofPoints: [
       "Coverage card ranked by relevance",
       "Active portfolio value at a glance",
@@ -508,12 +528,12 @@ export const useCases: UseCase[] = [
   },
   {
     id: "why-moving",
-    moment: "Mid-day check",
+    moment: "Midday check",
     headline: "Ask AI why the portfolio is moving today",
     summary:
-      "Type a question and get a portfolio-grounded answer that highlights which holdings are driving the move and why.",
+      "Type a question and get an answer grounded in your portfolio that highlights which holdings are driving the move and why.",
     proofPoints: [
-      "Natural-language prompt",
+      "Ask in plain words",
       "Answer grounded in your holdings",
       "Highlighted movers with context",
     ],
@@ -539,8 +559,8 @@ export const useCases: UseCase[] = [
       "Open any article from the feed, see which holdings it touches and why it matters, then continue into a focused AI conversation.",
     proofPoints: [
       "Impact summary per holding",
-      "One-tap story chat",
-      "Follow-up questions in context",
+      "Story chat in one tap",
+      "Follow up questions in context",
     ],
     ctaLabel: "Get started",
     ctaHref: "/demo#article-impact",

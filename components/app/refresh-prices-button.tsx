@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { RefreshCw } from "lucide-react";
+import { ArrowsClockwise as RefreshCw } from "@phosphor-icons/react/dist/ssr/ArrowsClockwise";
 import { useRouter } from "next/navigation";
 
 import { refreshPortfolioPricingSnapshot } from "@/lib/actions/portfolio";
@@ -92,7 +92,7 @@ export function RefreshPricesButton({
           buttonStyles({
             variant: isInline ? "ghost" : "secondary",
             className: isInline
-              ? "h-7 gap-1.5 px-2 text-[11px] font-semibold text-slate-400 hover:text-slate-200 disabled:opacity-60"
+              ? "h-7 gap-2 px-2 text-xs font-semibold text-slate-400 hover:text-slate-200 disabled:opacity-60"
               : "disabled:opacity-70",
           }),
           className,
@@ -111,7 +111,7 @@ export function RefreshPricesButton({
       {feedback?.message ? (
         <span
           className={cn(
-            isInline ? "text-[11px] font-medium" : "text-xs font-medium",
+            isInline ? "text-xs font-medium" : "text-xs font-medium",
             feedbackToneClass(feedback.status),
             statusClassName,
           )}

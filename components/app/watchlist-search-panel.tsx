@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useRef, type FormEvent } from "react";
-import { Loader2, Search, X } from "lucide-react";
+import { CircleNotch as Loader2 } from "@phosphor-icons/react/dist/ssr/CircleNotch";
+import { MagnifyingGlass as Search } from "@phosphor-icons/react/dist/ssr/MagnifyingGlass";
+import { X } from "@phosphor-icons/react/dist/ssr/X";
 
 import { searchWatchlistCandidates, addWatchlistItem } from "@/lib/actions/watchlist";
 import type { WatchlistSearchCandidate } from "@/lib/watchlist/watchlist-data";
@@ -57,7 +59,7 @@ export function WatchlistSearchPanel({ onClose, onAdded }: Props) {
   return (
     <div className="rounded-2xl border border-white/[0.08] bg-surface-raised p-6 shadow-xl">
       <div className="mb-4 flex items-center justify-between">
-        <h3 className="text-[15px] font-bold text-white">Search &amp; Add Symbol</h3>
+        <h3 className="text-sm font-bold text-white">Search &amp; Add Symbol</h3>
         <button
           type="button"
           onClick={onClose}
@@ -74,14 +76,14 @@ export function WatchlistSearchPanel({ onClose, onAdded }: Props) {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Ticker or company…"
-          className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder-slate-500 outline-none transition focus:border-brand/40 focus:ring-1 focus:ring-brand/30"
+          className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white placeholder-slate-500 outline-none transition focus:border-brand/40 focus:ring-1 focus:ring-brand/30"
           autoFocus
         />
         <button
           type="submit"
           disabled={searching || !query.trim()}
           className={cn(
-            "inline-flex items-center gap-2 rounded-xl border border-brand bg-brand px-4 py-2.5 text-sm font-bold text-[#080c11] transition hover:bg-brand-strong disabled:opacity-50",
+            "inline-flex items-center gap-2 rounded-xl border border-brand bg-brand px-4 py-2 text-sm font-bold text-brand-foreground transition hover:bg-brand-strong disabled:opacity-50",
           )}
         >
           {searching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
@@ -97,7 +99,7 @@ export function WatchlistSearchPanel({ onClose, onAdded }: Props) {
               type="button"
               onClick={() => void handleSearch()}
               disabled={searching || !query.trim()}
-              className="mt-1.5 text-[12px] font-bold text-red-400 underline underline-offset-2 transition hover:text-red-300 disabled:opacity-50"
+              className="mt-2 text-xs font-bold text-red-400 underline underline-offset-2 transition hover:text-red-300 disabled:opacity-50"
             >
               Retry
             </button>
@@ -122,24 +124,24 @@ export function WatchlistSearchPanel({ onClose, onAdded }: Props) {
               className="flex w-full items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-3 text-left transition hover:border-brand/25 hover:bg-brand/5 disabled:opacity-50"
             >
               <div>
-                <p className="text-[14px] font-bold text-white">{r.symbol}</p>
-                <p className="mt-0.5 text-[12px] text-slate-500">
+                <p className="text-sm font-bold text-white">{r.symbol}</p>
+                <p className="mt-0.5 text-xs text-slate-500">
                   {r.company}
                   {r.exchange ? ` · ${r.exchange}` : ""}
                 </p>
               </div>
               <div className="text-right">
                 {r.price != null ? (
-                  <p className="text-[14px] font-bold text-white">
+                  <p className="text-sm font-bold text-white">
                     ${r.price.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                   </p>
                 ) : (
-                  <p className="text-[13px] text-slate-600">—</p>
+                  <p className="text-xs text-slate-600">—</p>
                 )}
                 {r.dayChange != null ? (
                   <p
                     className={cn(
-                      "mt-0.5 text-[12px] font-bold",
+                      "mt-0.5 text-xs font-bold",
                       r.dayChange >= 0 ? "text-emerald-400" : "text-red-400",
                     )}
                   >

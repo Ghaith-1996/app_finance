@@ -151,7 +151,11 @@ test("E2E-00: themes and widths preserve real primary-link contrast and error-bo
       await page.goto("/");
       await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
       await expect(page.getByText("Illustrative scenario", { exact: true }).first()).toBeVisible();
-      const colors = await page.getByRole("link", { name: "Get started", exact: true }).first().evaluate((link) => {
+      // The redesigned hero uses "Start free"; "Get started" is now a plain footer link.
+      const primaryLink = page.getByRole("main").getByRole("link", { name: "Start free", exact: true }).first();
+      await expect(primaryLink).toBeVisible();
+      await expect(primaryLink).toHaveAttribute("href", "/onboarding");
+      const colors = await primaryLink.evaluate((link) => {
         const style = getComputedStyle(link);
         const canvas = document.createElement("canvas"); canvas.width = canvas.height = 1;
         const ctx = canvas.getContext("2d")!;

@@ -22,7 +22,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       saveChanges: "Save changes",
       backToHome: "Back to home",
       termsOfService: "Terms of Service",
-      privacyPolicy: "Privacy Policy",
+      privacyPolicy: "Privacy policy",
     },
     preferences: {
       title: "Preferences",
@@ -51,7 +51,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       overview: "Overview",
       fullPortfolio: "Full portfolio",
       watchlist: "Watchlist",
-      landingPage: "Landing Page",
+      landingPage: "Landing page",
       showNavigation: "Show navigation",
       hideNavigation: "Hide navigation",
       expandOverviewLinks: "Expand overview links",
@@ -93,14 +93,13 @@ export const dictionaries: Record<Locale, Dictionary> = {
     },
     landing: {
       headerTagline: "AI portfolio news, made personal",
-      heroLead: "Own",
       product: "Product",
       useCases: "Use cases",
       howItWorks: "How it works",
       faq: "FAQ",
       viewDemo: "View demo",
       getStarted: "Get started",
-      footerTagline: "Portfolio-aware finance intelligence.",
+      footerTagline: "Market news, read through your portfolio.",
       footerOnboarding: "Onboarding",
       footerFeed: "Feed demo",
       footerPortfolio: "Portfolio",
@@ -111,7 +110,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       footerContact: "Contact",
     },
     pages: {
-      homeTitle: "Today Dashboard",
+      homeTitle: "Today dashboard",
       homeDescription: "Your portfolio health, alerts, stories, and community signals in one place.",
       analysisEyebrow: "Analysis",
       analysisTitle: "Your AI brief updates automatically",
@@ -121,7 +120,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       feedTitle: "A personalized news feed built around what you own.",
       feedDescription:
         "Leveraging compound analysis to distill 14,000+ daily data points into your critical performance drivers.",
-      portfolioTitle: "Portfolio Overview",
+      portfolioTitle: "Portfolio overview",
       portfolioDescription: "Welcome back. Here's your market snapshot for today.",
       portfolioEmptyTitle: "No portfolio yet",
       portfolioEmptyDescription:
@@ -130,7 +129,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       watchlistDescription:
         "Track symbols and open the news feed for any asset in one click.",
       adminEyebrow: "Admin",
-      adminTitle: "Admin Console",
+      adminTitle: "Admin console",
       adminDescription:
         "Allowlist-only controls for model access and manual news operations. Stripe plan state remains unchanged; admin status only overrides AI model tier access.",
       adminBack: "Back to settings",
@@ -224,7 +223,6 @@ export const dictionaries: Record<Locale, Dictionary> = {
     },
     landing: {
       headerTagline: "Actualités de portefeuille par IA, plus personnelles",
-      heroLead: "Prenez",
       product: "Produit",
       useCases: "Cas d'usage",
       howItWorks: "Fonctionnement",

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 
-import { ArrowRight } from "lucide-react";
+import { ArrowRight } from "@phosphor-icons/react/dist/ssr/ArrowRight";
 
 import { ActivePortfolioValueCard } from "@/components/app/active-portfolio-value-card";
 import { AppShell } from "@/components/app/app-shell";
@@ -93,12 +93,12 @@ export default async function FeedPage({
         </Link>
       }
     >
-      <div className="space-y-5">
+      <div className="space-y-6">
         {/* Audit D01: one compact strip instead of three tall cards, so the first stories sit
             above the fold. */}
         <Panel className="grid gap-4 rounded-2xl p-4 sm:grid-cols-3 sm:gap-6 sm:px-6">
           <div className="min-w-0 space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
+            <p className="text-xs font-semibold text-slate-500">
               Intelligence coverage
             </p>
             <p className="flex flex-wrap items-baseline gap-x-2">
@@ -111,7 +111,7 @@ export default async function FeedPage({
           </div>
 
           <div className="min-w-0 space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
+            <p className="text-xs font-semibold text-slate-500">
               Last analysis
             </p>
             <p className="text-xl font-semibold tracking-tight text-white">

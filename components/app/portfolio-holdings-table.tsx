@@ -3,7 +3,13 @@
 import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowDown, ArrowUp, ArrowUpDown, ExternalLink, Minus, Newspaper, Plus } from "lucide-react";
+import { ArrowDown } from "@phosphor-icons/react/dist/ssr/ArrowDown";
+import { ArrowUp } from "@phosphor-icons/react/dist/ssr/ArrowUp";
+import { ArrowsDownUp as ArrowUpDown } from "@phosphor-icons/react/dist/ssr/ArrowsDownUp";
+import { ArrowSquareOut as ExternalLink } from "@phosphor-icons/react/dist/ssr/ArrowSquareOut";
+import { Minus } from "@phosphor-icons/react/dist/ssr/Minus";
+import { Newspaper } from "@phosphor-icons/react/dist/ssr/Newspaper";
+import { Plus } from "@phosphor-icons/react/dist/ssr/Plus";
 
 import type { Holding } from "@/lib/types";
 import { InvestmentThesisPanel } from "@/components/app/investment-thesis-panel";
@@ -29,13 +35,13 @@ type SortDir = "asc" | "desc";
 const COLUMNS: Array<{ key: SortKey; label: string; align?: "left" | "right" }> = [
   { key: "symbol", label: "Holding" },
   { key: "quantity", label: "Shares" },
-  { key: "averageCost", label: "Avg Cost" },
-  { key: "costBasis", label: "Cost Basis", align: "right" },
+  { key: "averageCost", label: "Avg cost" },
+  { key: "costBasis", label: "Cost basis", align: "right" },
   { key: "price", label: "Price" },
   { key: "dailyChange", label: "Day %" },
   { key: "value", label: "Value", align: "right" },
-  { key: "gainLoss", label: "Gain/Loss", align: "right" },
-  { key: "gainLossPercent", label: "Gain/Loss %", align: "right" },
+  { key: "gainLoss", label: "Gain/loss", align: "right" },
+  { key: "gainLossPercent", label: "Gain/loss %", align: "right" },
 ];
 
 const inputClass =
@@ -182,39 +188,39 @@ function HoldingAdjustPanel({
 
   return (
     <div
-      className="rounded-2xl border border-brand/20 bg-brand/5 px-5 py-5"
+      className="rounded-2xl border border-brand/20 bg-brand/5 px-6 py-6"
       onClick={(e) => e.stopPropagation()}
       role="region"
       aria-label={`Adjust position ${holding.symbol}`}
     >
-      <p className="mb-4 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+      <p className="mb-4 text-xs font-semibold text-slate-500">
         Update position — {holding.symbol}
       </p>
-      <div className="mb-5 rounded-2xl border border-white/[0.06] bg-surface-raised/60 p-4">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+      <div className="mb-6 rounded-2xl border border-white/[0.06] bg-surface-raised/60 p-4">
+        <p className="text-xs font-semibold text-slate-500">
           Stock details
         </p>
         <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
           <div className="rounded-xl border border-white/[0.06] bg-surface-input/70 px-3 py-3">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+            <p className="text-xs font-semibold text-slate-500">
               Symbol
             </p>
             <p className="mt-1 text-sm font-semibold text-white">{holding.symbol}</p>
           </div>
           <div className="rounded-xl border border-white/[0.06] bg-surface-input/70 px-3 py-3">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+            <p className="text-xs font-semibold text-slate-500">
               Company
             </p>
             <p className="mt-1 truncate text-sm font-semibold text-white">{holding.company}</p>
           </div>
           <div className="rounded-xl border border-white/[0.06] bg-surface-input/70 px-3 py-3">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+            <p className="text-xs font-semibold text-slate-500">
               Current price
             </p>
             <p className="mt-1 text-sm font-semibold text-white">{formatQuoteAmount(price, holding.quoteCurrency)}</p>
           </div>
           <div className="rounded-xl border border-white/[0.06] bg-surface-input/70 px-3 py-3">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+            <p className="text-xs font-semibold text-slate-500">
               Day %
             </p>
             <p
@@ -228,7 +234,7 @@ function HoldingAdjustPanel({
             </p>
           </div>
           <div className="rounded-xl border border-white/[0.06] bg-surface-input/70 px-3 py-3">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+            <p className="text-xs font-semibold text-slate-500">
               Current value
             </p>
             <p className="mt-1 text-sm font-semibold text-white">{formatUsd(value)}</p>
@@ -246,7 +252,7 @@ function HoldingAdjustPanel({
             full position, this line is removed.
           </p>
           <div>
-            <label className="mb-1 block text-[10px] uppercase tracking-wider text-slate-500">
+            <label className="mb-1 block text-xs text-slate-500">
               Shares sold
             </label>
             <div className="flex gap-2">
@@ -270,7 +276,7 @@ function HoldingAdjustPanel({
                 }}
                 className={buttonStyles({
                   variant: "ghost",
-                  className: "shrink-0 px-3 text-xs font-semibold uppercase tracking-wider text-brand",
+                  className: "shrink-0 px-3 text-xs font-semibold text-brand",
                 })}
               >
                 Max
@@ -298,7 +304,7 @@ function HoldingAdjustPanel({
           </p>
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <label className="mb-1 block text-[10px] uppercase tracking-wider text-slate-500">
+              <label className="mb-1 block text-xs text-slate-500">
                 Shares added
               </label>
               <input
@@ -312,7 +318,7 @@ function HoldingAdjustPanel({
               />
             </div>
             <div>
-              <label className="mb-1 block text-[10px] uppercase tracking-wider text-slate-500">
+              <label className="mb-1 block text-xs text-slate-500">
                 Price / share (new lot)
               </label>
               <input
@@ -389,7 +395,7 @@ export function PortfolioHoldingsTable({
     <div className="space-y-4">
       <div
         className={cn(
-          "grid items-center gap-x-3 px-3 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-600 sm:px-6 md:gap-x-4",
+          "grid items-center gap-x-3 px-3 text-xs font-bold text-slate-600 sm:px-6 md:gap-x-4",
           MOBILE_GRID,
           DESKTOP_GRID,
         )}
@@ -407,9 +413,9 @@ export function PortfolioHoldingsTable({
             <button
               type="button"
               onClick={() => handleSort(column.key)}
-              className={`inline-flex items-center gap-1.5 transition hover:text-slate-300 ${
-                column.align === "right" ? "ml-auto" : ""
-              }`}
+              className={`inline-flex items-center gap-2 transition hover:text-slate-300 ${
+ column.align === "right" ? "ml-auto" : ""
+ }`}
             >
               <span>{column.label}</span>
               {sortKey === column.key ? (
@@ -444,7 +450,7 @@ export function PortfolioHoldingsTable({
                 type="button"
                 onClick={() => setOpenId((id) => (id === holding.id ? null : holding.id))}
                 className={cn(
-                  "grid w-full items-center gap-x-3 rounded-2xl border px-3 py-3 text-left transition-transform duration-200 sm:px-6 sm:py-5 md:gap-x-4",
+                  "grid w-full items-center gap-x-3 rounded-2xl border px-3 py-3 text-left transition-transform duration-200 sm:px-6 sm:py-6 md:gap-x-4",
                   MOBILE_GRID,
                   DESKTOP_GRID,
                   isOpen
@@ -460,14 +466,14 @@ export function PortfolioHoldingsTable({
                     <p className="font-bold leading-tight text-white">
                       {holding.symbol}
                     </p>
-                    <p className="mt-0.5 truncate text-[10px] font-bold uppercase tracking-widest text-slate-600">
+                    <p className="mt-0.5 truncate text-xs font-bold text-slate-600">
                       {holding.company}
                     </p>
-                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                    <div className="mt-1 flex flex-wrap items-center gap-2">
                       <Link
                         href={`/feed?ticker=${encodeURIComponent(holding.symbol)}`}
                         onClick={(e) => e.stopPropagation()}
-                        className="inline-flex items-center gap-1 rounded-md border border-brand/25 bg-brand/10 px-2 py-0.5 text-[10px] font-bold text-brand transition hover:border-brand/40 hover:bg-brand/15"
+                        className="inline-flex items-center gap-1 rounded-md border border-brand/25 bg-brand/10 px-2 py-0.5 text-xs font-bold text-brand transition hover:border-brand/40 hover:bg-brand/15"
                       >
                         <Newspaper className="h-3 w-3" />
                         News
@@ -478,7 +484,7 @@ export function PortfolioHoldingsTable({
                           target="_blank"
                           rel="noopener noreferrer"
                           onClick={(e) => e.stopPropagation()}
-                          className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-bold text-slate-300 transition hover:border-white/20 hover:text-white"
+                          className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2 py-0.5 text-xs font-bold text-slate-300 transition hover:border-white/20 hover:text-white"
                           aria-label={`${holding.symbol} latest earnings report`}
                         >
                           <ExternalLink className="h-3 w-3" />
@@ -486,7 +492,7 @@ export function PortfolioHoldingsTable({
                         </a>
                       ) : (
                         <span
-                          className="inline-flex items-center gap-1 rounded-md border border-white/[0.06] bg-white/[0.03] px-2 py-0.5 text-[10px] font-bold text-slate-600"
+                          className="inline-flex items-center gap-1 rounded-md border border-white/[0.06] bg-white/[0.03] px-2 py-0.5 text-xs font-bold text-slate-600"
                           aria-disabled="true"
                           aria-label={`${holding.symbol} latest earnings report unavailable`}
                         >
@@ -497,41 +503,41 @@ export function PortfolioHoldingsTable({
                     </div>
                   </div>
                 </div>
-                <div className="hidden whitespace-nowrap text-[14px] font-medium text-slate-400 md:block">
+                <div className="hidden whitespace-nowrap text-sm font-medium text-slate-400 md:block">
                   {holding.quantity.toFixed(2)}
                 </div>
-                <div className="hidden whitespace-nowrap text-[14px] font-medium text-slate-400 md:block">
+                <div className="hidden whitespace-nowrap text-sm font-medium text-slate-400 md:block">
                   {formatQuoteAmount(holding.averageCost, holding.quoteCurrency)}
                 </div>
-                <div className="hidden whitespace-nowrap text-right text-[14px] font-bold text-slate-300 md:block">
+                <div className="hidden whitespace-nowrap text-right text-sm font-bold text-slate-300 md:block">
                   {formatUsd(costBasis)}
                 </div>
-                <div className="whitespace-nowrap text-[14px] font-bold text-white">
+                <div className="whitespace-nowrap text-sm font-bold text-white">
                   {formatQuoteAmount(price, holding.quoteCurrency)}
                 </div>
                 <div
-                  className={`hidden whitespace-nowrap text-[14px] font-bold md:block ${
-                    isPositiveDay ? "text-emerald-400" : "text-red-400"
-                  }`}
+                  className={`hidden whitespace-nowrap text-sm font-bold md:block ${
+ isPositiveDay ? "text-emerald-400" : "text-red-400"
+ }`}
                 >
                   {isPositiveDay ? "+" : ""}
                   {dayChange.toFixed(2)}%
                 </div>
-                <div className="whitespace-nowrap text-right text-[15px] font-bold text-white">
+                <div className="whitespace-nowrap text-right text-sm font-bold text-white">
                   {formatUsd(value)}
                 </div>
                 <div
-                  className={`whitespace-nowrap text-right text-[15px] font-bold ${
-                    isPositiveTotal ? "text-emerald-400" : "text-red-400"
-                  }`}
+                  className={`whitespace-nowrap text-right text-sm font-bold ${
+ isPositiveTotal ? "text-emerald-400" : "text-red-400"
+ }`}
                 >
                   {gainLoss !== null && isPositiveTotal ? "+" : ""}
                   {formatUsd(gainLoss)}
                 </div>
                 <div
-                  className={`hidden whitespace-nowrap text-right text-[15px] font-bold md:block ${
-                    isPositiveTotal ? "text-emerald-400" : "text-red-400"
-                  }`}
+                  className={`hidden whitespace-nowrap text-right text-sm font-bold md:block ${
+ isPositiveTotal ? "text-emerald-400" : "text-red-400"
+ }`}
                 >
                   {gainLossPercent === null ? "—" : `${isPositiveTotal ? "+" : ""}${gainLossPercent.toFixed(2)}%`}
                 </div>

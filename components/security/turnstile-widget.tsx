@@ -189,7 +189,7 @@ function TurnstileWidget({
 
   if (!siteKey) {
     return (
-      <p className="text-[11px] text-slate-600">
+      <p className="text-xs text-slate-600">
         Bot protection unavailable (missing site key).
       </p>
     );
@@ -197,7 +197,7 @@ function TurnstileWidget({
 
   if (scriptFailed) {
     return (
-      <div className="flex items-center gap-2 py-2 text-[11px] text-amber-400">
+      <div className="flex items-center gap-2 py-2 text-xs text-amber-400">
         <span>Verification failed to load.</span>
         <button
           type="button"
@@ -336,7 +336,7 @@ export function TurnstileBlock({
         action={action}
       />
       {statusMessage && (
-        <div className="mt-1 flex items-center gap-2 text-[11px]">
+        <div className="mt-1 flex items-center gap-2 text-xs">
           <span
             className={cn(
               status === "error"

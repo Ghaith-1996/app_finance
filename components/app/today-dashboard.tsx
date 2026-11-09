@@ -1,22 +1,20 @@
 import type { CSSProperties, ReactNode } from "react";
 import Link from "next/link";
-import {
-  AlertTriangle,
-  ArrowRight,
-  Bell,
-  CalendarDays,
-  CheckCircle2,
-  ChevronDown,
-  Clock3,
-  DatabaseZap,
-  Gauge,
-  History,
-  LineChart,
-  Newspaper,
-  Radio,
-  Sparkles,
-  WalletCards,
-} from "lucide-react";
+import { Warning as AlertTriangle } from "@phosphor-icons/react/dist/ssr/Warning";
+import { ArrowRight } from "@phosphor-icons/react/dist/ssr/ArrowRight";
+import { Bell } from "@phosphor-icons/react/dist/ssr/Bell";
+import { CalendarDots as CalendarDays } from "@phosphor-icons/react/dist/ssr/CalendarDots";
+import { CheckCircle as CheckCircle2 } from "@phosphor-icons/react/dist/ssr/CheckCircle";
+import { CaretDown as ChevronDown } from "@phosphor-icons/react/dist/ssr/CaretDown";
+import { Clock as Clock3 } from "@phosphor-icons/react/dist/ssr/Clock";
+import { Database as DatabaseZap } from "@phosphor-icons/react/dist/ssr/Database";
+import { Gauge } from "@phosphor-icons/react/dist/ssr/Gauge";
+import { ClockCounterClockwise as History } from "@phosphor-icons/react/dist/ssr/ClockCounterClockwise";
+import { ChartLine as LineChart } from "@phosphor-icons/react/dist/ssr/ChartLine";
+import { Newspaper } from "@phosphor-icons/react/dist/ssr/Newspaper";
+import { Broadcast as Radio } from "@phosphor-icons/react/dist/ssr/Broadcast";
+import { Sparkle as Sparkles } from "@phosphor-icons/react/dist/ssr/Sparkle";
+import { Wallet as WalletCards } from "@phosphor-icons/react/dist/ssr/Wallet";
 
 import { formatAppDateTime } from "@/lib/time/format";
 import type { HomeDashboardData } from "@/lib/server/page-loaders";
@@ -53,10 +51,10 @@ function toneDot(tone: PortfolioHealthTone) {
 }
 
 function healthColor(score: number) {
-  if (score >= 85) return "#34d399";
-  if (score >= 70) return "#10b981";
+  if (score >= 85) return "var(--positive)";
+  if (score >= 70) return "var(--brand)";
   if (score >= 55) return "#f59e0b";
-  return "#f87171";
+  return "var(--negative)";
 }
 
 function formatReportDate(value: string | null) {
@@ -91,35 +89,35 @@ export function TodayDashboard({ data }: { data: HomeDashboardData }) {
         <div className="rounded-2xl border border-white/[0.06] bg-surface-raised p-6 sm:p-8">
           <div className="flex items-center gap-3 text-brand">
             <WalletCards className="h-5 w-5" />
-            <p className="text-xs font-bold uppercase tracking-[0.22em]">
-              Today Dashboard
+            <p className="text-xs font-bold">
+              Today dashboard
             </p>
           </div>
-          <h2 className="mt-5 text-2xl font-bold tracking-tight text-white sm:text-3xl">
+          <h2 className="mt-6 text-2xl font-bold tracking-tight text-white sm:text-3xl">
             Build your first portfolio brief
           </h2>
-          <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-400">
+          <p className="mt-3 max-w-2xl text-sm text-slate-400">
             Add holdings to unlock the health score, matched news, earnings links,
             and daily digest controls.
           </p>
           <div className="mt-6 flex flex-wrap gap-3">
             <Link
               href="/onboarding"
-              className="inline-flex items-center gap-2 rounded-xl bg-brand px-5 py-2.5 text-sm font-bold text-[#080c11] transition hover:bg-brand-strong"
+              className="inline-flex items-center gap-2 rounded-xl bg-brand px-6 py-2 text-sm font-bold text-brand-foreground transition hover:bg-brand-strong"
             >
               Start onboarding
               <ArrowRight className="h-4 w-4" />
             </Link>
             <Link
               href="/demo"
-              className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-bold text-slate-200 transition hover:bg-white/10"
+              className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-6 py-2 text-sm font-bold text-slate-200 transition hover:bg-white/10"
             >
               View demo
             </Link>
           </div>
         </div>
         <div className="rounded-2xl border border-white/[0.06] bg-surface-raised p-6 sm:p-8">
-          <p className="text-xs font-bold uppercase tracking-[0.22em] text-slate-500">
+          <p className="text-xs font-bold text-slate-500">
             Market coverage
           </p>
           <p className="mt-4 text-4xl font-bold tracking-tight text-white">
@@ -141,11 +139,11 @@ export function TodayDashboard({ data }: { data: HomeDashboardData }) {
       <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
         <div className="rounded-2xl border border-white/[0.06] bg-surface-raised p-6 sm:p-8">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-2 rounded-lg border border-brand/20 bg-brand/10 px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.18em] text-brand">
+            <span className="inline-flex items-center gap-2 rounded-lg border border-brand/20 bg-brand/10 px-3 py-2 text-xs font-bold text-brand">
               <Radio className="h-3.5 w-3.5" />
               Today
             </span>
-            <span className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
+            <span className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-slate-400">
               {data.portfolioName}
             </span>
           </div>
@@ -159,7 +157,7 @@ export function TodayDashboard({ data }: { data: HomeDashboardData }) {
                 </p>
                 <span
                   className={cn(
-                    "mb-1 rounded-lg px-2.5 py-1 text-sm font-bold",
+                    "mb-1 rounded-lg px-3 py-1 text-sm font-bold",
                     valueDisplay.direction === "unknown"
                       ? "bg-white/5 text-slate-400"
                       : valueDisplay.direction === "down"
@@ -183,31 +181,31 @@ export function TodayDashboard({ data }: { data: HomeDashboardData }) {
                 </div>
               </div>
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.22em] text-slate-500">Health Score</p>
+                <p className="text-xs font-bold text-slate-500">Health score</p>
                 <p className="mt-1 text-lg font-bold text-white">{data.health.label}</p>
               </div>
             </div>
           </div>
 
-          <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-400">{data.health.summary}</p>
+          <p className="mt-4 max-w-2xl text-sm text-slate-400">{data.health.summary}</p>
 
           <div className="mt-6 flex flex-wrap gap-3">
             <Link
               href="/feed"
-              className="inline-flex items-center gap-2 rounded-xl bg-brand px-4 py-2.5 text-sm font-bold text-[#080c11] transition hover:bg-brand-strong"
+              className="inline-flex items-center gap-2 rounded-xl bg-brand px-4 py-2 text-sm font-bold text-brand-foreground transition hover:bg-brand-strong"
             >
               Open feed
               <ArrowRight className="h-4 w-4" />
             </Link>
             <Link
               href="/portfolio/full"
-              className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-bold text-slate-200 transition hover:bg-white/10"
+              className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-bold text-slate-200 transition hover:bg-white/10"
             >
               Full portfolio
             </Link>
             <Link
               href="/analysis"
-              className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-bold text-slate-200 transition hover:bg-white/10"
+              className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-bold text-slate-200 transition hover:bg-white/10"
             >
               Run analysis
             </Link>
@@ -225,7 +223,7 @@ export function TodayDashboard({ data }: { data: HomeDashboardData }) {
             </div>
           </div>
           {nextActions.length > 0 ? (
-            <ol className="mt-5 space-y-3">
+            <ol className="mt-6 space-y-3">
               {nextActions.map((action) => (
                 <li key={action.id}>
                   <Link
@@ -235,18 +233,18 @@ export function TodayDashboard({ data }: { data: HomeDashboardData }) {
                     <div className="flex items-start justify-between gap-3">
                       <p className="text-sm font-bold text-white">{action.title}</p>
                       {action.tone !== "neutral" ? (
-                        <span className={cn("rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase", toneClasses(action.tone))}>
+                        <span className={cn("rounded-md border px-2 py-0.5 text-xs font-bold", toneClasses(action.tone))}>
                           {action.tone}
                         </span>
                       ) : null}
                     </div>
-                    <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-400">{action.detail}</p>
+                    <p className="mt-2 line-clamp-2 text-sm text-slate-400">{action.detail}</p>
                   </Link>
                 </li>
               ))}
             </ol>
           ) : (
-            <div className="mt-5">
+            <div className="mt-6">
               <EmptyMini
                 title="Nothing needs attention"
                 detail="No alert, risk or material change is waiting for you right now."
@@ -272,32 +270,32 @@ export function TodayDashboard({ data }: { data: HomeDashboardData }) {
           </Link>
         </div>
         {topStories.length > 0 ? (
-          <div className="mt-5 grid gap-3 md:grid-cols-3">
+          <div className="mt-6 grid gap-3 md:grid-cols-3">
             {topStories.map((story) => (
               <Link
                 key={story.newsItemId}
                 href={storyHref(story.newsItemId)}
                 className="block rounded-xl border border-white/[0.06] bg-white/[0.03] p-4 transition hover:bg-white/[0.06]"
               >
-                <span className="rounded-md bg-white/5 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                <span className="rounded-md bg-white/5 px-2 py-0.5 text-xs font-bold text-slate-500">
                   {categoryLabel(story.category)}
                 </span>
-                <h3 className="mt-3 text-sm font-bold leading-snug text-white">{story.headline}</h3>
-                <p className="mt-2 line-clamp-3 text-sm leading-6 text-slate-400">
+                <h3 className="mt-3 text-sm font-bold text-white">{story.headline}</h3>
+                <p className="mt-2 line-clamp-3 text-sm text-slate-400">
                   {story.whyItMatters || story.aiSummary}
                 </p>
               </Link>
             ))}
           </div>
         ) : (
-          <div className="mt-5">
+          <div className="mt-6">
             <EmptyMini title="No matched story" detail="Run analysis to populate today's top stories." />
           </div>
         )}
       </div>
 
       <details className="group rounded-2xl border border-white/[0.06] bg-surface-raised">
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-4 p-5 sm:p-6 [&::-webkit-details-marker]:hidden">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-4 p-6 sm:p-6 [&::-webkit-details-marker]:hidden">
           <span>
             <span className="block text-base font-bold text-white">More portfolio detail</span>
             <span className="mt-1 block text-sm text-slate-500">
@@ -311,24 +309,24 @@ export function TodayDashboard({ data }: { data: HomeDashboardData }) {
             <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-6">
               <div className="flex items-center gap-2 text-brand">
                 <Gauge className="h-5 w-5" />
-                <p className="text-xs font-bold uppercase tracking-[0.22em]">Health factors</p>
+                <p className="text-xs font-bold">Health factors</p>
               </div>
-              <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {data.health.factors.slice(0, 6).map((factor) => (
                   <div key={factor.id} className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-4">
                     <div className="flex items-center justify-between gap-3">
-                      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">{factor.label}</p>
+                      <p className="text-xs font-bold text-slate-500">{factor.label}</p>
                       <span className={cn("h-2 w-2 rounded-full", toneDot(factor.tone))} />
                     </div>
                     <p className="mt-2 text-sm font-bold text-white">{factor.value}</p>
-                    <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{factor.detail}</p>
+                    <p className="mt-1 line-clamp-2 text-xs text-slate-500">{factor.detail}</p>
                   </div>
                 ))}
               </div>
             </div>
             <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-6">
-              <p className="text-xs font-bold uppercase tracking-[0.22em] text-slate-500">Alert readiness</p>
-              <div className="mt-5 space-y-3">
+              <p className="text-xs font-bold text-slate-500">Alert readiness</p>
+              <div className="mt-6 space-y-3">
                 <ReadinessRow
                   icon={Bell}
                   label="Daily digest"
@@ -363,7 +361,7 @@ export function TodayDashboard({ data }: { data: HomeDashboardData }) {
 
       <div className="grid gap-4 xl:grid-cols-3">
         <div className="rounded-2xl border border-white/[0.06] bg-surface-raised p-6">
-          <div className="mb-5 flex items-center gap-3">
+          <div className="mb-6 flex items-center gap-3">
             <div className="rounded-xl border border-brand/20 bg-brand/10 p-3 text-brand">
               <Clock3 className="h-5 w-5" />
             </div>
@@ -384,11 +382,11 @@ export function TodayDashboard({ data }: { data: HomeDashboardData }) {
                 >
                   <div className="flex items-start justify-between gap-3">
                     <p className="text-sm font-bold text-white">{item.title}</p>
-                    <span className={cn("rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase", toneClasses(item.tone))}>
+                    <span className={cn("rounded-md border px-2 py-0.5 text-xs font-bold", toneClasses(item.tone))}>
                       {item.tone}
                     </span>
                   </div>
-                  <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-400">
+                  <p className="mt-2 line-clamp-2 text-sm text-slate-400">
                     {item.detail}
                   </p>
                 </Link>
@@ -403,7 +401,7 @@ export function TodayDashboard({ data }: { data: HomeDashboardData }) {
         </div>
 
         <div className="rounded-2xl border border-white/[0.06] bg-surface-raised p-6 xl:col-span-2">
-          <div className="mb-5 flex items-center gap-3">
+          <div className="mb-6 flex items-center gap-3">
             <div className="rounded-xl border border-white/10 bg-white/5 p-3 text-slate-300">
               <History className="h-5 w-5" />
             </div>
@@ -421,14 +419,14 @@ export function TodayDashboard({ data }: { data: HomeDashboardData }) {
                   <>
                     <div className="flex items-start justify-between gap-3">
                       <p className="text-sm font-bold text-white">{item.title}</p>
-                      <span className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-600">
+                      <span className="shrink-0 text-xs font-semibold text-slate-600">
                         {item.type}
                       </span>
                     </div>
-                    <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-400">
+                    <p className="mt-2 line-clamp-2 text-sm text-slate-400">
                       {item.detail}
                     </p>
-                    <p className="mt-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-600">
+                    <p className="mt-3 text-xs font-semibold text-slate-600">
                       {formatActivityTime(item.occurredAt)}
                     </p>
                   </>
@@ -483,11 +481,11 @@ export function TodayDashboard({ data }: { data: HomeDashboardData }) {
             >
               <div className="flex items-start justify-between gap-3">
                 <p className="text-sm font-bold text-white">{item.title}</p>
-                <span className={cn("rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase", toneClasses(item.tone))}>
+                <span className={cn("rounded-md border px-2 py-0.5 text-xs font-bold", toneClasses(item.tone))}>
                   {item.tone}
                 </span>
               </div>
-              <p className="mt-2 text-sm leading-6 text-slate-400">{item.detail}</p>
+              <p className="mt-2 text-sm text-slate-400">{item.detail}</p>
             </Link>
           ))}
         </SignalPanel>
@@ -500,12 +498,12 @@ export function TodayDashboard({ data }: { data: HomeDashboardData }) {
         >
           {data.health.opportunities.slice(0, 3).map((item) => (
             <Link
-              key={`${item.title}-${item.detail}`}
+              key={item.href}
               href={item.href}
               className="block rounded-xl border border-white/[0.06] bg-white/[0.03] p-4 transition hover:bg-white/[0.06]"
             >
               <p className="text-sm font-bold text-white">{item.title}</p>
-              <p className="mt-2 line-clamp-3 text-sm leading-6 text-slate-400">
+              <p className="mt-2 line-clamp-3 text-sm text-slate-400">
                 {item.detail}
               </p>
             </Link>
@@ -528,7 +526,7 @@ export function TodayDashboard({ data }: { data: HomeDashboardData }) {
             >
               <div className="flex items-center justify-between gap-3">
                 <p className="text-sm font-bold text-white">{item.symbol}</p>
-                <span className="rounded-md bg-brand/10 px-2 py-0.5 text-[10px] font-bold uppercase text-brand">
+                <span className="rounded-md bg-brand/10 px-2 py-0.5 text-xs font-bold text-brand">
                   {item.source ?? "report"}
                 </span>
               </div>
@@ -541,12 +539,12 @@ export function TodayDashboard({ data }: { data: HomeDashboardData }) {
 
       <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
         <div className="rounded-2xl border border-white/[0.06] bg-surface-raised p-6">
-          <div className="mb-5 flex items-center gap-3">
+          <div className="mb-6 flex items-center gap-3">
             <div className="rounded-xl border border-brand/20 bg-brand/10 p-3 text-brand">
               <DatabaseZap className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-xs font-bold uppercase tracking-[0.22em] text-slate-500">
+              <p className="text-xs font-bold text-slate-500">
                 Data freshness
               </p>
               <p className="text-sm text-slate-400">Prices, news, analysis, snapshots, and alerts</p>
@@ -562,12 +560,12 @@ export function TodayDashboard({ data }: { data: HomeDashboardData }) {
               >
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-sm font-bold text-white">{item.label}</p>
-                  <span className={cn("rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase", toneClasses(item.tone))}>
+                  <span className={cn("rounded-md border px-2 py-0.5 text-xs font-bold", toneClasses(item.tone))}>
                     {item.tone}
                   </span>
                 </div>
                 <p className="mt-2 text-sm font-semibold text-slate-300">{item.value}</p>
-                <p className="mt-1 text-xs leading-5 text-slate-500">{item.detail}</p>
+                <p className="mt-1 text-xs text-slate-500">{item.detail}</p>
               </Link>
             ))}
           </div>
@@ -580,7 +578,7 @@ export function TodayDashboard({ data }: { data: HomeDashboardData }) {
                 <Bell className="h-5 w-5" />
               </div>
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.22em] text-slate-500">
+                <p className="text-xs font-bold text-slate-500">
                   Recent alerts
                 </p>
                 <p className="text-sm text-slate-400">Generated from your smart rules</p>
@@ -592,7 +590,7 @@ export function TodayDashboard({ data }: { data: HomeDashboardData }) {
           </div>
 
           {data.recentAlerts.length > 0 ? (
-            <div className="mt-5 space-y-3">
+            <div className="mt-6 space-y-3">
               {data.recentAlerts.slice(0, 3).map((alert) => (
                 <Link
                   key={alert.id}
@@ -603,7 +601,7 @@ export function TodayDashboard({ data }: { data: HomeDashboardData }) {
                     <p className="text-sm font-bold text-white">{alert.title}</p>
                     <span
                       className={cn(
-                        "rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase",
+                        "rounded-md border px-2 py-0.5 text-xs font-bold",
                         alert.severity === "high"
                           ? toneClasses("risk")
                           : alert.severity === "medium"
@@ -614,7 +612,7 @@ export function TodayDashboard({ data }: { data: HomeDashboardData }) {
                       {alert.severity}
                     </span>
                   </div>
-                  <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-400">
+                  <p className="mt-2 line-clamp-2 text-sm text-slate-400">
                     {alert.message}
                   </p>
                 </Link>
@@ -635,7 +633,7 @@ export function TodayDashboard({ data }: { data: HomeDashboardData }) {
                 <LineChart className="h-5 w-5" />
               </div>
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.22em] text-slate-500">
+                <p className="text-xs font-bold text-slate-500">
                   Daily digest
                 </p>
                 <p className="text-sm text-slate-400">
@@ -649,11 +647,11 @@ export function TodayDashboard({ data }: { data: HomeDashboardData }) {
           </div>
 
           {data.latestDigest ? (
-            <Link href={`/digest/${data.latestDigest.id}`} className="mt-5 block rounded-xl border border-white/[0.06] bg-white/[0.03] p-4 transition hover:bg-white/[0.06]">
+            <Link href={`/digest/${data.latestDigest.id}`} className="mt-6 block rounded-xl border border-white/[0.06] bg-white/[0.03] p-4 transition hover:bg-white/[0.06]">
               <p className="text-sm font-bold text-white">
                 {formatReportDate(data.latestDigest.digestDate)}
               </p>
-              <p className="mt-2 text-sm leading-6 text-slate-400">
+              <p className="mt-2 text-sm text-slate-400">
                 {data.latestDigest.summaryLine}
               </p>
               <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-500">
@@ -727,7 +725,7 @@ function SignalPanel({
 
   return (
     <div className="rounded-2xl border border-white/[0.06] bg-surface-raised p-6">
-      <div className="mb-5 flex items-center gap-3">
+      <div className="mb-6 flex items-center gap-3">
         <div className="rounded-xl border border-white/10 bg-white/5 p-3 text-slate-300">
           <Icon className="h-5 w-5" />
         </div>
@@ -747,7 +745,7 @@ function EmptyMini({ title, detail }: { title: string; detail: string }) {
         <CheckCircle2 className="h-4 w-4" />
         <p className="text-sm font-bold">{title}</p>
       </div>
-      <p className="mt-2 text-sm leading-6 text-slate-500">{detail}</p>
+      <p className="mt-2 text-sm text-slate-500">{detail}</p>
     </div>
   );
 }

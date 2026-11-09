@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Plus, Search } from "lucide-react";
+import { Plus } from "@phosphor-icons/react/dist/ssr/Plus";
+import { MagnifyingGlass as Search } from "@phosphor-icons/react/dist/ssr/MagnifyingGlass";
 
 import { WatchlistItems } from "@/components/app/watchlist-items";
 import { WatchlistSearchPanel } from "@/components/app/watchlist-search-panel";
@@ -37,8 +38,8 @@ export function WatchlistPageClient({ items }: Props) {
       {/* Header controls */}
       <div className="-mt-4 mb-6 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <span className="inline-flex items-center rounded-lg bg-brand/10 px-2.5 py-1 text-[10px] font-bold tracking-widest text-brand">
-            ACTIVE MONITOR
+          <span className="inline-flex items-center rounded-lg bg-brand/10 px-3 py-1 text-xs font-bold text-brand">
+            Active monitor
           </span>
           <span className="text-sm font-medium text-slate-600">
             Prices refresh when you open this page
@@ -48,7 +49,7 @@ export function WatchlistPageClient({ items }: Props) {
         <button
           type="button"
           onClick={() => setSearchOpen((o) => !o)}
-          className="flex items-center gap-2 rounded-xl bg-brand px-5 py-2.5 text-sm font-bold text-[#080c11] transition hover:bg-brand-strong"
+          className="flex items-center gap-2 rounded-xl bg-brand px-6 py-2 text-sm font-bold text-brand-foreground transition hover:bg-brand-strong"
         >
           <Plus className="h-4 w-4" />
           Add to Watchlist
@@ -79,7 +80,7 @@ export function WatchlistPageClient({ items }: Props) {
               <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-white/5">
                 <Search className="h-5 w-5 text-slate-500" />
               </div>
-              <p className="text-[13px] font-medium text-slate-500">
+              <p className="text-xs font-medium text-slate-500">
                 Add symbols to start tracking prices and news
               </p>
             </div>

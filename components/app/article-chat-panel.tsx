@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { Loader2, SendHorizonal, Sparkles } from "lucide-react";
+import { CircleNotch as Loader2 } from "@phosphor-icons/react/dist/ssr/CircleNotch";
+import { PaperPlaneRight as SendHorizonal } from "@phosphor-icons/react/dist/ssr/PaperPlaneRight";
+import { Sparkle as Sparkles } from "@phosphor-icons/react/dist/ssr/Sparkle";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -269,7 +271,7 @@ export function ArticleChatPanel({
       {showHeader ? (
         <div className="flex items-center justify-between gap-3">
           <div className="space-y-1">
-            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-brand">
+            <p className="text-sm font-semibold text-brand">
               Ask AI
             </p>
             <p className="text-sm text-slate-400">{helperCopy}</p>
@@ -281,9 +283,9 @@ export function ArticleChatPanel({
         </div>
       ) : null}
 
-      <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 py-2.5">
+      <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 py-2">
         <div className="min-w-0 space-y-1">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+          <p className="text-xs font-semibold text-slate-500">
             Model
           </p>
           <p className="text-xs text-slate-500">
@@ -306,9 +308,9 @@ export function ArticleChatPanel({
                 disabled={sending || locked}
                 onClick={() => onSelectedTierChange(option.tier)}
                 className={cn(
-                  "rounded-full px-3 py-1.5 text-sm font-medium transition",
+                  "rounded-full px-3 py-2 text-sm font-medium transition",
                   selected
-                    ? "bg-brand text-white shadow-sm"
+                    ? "bg-brand text-brand-foreground shadow-sm"
                     : "text-slate-400 hover:text-slate-200",
                   (sending || locked) && "cursor-not-allowed opacity-60",
                 )}
@@ -343,10 +345,10 @@ export function ArticleChatPanel({
                       : "ml-auto max-w-[90%] rounded-2xl bg-brand/10 p-3 text-sm text-white"
                   }
                 >
-                  <p className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] opacity-70">
+                  <p className="mb-1 text-xs font-semibold opacity-70">
                     {message.role}
                   </p>
-                  <p className="whitespace-pre-wrap leading-6">{message.content}</p>
+                  <p className="whitespace-pre-wrap">{message.content}</p>
                 </div>
               ))
             ) : (

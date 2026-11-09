@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import localFont from "next/font/local";
 import { cookies } from "next/headers";
 
 import {
@@ -8,6 +9,10 @@ import {
 import { APP_LOGO_ALT } from "@/lib/brand/logo";
 import { isTheme, THEME_COOKIE_KEY } from "@/lib/preferences";
 import "./globals.css";
+
+// Bundled (OFL, see app/fonts) so builds never fetch from Google; the E2E build has no internet access.
+const manrope = localFont({ src: "./fonts/manrope-latin-variable.woff2", weight: "200 800", variable: "--font-manrope", display: "swap" });
+const geistMono = localFont({ src: "./fonts/geist-mono-variable.woff2", weight: "100 900", variable: "--font-geist-mono", display: "swap" });
 
 export const metadata: Metadata = {
   // Audit D14: route pages set a short title; the template adds the product name.
@@ -34,14 +39,14 @@ export default async function RootLayout({
 }>) {
   const cookieStore = await cookies();
   const themeCookie = cookieStore.get(THEME_COOKIE_KEY)?.value;
-  const initialTheme = isTheme(themeCookie) ? themeCookie : "dark";
+  const initialTheme = isTheme(themeCookie) ? themeCookie : "light";
   const initialLocale = "en";
 
   return (
     <html
       lang={initialLocale}
       data-theme={initialTheme}
-      className="bg-background"
+      className={`${manrope.variable} ${geistMono.variable} bg-background`}
       suppressHydrationWarning
     >
       <head>

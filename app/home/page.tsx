@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { ArrowRight, MessagesSquare } from "lucide-react";
+import { ArrowRight } from "@phosphor-icons/react/dist/ssr/ArrowRight";
+import { ChatsCircle as MessagesSquare } from "@phosphor-icons/react/dist/ssr/ChatsCircle";
 
 import { AppShell } from "@/components/app/app-shell";
 import { TodayDashboard } from "@/components/app/today-dashboard";
@@ -28,7 +29,7 @@ export default async function HomePage() {
         {/* Audit D06: community is a clear secondary destination, not the bottom of Home. */}
         <Link
           href="/community"
-          className="flex items-center justify-between gap-4 rounded-2xl border border-white/[0.06] bg-surface-raised p-5 transition hover:bg-surface-hover sm:p-6"
+          className="flex items-center justify-between gap-4 rounded-2xl border border-white/[0.06] bg-surface-raised p-6 transition hover:bg-surface-hover sm:p-6"
         >
           <span className="flex items-center gap-3">
             <span className="rounded-xl border border-white/10 bg-white/5 p-3 text-slate-300">

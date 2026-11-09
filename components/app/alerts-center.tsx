@@ -2,15 +2,13 @@
 
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import {
-  AlertTriangle,
-  Bell,
-  CheckCircle2,
-  DollarSign,
-  ExternalLink,
-  Newspaper,
-  ShieldAlert,
-} from "lucide-react";
+import { Warning as AlertTriangle } from "@phosphor-icons/react/dist/ssr/Warning";
+import { Bell } from "@phosphor-icons/react/dist/ssr/Bell";
+import { CheckCircle as CheckCircle2 } from "@phosphor-icons/react/dist/ssr/CheckCircle";
+import { CurrencyDollar as DollarSign } from "@phosphor-icons/react/dist/ssr/CurrencyDollar";
+import { ArrowSquareOut as ExternalLink } from "@phosphor-icons/react/dist/ssr/ArrowSquareOut";
+import { Newspaper } from "@phosphor-icons/react/dist/ssr/Newspaper";
+import { ShieldWarning as ShieldAlert } from "@phosphor-icons/react/dist/ssr/ShieldWarning";
 
 import { formatRelativeTime } from "@/lib/time/format";
 import { markAlertRead, markAllAlertsRead } from "@/lib/actions/alerts";
@@ -201,10 +199,10 @@ export function AlertsCenter({
               <article
                 key={alert.id}
                 className={cn(
-                  "rounded-2xl border bg-surface-raised p-5 transition",
+                  "rounded-2xl border bg-surface-raised p-6 transition",
                   alert.readAt
                     ? "border-white/[0.06] opacity-75"
-                    : "border-brand/20 shadow-[0_0_0_1px_rgba(16,185,129,0.08)]",
+                    : "border-brand/20",
                 )}
               >
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -219,14 +217,14 @@ export function AlertsCenter({
                         </Badge>
                         <Badge tone="neutral">{typeLabel(alert.alertType)}</Badge>
                         {!alert.readAt ? <Badge tone="brand">Unread</Badge> : null}
-                        <span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-600">
+                        <span className="text-xs font-semibold text-slate-600">
                           {formatAlertTime(alert.createdAt)}
                         </span>
                       </div>
                       <h2 className="mt-3 text-lg font-bold tracking-tight text-white">
                         {alert.title}
                       </h2>
-                      <p className="mt-2 max-w-3xl text-sm leading-7 text-slate-400">
+                      <p className="mt-2 max-w-3xl text-sm text-slate-400">
                         {alert.message}
                       </p>
                     </div>
@@ -245,7 +243,7 @@ export function AlertsCenter({
                     ) : null}
                     <Link
                       href={alert.actionHref}
-                      className="inline-flex items-center gap-2 rounded-xl bg-brand px-4 py-2.5 text-sm font-bold text-[#080c11] transition hover:bg-brand-strong"
+                      className="inline-flex items-center gap-2 rounded-xl bg-brand px-4 py-2 text-sm font-bold text-brand-foreground transition hover:bg-brand-strong"
                     >
                       Open
                       <ExternalLink className="h-4 w-4" />
@@ -260,7 +258,7 @@ export function AlertsCenter({
         <div className="rounded-2xl border border-dashed border-white/10 bg-surface-raised/60 p-10 text-center">
           <Bell className="mx-auto h-8 w-8 text-slate-500" />
           <h2 className="mt-4 text-xl font-bold text-white">No alerts match this view</h2>
-          <p className="mx-auto mt-2 max-w-xl text-sm leading-7 text-slate-500">
+          <p className="mx-auto mt-2 max-w-xl text-sm text-slate-500">
             Adjust the filters or enable smart alert rules in Settings to populate
             this center as the cron runs.
           </p>
@@ -281,7 +279,7 @@ function SummaryTile({
 }) {
   return (
     <div className="rounded-2xl border border-white/[0.06] bg-surface-raised p-6">
-      <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">
+      <p className="text-xs font-bold text-slate-500">
         {label}
       </p>
       <p className="mt-3 text-3xl font-bold tracking-tight text-white">{value}</p>
@@ -304,7 +302,7 @@ function FilterButton({
       type="button"
       onClick={onClick}
       className={cn(
-        "rounded-xl px-3 py-2 text-xs font-bold uppercase tracking-[0.12em] transition",
+        "rounded-xl px-3 py-2 text-xs font-bold transition",
         active
           ? "bg-brand/15 text-brand"
           : "bg-white/[0.04] text-slate-500 hover:bg-white/[0.08] hover:text-slate-300",

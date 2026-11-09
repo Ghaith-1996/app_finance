@@ -1,14 +1,12 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import {
-  AlertTriangle,
-  BellRing,
-  CalendarDays,
-  Gauge,
-  Loader2,
-  TrendingUp,
-} from "lucide-react";
+import { Warning as AlertTriangle } from "@phosphor-icons/react/dist/ssr/Warning";
+import { BellRinging as BellRing } from "@phosphor-icons/react/dist/ssr/BellRinging";
+import { CalendarDots as CalendarDays } from "@phosphor-icons/react/dist/ssr/CalendarDots";
+import { Gauge } from "@phosphor-icons/react/dist/ssr/Gauge";
+import { CircleNotch as Loader2 } from "@phosphor-icons/react/dist/ssr/CircleNotch";
+import { TrendUp as TrendingUp } from "@phosphor-icons/react/dist/ssr/TrendUp";
 
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
@@ -109,15 +107,15 @@ export function NotificationSettingsPanel({
   }
 
   return (
-    <Panel className="space-y-6 rounded-[2rem] p-6">
+    <Panel className="space-y-6 rounded-4xl p-6">
       <div className="space-y-2">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
+        <p className="text-xs font-semibold text-slate-500">
           Notifications
         </p>
         <h2 className="text-2xl font-semibold tracking-tight text-white">
           Morning digest
         </h2>
-        <p className="max-w-2xl text-sm leading-7 text-slate-400">
+        <p className="max-w-2xl text-sm text-slate-400">
           Sent daily at 9:00 AM Eastern. Email includes the full top-10 digest.
           SMS stays short with the overnight bullish and bearish leaders plus one
           Pulsefolio link.
@@ -125,7 +123,7 @@ export function NotificationSettingsPanel({
       </div>
 
       <form
-        className="space-y-5"
+        className="space-y-6"
         onSubmit={(event) => {
           event.preventDefault();
           setError(null);
@@ -152,7 +150,7 @@ export function NotificationSettingsPanel({
           });
         }}
       >
-        <label className="flex items-start justify-between gap-4 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-5 py-4">
+        <label className="flex items-start justify-between gap-4 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-6 py-4">
           <span className="space-y-1">
             <span className="block text-sm font-semibold text-white">
               Email digest
@@ -169,7 +167,7 @@ export function NotificationSettingsPanel({
           />
         </label>
 
-        <label className="flex items-start justify-between gap-4 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-5 py-4">
+        <label className="flex items-start justify-between gap-4 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-6 py-4">
           <span className="space-y-1">
             <span className="block text-sm font-semibold text-white">
               SMS digest
@@ -188,18 +186,18 @@ export function NotificationSettingsPanel({
 
         <div className="border-t border-white/[0.06] pt-6">
           <div className="space-y-2">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
+            <p className="text-xs font-semibold text-slate-500">
               Smart alerts
             </p>
             <h3 className="text-xl font-semibold tracking-tight text-white">
               Portfolio alert rules
             </h3>
-            <p className="max-w-2xl text-sm leading-7 text-slate-400">
+            <p className="max-w-2xl text-sm text-slate-400">
               Saved rules for critical news, earnings, price moves, and concentration changes.
             </p>
           </div>
 
-          <div className="mt-5 grid gap-4 lg:grid-cols-2">
+          <div className="mt-6 grid gap-4 lg:grid-cols-2">
             <AlertToggle
               icon={AlertTriangle}
               title="Critical news"
@@ -337,9 +335,9 @@ function AlertToggle({
   onChange: (checked: boolean) => void;
 }) {
   return (
-    <label className="flex items-start justify-between gap-4 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-5 py-4">
+    <label className="flex items-start justify-between gap-4 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-6 py-4">
       <span className="flex min-w-0 gap-3">
-        <span className="mt-0.5 rounded-xl border border-white/10 bg-white/5 p-2.5 text-brand">
+        <span className="mt-0.5 rounded-xl border border-white/10 bg-white/5 p-3 text-brand">
           <Icon className="h-4 w-4" />
         </span>
         <span className="space-y-1">
@@ -379,10 +377,10 @@ function AlertThreshold({
   onValueChange: (value: string) => void;
 }) {
   return (
-    <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] px-5 py-4">
+    <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] px-6 py-4">
       <label className="flex items-start justify-between gap-4">
         <span className="flex min-w-0 gap-3">
-          <span className="mt-0.5 rounded-xl border border-white/10 bg-white/5 p-2.5 text-brand">
+          <span className="mt-0.5 rounded-xl border border-white/10 bg-white/5 p-3 text-brand">
             <Icon className="h-4 w-4" />
           </span>
           <span className="space-y-1">
@@ -398,7 +396,7 @@ function AlertThreshold({
         />
       </label>
       <label className="mt-4 block space-y-2">
-        <span className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">
+        <span className="text-xs font-medium text-slate-500">
           Threshold
         </span>
         <div className="flex items-center gap-3">

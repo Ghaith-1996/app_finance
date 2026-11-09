@@ -19,7 +19,7 @@ Les 17 cas ajoutés après l'implémentation dans cette PR sont retirés seuleme
 | Cas retirés | Protection de remplacement vérifiée |
 |---|---|
 | `reduced-motion.test.tsx` : 2 helpers de mouvement | Préférence OS réelle et scroll natif via le feed authentifié ; API `matchMedia` absente injectée après hydratation pour vérifier le fallback réel de pagination. |
-| Même fichier : 4 assertions CSS et 1 markup Hero | Styles calculés : délais nuls, durée/itérations/transitions réduites, spinner actif, mesh statique ou animé selon largeur/préférence, couleurs des deux thèmes et `aria-hidden`. |
+| Même fichier : 4 assertions CSS et 1 markup Hero | Styles calculés : délais nuls, durée/itérations/transitions réduites, spinner actif, mesh statique ou animé selon largeur/préférence, couleurs des deux thèmes et `aria-hidden`. Le mesh a été retiré du Hero par la refonte de la PR #15 ; ses assertions E2E ont disparu avec lui, le reste du remplacement est inchangé. |
 | Même fichier : 5 cas UseCases avec faux observer/timers | Vrai IntersectionObserver, intervalle natif, sélection au pointeur, focus clavier, hover sans sélection, absence de cycle en mouvement réduit et contenu visible sans JavaScript. |
 | `analysis-step-status.test.ts` : 5 statuts | Sessions Auth et lectures de la base réelles : idle, mapping, complete, degraded, failed ; les cinq étapes affichées sont vérifiées pour chaque état. Queued et accès inter-utilisateurs sont aussi couverts. |
 
